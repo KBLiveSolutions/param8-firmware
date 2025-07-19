@@ -1,14 +1,15 @@
 #include <Arduino.h>
 #include "encoders.h"
 #include "../core/actions.h"
+#include "../core/controls.h"
 
 
 RotaryEncoder* encoder[8];
 Encoders encoders;
 
 void  Encoders::read(){
-      static int lastPos[8] = {0};
-    static unsigned long lastTime[8] = {0};
+  static int lastPos[8] = {0};
+  static unsigned long lastTime[8] = {0};
 
   for (int i = 0; i < 8; i++) {
     encoder[i]->tick();
@@ -23,21 +24,23 @@ void  Encoders::read(){
       // Si l'encodeur est tourné rapidement (<50ms), on augmente le pas
       int gain = 1;
       if (dt < 50) gain = 4;
-      else if (dt < 100) gain = 2;
+      else 
+      if (dt < 100) gain = 2;
 
-      positions[i] += delta * gain;
+      // positions[i] += delta * gain;
 
-      // Clamp entre 0 et 127
-      if (positions[i] < 0) positions[i] = 0;
-      if (positions[i] > 127) positions[i] = 127;
+      // // Clamp entre 0 et 127
+      // if (positions[i] < 0) positions[i] = 0;
+      // if (positions[i] > 127) positions[i] = 127;
 
-      Serial.print("Encodeur ");
-      Serial.print(i);
-      Serial.print(" : ");
-      Serial.println(positions[i]);
-      onEncoderChange(i, positions[i]);
+      // Serial.print("Encodeur ");
+      // Serial.print(i);
+      // Serial.print(" : ");
+      // Serial.println(positions[i]);
+      onEncoderChange(i, delta * gain);
       lastPos[i] = newPos;
       lastTime[i] = now;
+      // if (controls.getPreset() == 7) positions[i] = 64;
     }
   }
   };

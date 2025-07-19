@@ -48,11 +48,19 @@ void setup() {
 
 unsigned long lastDisplay = 0;
 const unsigned long displayInterval = 100;  // 20 FPS
+unsigned long lastInactivityCheck = 0;
+const unsigned long inactivityCheckInterval = 250;  // Vérifier toutes les 250ms
 
 void loop() {
   midiRead();
   encoders.read();
   readButtons();
   updateDisplay();
-
+  
+  // Vérifier les encodeurs inactifs périodiquement
+  unsigned long currentTime = millis();
+  if (currentTime - lastInactivityCheck >= inactivityCheckInterval) {
+    controls.checkInactiveEncoders();
+    lastInactivityCheck = currentTime;
+  }
 }

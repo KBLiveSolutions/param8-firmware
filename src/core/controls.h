@@ -12,7 +12,8 @@ struct MidiControl {
     ControlMidiType type;
     uint8_t number;
     uint8_t channel;
-    uint8_t value = 0; // Default value for controls    
+    uint8_t value = 0; // Valeur réelle synchronisée avec Live
+    unsigned long lastActivity = 0; // Timestamp de la dernière activité
 };
 
 struct PresetControls {
@@ -44,6 +45,7 @@ public:
     void setDefaults();
     void getPresetControls(uint8_t);
     void onControlChange(uint8_t channel, uint8_t control, uint8_t value);
+    void checkInactiveEncoders(); // Nouvelle fonction pour vérifier les encodeurs inactifs
 private:
     uint8_t _currentPreset;
     PresetControls _presets[8];

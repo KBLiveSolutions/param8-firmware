@@ -99,6 +99,11 @@ void ControlsManager::setDefaults() {
             setButtonLong(_preset, i, type, number, channel); // Utilise la surcharge avec preset
         }
     }
+    
+    // Initialiser les timestamps d'activité à 0
+    for (int i = 0; i < 8; ++i) {
+        getEncoder(i).lastActivity = 0;
+    }
 }
 
 void ControlsManager::onControlChange(uint8_t channel, uint8_t control, uint8_t value) {
@@ -114,6 +119,7 @@ void ControlsManager::onControlChange(uint8_t channel, uint8_t control, uint8_t 
             if(getEncoder(i).value == value) faders[i]->showParamName();
             faders[i]->setValue(value);
             getEncoder(i).value = value;
+            getEncoder(i).lastActivity = millis(); // Mettre à jour le timestamp d'activité
             encoders.positions[i] = value; 
         }
         // Serial.print("Short Button:     ");
@@ -121,11 +127,29 @@ void ControlsManager::onControlChange(uint8_t channel, uint8_t control, uint8_t 
         // Serial.print(" - Channel: ");
         // Serial.print(getButtonShort(i).channel);
         // Serial.print(", Control: ");
-        Serial.print(getButtonShort(i).number);
+        // Serial.print(getButtonShort(i).number);
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {
             if(value > 63) showLed(i, 255, 255, 255); 
             else showLed(i, 0, 0, 0); // Éteint la LED si la valeur est inférieure ou égale à 63
             getButtonShort(i).value = value;
+        }
+    }
+}
+
+void ControlsManager::checkInactiveEncoders() {
+    unsigned long currentTime = millis();
+    const unsigned long INACTIVITY_TIMEOUT = 500; // 1 seconde en millisecondes
+    
+    for (int i = 0; i < 8; ++i) {
+        // Vérifier si l'encodeur a été inactif pendant plus d'1 seconde
+        if (getEncoder(i).lastActivity != 0 && 
+            (currentTime - getEncoder(i).lastActivity) > INACTIVITY_TIMEOUT) {
+            
+            // Afficher le nom du paramètre
+            faders[i]->showParamName();
+            
+            // Réinitialiser le timestamp pour éviter l'appel répétitif
+            getEncoder(i).lastActivity = 0;
         }
     }
 }

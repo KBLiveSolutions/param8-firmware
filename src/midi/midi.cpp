@@ -136,7 +136,6 @@ void handleSysExMessage(uint8_t *packet) {
     if (packet[i] == SYSEX_END_BYTE) {
       onSysEx(sysExBuffer, sysExBufferSize);
       clearSysExBuffer();
-      delay(2);
       return;
     }
   }
@@ -158,39 +157,43 @@ void onControlChange(uint8_t channel, uint8_t control, uint8_t value){
 };
 
 void onSysEx(const uint8_t* sysex, size_t len) {
-    if (len < 4) return;
+    if (len < 5) return; // Maintenant on a besoin d'au moins 5 octets
 
     uint8_t constructor_byte = sysex[1];
     uint8_t status_byte = sysex[2];
     uint8_t param_number = sysex[3];
+    uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
 
-    // Les caractères commencent à sysex[4], chaque caractère = 2 octets
-    const uint8_t* char_data = sysex + 4;
-    size_t char_data_len = len > 5 ? len - 5 : 0; // -5 pour F0, constructeur, status, param, F7
+    // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
+    const uint8_t* char_data = sysex + 5;
+    size_t char_data_len = len > 6 ? len - 6 : 0; // -6 pour F0, constructeur, status, param, staticOverlay, F7
 
     char ascii_string[20] = {0}; // 10 caractères max + \0
     decode_ascii_sysex(char_data, char_data_len, ascii_string, sizeof(ascii_string));
 
     // Gestion des différents status_byte
     if (status_byte == 0) {
-        faders[param_number]->setParamName(ascii_string);
+        if (strlen(ascii_string) > 0) {
+            faders[param_number]->setParamName(ascii_string);
+        } else {
+            // String vide, passe une string vide
+            faders[param_number]->setParamName("");
+        }
     } 
+    
     else if (status_byte == 1) {
         faders[param_number]->updateTitle(ascii_string);
     } 
     else if (status_byte == 2) {
         // Stocke la ligne reçue dans la boîte de gauche
-        updateDisplayBox("left", ascii_string);
+        updateDisplayBox("left", ascii_string, staticOverlay == 1);
     }
     else if (status_byte == 3) {
         // Stocke la ligne reçue dans la boîte de droite
-        updateDisplayBox("right", ascii_string);
+        updateDisplayBox("right", ascii_string, staticOverlay == 1);
     }
     else if (status_byte == 5) {
       
-    } 
-    else if (status_byte == 5) {
-
     }
 }
 
