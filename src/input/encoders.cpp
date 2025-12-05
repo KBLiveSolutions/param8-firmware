@@ -23,9 +23,11 @@ void  Encoders::read(){
 
       // Si l'encodeur est tourné rapidement (<50ms), on augmente le pas
       int gain = 1;
-      if (dt < 50) gain = 4;
+      if (dt < 50) gain = 20;
       else 
-      if (dt < 100) gain = 2;
+      if (dt < 100) gain = 8;
+      else 
+      if (dt < 150) gain = 4;
 
       // positions[i] += delta * gain;
 
@@ -37,7 +39,7 @@ void  Encoders::read(){
       // Serial.print(i);
       // Serial.print(" : ");
       // Serial.println(positions[i]);
-      onEncoderChange(i, delta * gain);
+      onRelativeEncoderChange(i, delta * gain);
       lastPos[i] = newPos;
       lastTime[i] = now;
       // if (controls.getPreset() == 7) positions[i] = 64;
@@ -47,7 +49,7 @@ void  Encoders::read(){
 
 void Encoders::setup(){
       for (int i = 0; i < 8; i++) {
-    encoder[i] = new RotaryEncoder(PIN_IN2[i], PIN_IN1[i], RotaryEncoder::LatchMode::TWO03);
+    encoder[i] = new RotaryEncoder(PIN_IN1[i], PIN_IN2[i], RotaryEncoder::LatchMode::FOUR0);
 
     // FOUR3 = 1, // 4 steps, Latch at position 3 only (compatible to older versions)
     // FOUR0 = 2, // 4 steps, Latch at position 0 (reverse wirings)

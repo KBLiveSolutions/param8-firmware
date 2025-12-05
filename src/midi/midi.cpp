@@ -104,7 +104,6 @@ void handleMIDIDAWMessage(uint8_t *packet) {
       {
         uint8_t program = packet[2] & 0x0F;
 
-        onButtonLongPress(program);
 
         // Serial.print("Program Change - Program: ");
         // Serial.print(program);
@@ -161,9 +160,14 @@ void onSysEx(const uint8_t* sysex, size_t len) {
 
     uint8_t constructor_byte = sysex[1];
     uint8_t status_byte = sysex[2];
+    Serial.print("Received SysEx - Constructor: ");
+    Serial.print(constructor_byte);
+    Serial.print(", Status: ");
+    Serial.println(status_byte);
     uint8_t param_number = sysex[3];
     uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
-
+  Serial.print("Param Number: ");
+  Serial.print(param_number);
     // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
     const uint8_t* char_data = sysex + 5;
     size_t char_data_len = len > 6 ? len - 6 : 0; // -6 pour F0, constructeur, status, param, staticOverlay, F7
@@ -172,28 +176,37 @@ void onSysEx(const uint8_t* sysex, size_t len) {
     decode_ascii_sysex(char_data, char_data_len, ascii_string, sizeof(ascii_string));
 
     // Gestion des différents status_byte
-    if (status_byte == 0) {
-        if (strlen(ascii_string) > 0) {
-            faders[param_number]->setParamName(ascii_string);
-        } else {
-            // String vide, passe une string vide
-            faders[param_number]->setParamName("");
-        }
-    } 
-    
-    else if (status_byte == 1) {
-        faders[param_number]->updateTitle(ascii_string);
-    } 
-    else if (status_byte == 2) {
-        // Stocke la ligne reçue dans la boîte de gauche
-        updateDisplayBox("left", ascii_string, staticOverlay == 1);
-    }
-    else if (status_byte == 3) {
-        // Stocke la ligne reçue dans la boîte de droite
-        updateDisplayBox("right", ascii_string, staticOverlay == 1);
-    }
-    else if (status_byte == 5) {
-      
+    switch (status_byte) {
+        case 0:
+            if (strlen(ascii_string) > 0) {
+                faders[param_number]->setParamName(ascii_string);
+            } else {
+                // String vide, passe une string vide
+                faders[param_number]->setParamName("");
+            }
+            break;
+        
+        case 1:
+            faders[param_number]->updateTitle(ascii_string);
+            break;
+            
+        case 2:
+            // Stocke la ligne reçue dans la boîte de gauche
+            updateDisplayBox("left", ascii_string, staticOverlay == 1);
+            break;
+            
+        case 3:
+            // Stocke la ligne reçue dans la boîte de droite
+            updateDisplayBox("right", ascii_string, staticOverlay == 1);
+            break;
+            
+        case 5:
+            // requete de numero de preset
+            Serial.print("Réponse SysEx: Envoi du preset actuel ");
+            uint8_t preset = controls.getPreset();
+            sendPresetSysEx(preset);
+            break;
+
     }
 }
 

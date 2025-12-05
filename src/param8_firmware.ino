@@ -56,7 +56,9 @@ void loop() {
   encoders.read();
   readButtons();
   updateDisplay();
-  
+      if (revertMode) {
+        pulseLedWhite(8);
+    }
   // Vérifier les encodeurs inactifs périodiquement
   unsigned long currentTime = millis();
   if (currentTime - lastInactivityCheck >= inactivityCheckInterval) {

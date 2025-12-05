@@ -4,86 +4,144 @@
 #include "../view/display.h"
 #include "../view/leds.h"
 
+#define MAX_LATCH_EVENTS 256
+bool shiftPressed = false; 
+bool latchPressed = false;
+uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
+uint8_t latchEncoderEventCount[8] = {0};
+bool revertMode = false;
+uint8_t revertEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
+uint8_t revertEncoderEventCount[8] = {0};
 
-void onButtonShortPress(uint8_t idx) {   
-    uint8_t channel = controls.getButtonShort(idx).channel;
-    ControlMidiType type = controls.getButtonShort(idx).type;
-    uint8_t number = controls.getButtonShort(idx).number;
-    uint8_t value = controls.getButtonShort(idx).value;
-    if (controls.getPreset() > 5) {
-        sendMidiMessage( type, number, 127, channel);
-        sendMidiMessage( type, number, 0, channel);
-    } 
-    else {
-        value = value < 63 ? 127 : 0; // Convert to MIDI value
-        sendMidiMessage( type, number, value, channel);
+void onShiftPress() {
+    shiftPressed = true;
+    sendMidiMessage(0, 110, 127, 7);
+
+    if (revertMode) {
+        revertMode = false;
+        setRevertModeLed(false);
+        for (int i = 0; i < 8; ++i) {
+            revertEncoderEventCount[i] = 0;
+        }
     }
 }
 
-void onButtonLongPress(uint8_t idx) {
-    blinkLedBlue(idx, 2);
-    char buf[24];
-    snprintf(buf, sizeof(buf), "Preset %d", idx + 1);
-    buf[sizeof(buf)-1] = '\0';  
-    updateDisplayBox("left", buf);
-    updateDisplayBox("right", buf);
-    // Faire clignoter la LED correspondante 2 fois en bleu
-    
-    controls.setPreset(idx);
-    updateFaderTitles();
-    sendPresetSysEx(idx);
-
-    uint8_t channel = controls.getButtonLong(idx).channel;
-    ControlMidiType type = controls.getButtonLong(idx).type;
-    uint8_t number = controls.getButtonLong(idx).number;
-    sendMidiMessage(type, number, 127, channel);
-    sendMidiMessage(type, number, 0, channel);
-
+void onShiftRelease() {
+    shiftPressed = false;
+    sendMidiMessage(0, 110, 0, 7);
 }
 
-void onEncoderChange(uint8_t idx, int delta) {
+void onLatchPress() {
+    for (int i = 0; i < 8; ++i) {
+        latchEncoderEventCount[i] = 0;
+    }
+    latchPressed = true;
+    sendMidiMessage(0, 111, 127, 7);
+
+    if (revertMode && !shiftPressed) {
+        revertMode = false;
+        setRevertModeLed(false);
+        for (int i = 0; i < 8; ++i) {
+            revertEncoderEventCount[i] = 0;
+        }
+        return;
+    }
+
+    if (shiftPressed) {
+        if (!revertMode) {
+            revertMode = true;
+            for (int i = 0; i < 8; ++i) {
+                revertEncoderEventCount[i] = 0;
+            }
+            setRevertModeLed(true);
+        } else {
+            sendRevertEvents();
+            revertMode = false;
+            setRevertModeLed(false);
+            for (int i = 0; i < 8; ++i) {
+                revertEncoderEventCount[i] = 0;
+            }
+        }
+    }
+}
+
+void onLatchRelease() {
+    latchPressed = false;
+    releaseLatchAndSend();
+    sendMidiMessage(0, 111, 0, 7);
+}
+
+void onButtonShortPress(uint8_t idx) {   
+}
+
+
+void onButtonPressedReleased(uint8_t idx, bool pressed) {
+    int _value = pressed ? 127 : 0;
+    if (shiftPressed) {
+        blinkLedBlue(idx, 2);
+        char buf[24];
+        snprintf(buf, sizeof(buf), "Preset %d", idx + 1);
+        buf[sizeof(buf)-1] = '\0';  
+        updateDisplayBox("left", buf);
+        updateDisplayBox("right", buf);
+
+        controls.setPreset(idx);
+        updateFaderTitles();
+        sendPresetSysEx(idx);
+
+        ControlMidiType type_long = controls.getButtonLong(idx).type;
+        uint8_t number_long = controls.getButtonLong(idx).number;
+        uint8_t channel_long = controls.getButtonLong(idx).channel;
+        sendMidiMessage(type_long, number_long, _value, channel_long);
+        return;
+    }
+
+    else
+    {
+        uint8_t channel = controls.getButtonShort(idx).channel;
+        ControlMidiType type = controls.getButtonShort(idx).type;
+        uint8_t number = controls.getButtonShort(idx).number;
+        // uint8_t value = controls.getButtonShort(idx).value;
+        sendMidiMessage(type, number, _value, channel);
+    }
+}
+
+void onButtonRelease(uint8_t idx) {
+  // Gérer l'événement de relâchement du bouton ici
+}
+
+void onRelativeEncoderChange(uint8_t idx, int delta) {
     uint8_t channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
     uint8_t number = controls.getEncoder(idx).number;
-    
-    // Mettre à jour le timestamp d'activité
+
     controls.getEncoder(idx).lastActivity = millis();
+
+    uint8_t relValue = (uint8_t)(delta & 0x7F);
+
+    // Calculer et mettre à jour la valeur cumulative
+    int estimated_display = controls.getEncoder(idx).value + delta;
+    if (estimated_display < 0) estimated_display = 0;
+    if (estimated_display > 127) estimated_display = 127;
     
-    int _value; // Utiliser int pour permettre les valeurs négatives temporaires
-    
-    if(controls.getPreset() > 5) {
-        // Mode relative: 64 = centre, >64 = increment, <64 = decrement
-        _value = 64 + delta;
-        // Clamp entre 1 et 127 pour le mode relatif
-        if (_value < 1) _value = 1;
-        if (_value > 127) _value = 127;
-        
-        sendMidiMessage(type, number, (uint8_t)_value, channel);
-        
-        // En mode relatif: afficher une estimation locale mais NE PAS modifier value
-        int estimated_display = controls.getEncoder(idx).value + delta;
-        if (estimated_display < 0) estimated_display = 0;
-        if (estimated_display > 127) estimated_display = 127;
-        // updateFader(idx, (uint8_t)estimated_display);
-        
+    // Mettre à jour la valeur stockée dans le contrôle
+    controls.getEncoder(idx).value = estimated_display;
+
+    if (revertMode) {
+        if (revertEncoderEventCount[idx] < MAX_LATCH_EVENTS) {
+            revertEncoderEvents[idx][revertEncoderEventCount[idx]++] = relValue;
+        }
+        sendMidiMessage(type, number, relValue, channel);
+    } else if (!latchPressed) {
+        sendMidiMessage(type, number, relValue, channel);
     } else {
-        // Mode absolu: mettre à jour la valeur stockée normalement
-        controls.getEncoder(idx).value += delta;
-        _value = controls.getEncoder(idx).value;
-        
-        // Clamp entre 0 et 127 pour le mode absolu
-        if (_value < 0) {
-            _value = 0;
-            controls.getEncoder(idx).value = 0;
+        if (latchEncoderEventCount[idx] < MAX_LATCH_EVENTS) {
+            latchEncoderEvents[idx][latchEncoderEventCount[idx]++] = relValue;
         }
-        if (_value > 127) {
-            _value = 127;
-            controls.getEncoder(idx).value = 127;
-        }
-        
-        sendMidiMessage(type, number, (uint8_t)_value, channel);
-        updateFader(idx, (uint8_t)_value);
     }
+    
+    // Mettre à jour le fader avec la valeur cumulative
+    // if (latchPressed || controls.getPreset() < 6) updateFader(idx, (uint8_t)estimated_display);
 }
 
 void updateFaderTitles() {
@@ -101,4 +159,56 @@ void sendPresetSysEx(uint8_t preset) {
     uint8_t packet[5] = { 240, 111, 4, preset, 247 };
     usb_midi.writePacket(packet);
     usb_midi.write(packet, 5);
+}
+
+void releaseLatchAndSend() {
+    // Trouver le nombre maximum d'événements parmi tous les encodeurs
+    uint8_t maxEvents = 0;
+    for (int i = 0; i < 8; ++i) {
+        if (latchEncoderEventCount[i] > maxEvents) {
+            maxEvents = latchEncoderEventCount[i];
+        }
+    }
+    
+    // Envoyer les événements de manière entrelacée
+    for (uint8_t eventIndex = 0; eventIndex < maxEvents; ++eventIndex) {
+        for (int i = 0; i < 8; ++i) {
+            // Vérifier s'il y a encore des événements pour cet encodeur
+            if (eventIndex < latchEncoderEventCount[i]) {
+                uint8_t channel = controls.getEncoder(i).channel;
+                ControlMidiType type = controls.getEncoder(i).type;
+                uint8_t number = controls.getEncoder(i).number;
+                
+                sendMidiMessage(type, number, latchEncoderEvents[i][eventIndex], channel);
+                delay(1); // Délai plus court car on alterne entre les encodeurs
+            }
+        }
+    }
+    
+    // Réinitialiser les compteurs
+    for (int i = 0; i < 8; ++i) {
+        latchEncoderEventCount[i] = 0;
+    }
+}
+
+void sendRevertEvents() {
+    for (int i = 0; i < 8; ++i) {
+        uint8_t channel = controls.getEncoder(i).channel;
+        ControlMidiType type = controls.getEncoder(i).type;
+        uint8_t number = controls.getEncoder(i).number;
+        for (uint8_t j = 0; j < revertEncoderEventCount[i]; ++j) {
+            uint8_t val = revertEncoderEvents[i][j];
+            uint8_t inv = 0;
+            if (val == 0) inv = 0;
+            else if (val <= 0x3F) inv = (0x80 - val) & 0x7F;
+            else inv = (0x80 - val) & 0x7F;
+            sendMidiMessage(type, number, inv, channel);
+        }
+    }
+}
+
+void setRevertModeLed(bool on) {
+    if (!on) {
+        showLed(8, 0, 0, 0);
+    }
 }

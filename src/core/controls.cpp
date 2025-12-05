@@ -15,8 +15,16 @@ ControlsManager::ControlsManager() : _currentPreset(0) {
 void ControlsManager::setPreset(uint8_t preset) {
     if (preset < 8) {
         _currentPreset = preset;
-        // Sauvegarde le preset actuel dans le JSON
+        
+        // Charger les données du nouveau preset depuis le JSON
         json.setMode(preset);
+        
+        // Synchroniser les positions des encodeurs avec les nouvelles valeurs
+        for (int i = 0; i < 8; i++) {
+            encoders.positions[i] = _presets[_currentPreset].encoder[i].value;
+        }
+        
+        // Sauvegarder le changement de preset
         json.save();
     }
 }
@@ -75,34 +83,63 @@ void ControlsManager::setButtonLong(uint8_t preset, uint8_t idx, ControlMidiType
 }
 
 void ControlsManager::setDefaults() {
-    // Charge le preset depuis le JSON (dernier preset utilisé)
     _currentPreset = json.getMode();
+    Serial.print("Preset actuel chargé: ");
+    Serial.println(_currentPreset);
     
     for(int _preset = 0; _preset < 8; ++_preset){
+        Serial.print("Chargement preset ");
+        Serial.println(_preset);
+        
         for(int i = 0; i < 8; ++i) {
             ControlData data = json.getControlData("encoders", _preset, i);
+            
+            Serial.print("  Encoder ");
+            Serial.print(i);
+            Serial.print(" - Raw data: type=");
+            Serial.print(data.value0);  // Devrait être 0 (CC)
+            Serial.print(", number=");
+            Serial.print(data.value1);  // Devrait être 10, 11, 12, etc.
+            Serial.print(", channel=");
+            Serial.println(data.value2); // Devrait être 0
+            
+            if (data.value1 == 0) {
+                Serial.println("    ❌ PROBLÈME: CC number = 0 au lieu de la vraie valeur!");
+            }
+            
             ControlMidiType type = static_cast<ControlMidiType>(data.value0);
             uint8_t number = static_cast<uint8_t>(data.value1);
             uint8_t channel = static_cast<uint8_t>(data.value2);
-            setEncoder(_preset, i, type, number, channel); // Utilise la surcharge avec preset
+            
+            setEncoder(_preset, i, type, number, channel);
+            _presets[_preset].encoder[i].value = 64;
+            _presets[_preset].encoder[i].lastActivity = 0;
 
+            // Charger la configuration des boutons courts
             data = json.getControlData("buttons_short", _preset, i);
             type = static_cast<ControlMidiType>(data.value0);
             number = static_cast<uint8_t>(data.value1);
             channel = static_cast<uint8_t>(data.value2);
-            setButtonShort(_preset, i, type, number, channel); // Utilise la surcharge avec preset
+            setButtonShort(_preset, i, type, number, channel);
             
+            // AJOUTER : Initialiser les valeurs des boutons
+            _presets[_preset].buttons_short[i].value = 0;
+            
+            // Charger la configuration des boutons longs  
             data = json.getControlData("buttons_long", _preset, i);
             type = static_cast<ControlMidiType>(data.value0);
             number = static_cast<uint8_t>(data.value1);
             channel = static_cast<uint8_t>(data.value2);
-            setButtonLong(_preset, i, type, number, channel); // Utilise la surcharge avec preset
+            setButtonLong(_preset, i, type, number, channel);
+            
+            // AJOUTER : Initialiser les valeurs des boutons
+            _presets[_preset].buttons_long[i].value = 0;
         }
     }
     
-    // Initialiser les timestamps d'activité à 0
-    for (int i = 0; i < 8; ++i) {
-        getEncoder(i).lastActivity = 0;
+    // Synchroniser les positions des encodeurs avec le preset actuel
+    for (int i = 0; i < 8; i++) {
+        encoders.positions[i] = _presets[_currentPreset].encoder[i].value;
     }
 }
 
@@ -116,7 +153,7 @@ void ControlsManager::onControlChange(uint8_t channel, uint8_t control, uint8_t 
     
     for (int i = 0; i < 8; ++i) {
         if (getEncoder(i).channel == channel && getEncoder(i).number == control) {
-            if(getEncoder(i).value == value) faders[i]->showParamName();
+            // if(getEncoder(i).value == value) faders[i]->showParamName();
             faders[i]->setValue(value);
             getEncoder(i).value = value;
             getEncoder(i).lastActivity = millis(); // Mettre à jour le timestamp d'activité

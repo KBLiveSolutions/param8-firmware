@@ -9,7 +9,7 @@ void setupLeds(){
   pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
   pixels.setBrightness(ledBrightness); // Set brightness
   for (int i = 0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, pixels.Color(0, 0, 0)); // Initialize all LEDs to off
+    pixels.setPixelColor(i, pixels.Color(30, 20, 60)); // Initialize all LEDs to off
   }
   pixels.show(); // Update the strip to apply the initial state
   Serial.println("LEDs initialized");
@@ -36,6 +36,31 @@ void blinkLedBlue(int led, int times) {
       pixels.setPixelColor(led, pixels.Color(0, 0, 0));
       pixels.show();
       delay(100); // Garder éteinte pendant 200ms
+    }
+  }
+}
+
+void pulseLedWhite(int led) {
+  if (led < NUMPIXELS) {
+    // Pulse continu en blanc - cette fonction devra être appelée régulièrement
+    static unsigned long lastUpdate = 0;
+    static int brightness = 0;
+    static int direction = 1; // 1 pour augmenter, -1 pour diminuer
+    
+    if (millis() - lastUpdate > 20) { // Mise à jour toutes les 20ms
+      brightness += direction * 5;
+      
+      if (brightness >= 255) {
+        brightness = 255;
+        direction = -1;
+      } else if (brightness <= 0) {
+        brightness = 0;
+        direction = 1;
+      }
+      
+      pixels.setPixelColor(led, pixels.Color(brightness, brightness, brightness));
+      pixels.show();
+      lastUpdate = millis();
     }
   }
 }
