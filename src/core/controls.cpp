@@ -135,12 +135,6 @@ void ControlsManager::onControlChange(uint8_t channel, uint8_t control, uint8_t 
             getEncoder(i).lastActivity = millis(); // Mettre à jour le timestamp d'activité
             encoders.positions[i] = value; 
         }
-        // Serial.print("Short Button:     ");
-        // Serial.print(i); 
-        // Serial.print(" - Channel: ");
-        // Serial.print(getButtonShort(i).channel);
-        // Serial.print(", Control: ");
-        // Serial.print(getButtonShort(i).number);
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {
             if(value > 63) showLed(i, 255, 255, 255); 
             else showLed(i, 0, 0, 0); // Éteint la LED si la valeur est inférieure ou égale à 63

@@ -25,57 +25,61 @@ void FaderWidget::showParamName() {
 void FaderWidget::drawTitle() {
     // Le titre est affiché en grand, centré verticalement sur le fader
     int area_x = x_offset;
+    int area_y = y_offset + ((boutonNumber > 3) ? 0 : 12);
     int area_w = 128;
+    int area_h = 16;
+
+    // Efface la zone du titre uniquement
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(area_x, area_y, area_w, area_h);
+
     // Police plus grande
-    u8g2.setFont(u8g2_font_helvB10_tr);
+    u8g2.setFont(u8g2_font_8x13B_tr);
     if(strcmp(paramName, "******") != 0){
-        int param_width = u8g2.getStrWidth(paramName);
-        int param_height = u8g2.getAscent() - u8g2.getDescent();
+        int param_width = u8g2.getStrWidth(title);
         int param_x = x_offset + (128 - param_width) / 2;
-        int param_y = y_offset + 12; // centré sur le fader
-        // Fond noir sous le texte
-        // u8g2.setDrawColor(0);
-        // u8g2.drawBox(param_x - 2, param_y - param_height + 2, param_width + 4, param_height);
+        int param_y = y_offset + ((boutonNumber > 3) ? 12 : 24);
         // Texte blanc
         u8g2.setDrawColor(1);
         u8g2.setCursor(param_x, param_y);
-        u8g2.print(paramName);
+        u8g2.print(title);
     }
+    u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
 void FaderWidget::drawFader() {
     int area_x = x_offset;
-    int area_y = y_offset + 16; // laisse un peu de marge en haut
+    int area_y = y_offset + ((boutonNumber > 3) ? 16 : 28);
     int area_w = 128;
-    int area_h = 3; // fader plus haut
+    int area_h = 8;
 
     // Efface la zone du fader uniquement
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
     int BAR_W = 120;
-    int BAR_H = 4; // fader plus haut
+    int BAR_H = 4;
     int BAR_X = area_x + 4;
     int BAR_Y = area_y;
 
     if(strcmp(title, "******") != 0){
         u8g2.setDrawColor(1);
         u8g2.drawFrame(BAR_X, BAR_Y, BAR_W, BAR_H);
-        int fillWidth = map(value, 0, 129, 0, BAR_W - 2);
-        u8g2.drawBox(BAR_X + 1, BAR_Y + 1, fillWidth, BAR_H);
+        int fillWidth = map(value, 0, 127, 0, BAR_W);
+        u8g2.drawBox(BAR_X, BAR_Y, fillWidth, BAR_H);
     }
-    // Le titre sera dessiné par-dessus dans drawTitle()
+    u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
 // Nouvelle méthode à ajouter dans la classe
 void FaderWidget::drawButtonName() {
     // Liste des vrais noms de boutons
     static const char* buttonNames[] = {
-        "Prev Track", "Next Track", "Hotswap", "A/B",
-        "Prev Device", "Next Device", "Prev Bank", "Next Bank"
+        "Track -", "Track +", "Hotswap", "A/B",
+        "Device -", "Device +", "Bank -", "Bank +"
     };
     int area_x = x_offset;
-    int area_y = y_offset + 20; // sous le fader plus haut
+    int area_y = y_offset + ((boutonNumber > 3) ? 20 : 0); // sous le fader plus haut
     int area_w = 128;
     int area_h = 12;
 
@@ -98,20 +102,24 @@ void FaderWidget::drawButtonName() {
 
     // Encadré
     u8g2.setDrawColor(1);
-    u8g2.drawFrame(x_offset + 4, area_y + 2, 8, 8);
+    u8g2.drawFrame(x_offset + 12, area_y + 4, 6, 6);
 
-    // Texte centré
+    // Texte centré, en gris si supporté
+    u8g2.setDrawColor(2); // 2 = gris moyen sur certains écrans
     u8g2.setCursor(box_x + 4, box_y + 10);
     u8g2.print(buttonName);
+    u8g2.setDrawColor(1); // repasse en blanc pour le reste
+    u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
 void FaderWidget::updateTitle(const char* txt) {
     strncpy(title, txt, sizeof(title));
     title[sizeof(title)-1] = '\0';
+    Serial.print("Texte: ");
+    Serial.println(title);
     if(!display_active){
     drawTitle();
     drawFader();
-    // drawButtonName();
     }
 }
 

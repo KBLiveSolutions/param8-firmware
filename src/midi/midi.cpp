@@ -194,7 +194,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   uint8_t param_number = sysex[3];
   uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
   Serial.print("Param Number: ");
-  Serial.print(param_number);
+  Serial.println(param_number);
   // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
   const uint8_t *char_data = sysex + 5;
   size_t char_data_len = len > 6 ? len - 6 : 0; // -6 pour F0, constructeur, status, param, staticOverlay, F7
