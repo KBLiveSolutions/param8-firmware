@@ -70,6 +70,6 @@ void loop() {
         screenSaverActive = true;
     }
     if (screenSaverActive) {
-        runScreenSaver();
+        // runScreenSaver();
     }
 }

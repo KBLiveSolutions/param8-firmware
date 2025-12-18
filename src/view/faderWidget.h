@@ -12,9 +12,10 @@ public:
     int value;
     int oldValue;
     int x_offset, y_offset;
+    int boutonNumber;
 
     // Déclaration seulement !
-    FaderWidget(U8G2 &u8g2, const char* title, int x, int y);
+    FaderWidget(U8G2 &u8g2, const char* title, int x, int y, int boutonNumber);
 
     void setTitle(const char* txt);
     void setValue(int val);
@@ -22,6 +23,7 @@ public:
     void draw();
     void drawFader();
     void drawTitle();
+    void drawButtonName();
     void updateTitle(const char* txt);
     void setParamName(const char* txt);
     void showParamName();

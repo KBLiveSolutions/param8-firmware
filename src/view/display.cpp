@@ -20,16 +20,16 @@ void setupDisplay() {
     u8g2_2.begin();
 
     // u8g2 : 1 2 / 5 6
-    faders[0] = new FaderWidget(u8g2,  "Fader 1",   0,   0);    // Bloc 1
-    faders[1] = new FaderWidget(u8g2,  "Fader 2", 128,   0);    // Bloc 2
-    faders[4] = new FaderWidget(u8g2,  "Fader 5",   0,  32);    // Bloc 5
-    faders[5] = new FaderWidget(u8g2,  "Fader 6", 128,  32);    // Bloc 6
+    faders[0] = new FaderWidget(u8g2,  "Fader 1",   0,   0, 0);    // Bloc 1
+    faders[1] = new FaderWidget(u8g2,  "Fader 2", 128,   0, 1);    // Bloc 2
+    faders[4] = new FaderWidget(u8g2,  "Fader 5",   0,  32, 4);    // Bloc 5
+    faders[5] = new FaderWidget(u8g2,  "Fader 6", 128,  32, 5);    // Bloc 6
 
     // u8g2_2 : 3 4 / 7 8
-    faders[2] = new FaderWidget(u8g2_2, "Fader 3",   0,   0);   // Bloc 3
-    faders[3] = new FaderWidget(u8g2_2, "Fader 4", 128,   0);   // Bloc 4
-    faders[6] = new FaderWidget(u8g2_2, "Fader 7",   0,  32);   // Bloc 7
-    faders[7] = new FaderWidget(u8g2_2, "Fader 8", 128,  32);   // Bloc 8
+    faders[2] = new FaderWidget(u8g2_2, "Fader 3",   0,   0, 2);   // Bloc 3
+    faders[3] = new FaderWidget(u8g2_2, "Fader 4", 128,   0, 3);   // Bloc 4
+    faders[6] = new FaderWidget(u8g2_2, "Fader 7",   0,  32, 6);   // Bloc 7
+    faders[7] = new FaderWidget(u8g2_2, "Fader 8", 128,  32, 7);   // Bloc 8
     u8g2.clearBuffer();
     u8g2_2.clearBuffer();
     updateDisplayBox("left", "KBD");
