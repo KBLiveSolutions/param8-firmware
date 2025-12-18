@@ -23,12 +23,11 @@ public:
     JsonArray getButtonShort(uint8_t preset, uint8_t btn);
     void setButtonShort(uint8_t preset, uint8_t btn, int v0, int v1);
 
-    JsonArray getButtonLong(uint8_t preset, uint8_t btn);
-    void setButtonLong(uint8_t preset, uint8_t btn, int v0, int v1);
-
+    int getButtonToggleMode(uint8_t preset, uint8_t btn);
+    void setButtonToggleMode(uint8_t preset, uint8_t btn, int value);
     JsonArray getEncoder(uint8_t preset, uint8_t enc);
     void getEncoderArray(uint8_t preset, uint8_t enc, int result[2]);
-    void setEncoder(uint8_t preset, uint8_t enc, int v0, int v1);
+    void setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel);
     ControlData getControlData(const char* control_type, uint8_t preset, uint8_t enc);
 
 private:

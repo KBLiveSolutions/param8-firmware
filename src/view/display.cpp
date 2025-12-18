@@ -13,6 +13,7 @@ unsigned long display_start_time = 0;
 bool display_active = false;
 bool display_needs_update = false;
 bool staticOverlay = false; // Flag pour l'affichage statique
+bool screenSaverActive = false;
 
 void setupDisplay() {
     u8g2.begin();
@@ -66,7 +67,9 @@ void updateDisplay() {
             u8g2.drawBox(area_x, area_y, area_w, area_h);
             u8g2.setDrawColor(1);
             u8g2.drawFrame(area_x, area_y, area_w, area_h);
-            u8g2.setFont(u8g2_font_7x14B_tr);
+            u8g2.setFontMode(1); // active le smooth font
+u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
+            // u8g2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2.getStrWidth(right_box_text);
             int text_x = (256 - text_width) / 2;
             u8g2.setCursor(text_x, text_y);
@@ -80,7 +83,9 @@ void updateDisplay() {
             u8g2_2.drawBox(area_x, area_y, area_w, area_h);
             u8g2_2.setDrawColor(1);
             u8g2_2.drawFrame(area_x, area_y, area_w, area_h);
-            u8g2_2.setFont(u8g2_font_7x14B_tr);
+            u8g2.setFontMode(1); // active le smooth font
+u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
+            // u8g2_2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2_2.getStrWidth(left_box_text);
             int text_x = (256 - text_width) / 2;
             u8g2_2.setCursor(text_x, text_y);
@@ -131,7 +136,9 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
         if (strcmp(side, "right") == 0) {
             u8g2.setDrawColor(1);
             u8g2.drawFrame(area_x, area_y, area_w, area_h);
-            u8g2.setFont(u8g2_font_7x14B_tr);
+            // u8g2.setFont(u8g2_font_7x14B_tr);
+            u8g2.setFontMode(1); // active le smooth font
+u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
             int text_width = u8g2.getStrWidth(text);
             int text_x = (256 - text_width) / 2;
             u8g2.setCursor(text_x, text_y);
@@ -141,7 +148,10 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
         if (strcmp(side, "left") == 0) {
             u8g2_2.setDrawColor(1);
             u8g2_2.drawFrame(area_x, area_y, area_w, area_h);
-            u8g2_2.setFont(u8g2_font_7x14B_tr);
+            // u8g2_2.setFont(u8g2_font_7x14B_tr);
+
+            u8g2.setFontMode(1); // active le smooth font
+u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
             int text_width = u8g2_2.getStrWidth(text);
             int text_x = (256 - text_width) / 2;
             u8g2_2.setCursor(text_x, text_y);
@@ -160,4 +170,28 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
     display_active = true;
     display_start_time = millis();
     staticOverlay = isStatic;
+}
+
+void runScreenSaver() {
+    static unsigned long lastUpdate = 0;
+    static int pixelCount = 0;
+    const int pixelsPerFrame = 20; // Moins de pixels par frame
+    const unsigned long frameInterval = 50; // ms entre chaque frame
+
+    unsigned long now = millis();
+    if (now - lastUpdate >= frameInterval) {
+        lastUpdate = now;
+        pixelCount = 0;
+        u8g2.clearBuffer();
+        u8g2_2.clearBuffer();
+        while (pixelCount < pixelsPerFrame) {
+            int x = random(0, 256);
+            int y = random(0, 64);
+            u8g2.drawPixel(x, y);
+            u8g2_2.drawPixel(x, y);
+            pixelCount++;
+        }
+        u8g2.sendBuffer();
+        u8g2_2.sendBuffer();
+    }
 }

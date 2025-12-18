@@ -41,44 +41,19 @@ MidiControl& ControlsManager::getButtonShort(uint8_t idx) {
     return _presets[_currentPreset].buttons_short[idx];
 }
 
-MidiControl& ControlsManager::getButtonLong(uint8_t idx) {
-    return _presets[_currentPreset].buttons_long[idx];
-}
-
-void ControlsManager::setEncoder(uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
-    if (idx < 8) {
-        _presets[_currentPreset].encoder[idx] = {type, number, channel};
-    }
-}
-
-void ControlsManager::setButtonShort(uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
-    if (idx < 8) {
-        _presets[_currentPreset].buttons_short[idx] = {type, number, channel};
-    }
-}
-
-void ControlsManager::setButtonLong(uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
-    if (idx < 8) {
-        _presets[_currentPreset].buttons_long[idx] = {type, number, channel};
-    }
-}
 
 // Surcharges avec paramètre de preset
 void ControlsManager::setEncoder(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
     if (preset < 8 && idx < 8) {
         _presets[preset].encoder[idx] = {type, number, channel};
+        json.setEncoder(preset, idx, static_cast<int>(type), static_cast<int>(number), static_cast<int>(channel)); 
     }
 }
 
-void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
+void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, bool toggleMode) {
     if (preset < 8 && idx < 8) {
         _presets[preset].buttons_short[idx] = {type, number, channel};
-    }
-}
-
-void ControlsManager::setButtonLong(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
-    if (preset < 8 && idx < 8) {
-        _presets[preset].buttons_long[idx] = {type, number, channel};
+        _presets[preset].buttons_short[idx].toggleMode = toggleMode;
     }
 }
 
@@ -120,20 +95,21 @@ void ControlsManager::setDefaults() {
             type = static_cast<ControlMidiType>(data.value0);
             number = static_cast<uint8_t>(data.value1);
             channel = static_cast<uint8_t>(data.value2);
-            setButtonShort(_preset, i, type, number, channel);
+            bool toggleMode = json.getButtonToggleMode(_preset, i) > 0;
+            setButtonShort(_preset, i, type, number, channel, toggleMode);
             
             // AJOUTER : Initialiser les valeurs des boutons
             _presets[_preset].buttons_short[i].value = 0;
             
             // Charger la configuration des boutons longs  
-            data = json.getControlData("buttons_long", _preset, i);
-            type = static_cast<ControlMidiType>(data.value0);
-            number = static_cast<uint8_t>(data.value1);
-            channel = static_cast<uint8_t>(data.value2);
-            setButtonLong(_preset, i, type, number, channel);
+            // data = json.getControlData("buttons_long", _preset, i);
+            // type = static_cast<ControlMidiType>(data.value0);
+            // number = static_cast<uint8_t>(data.value1);
+            // channel = static_cast<uint8_t>(data.value2);
+            // setButtonLong(_preset, i, type, number, channel);
             
             // AJOUTER : Initialiser les valeurs des boutons
-            _presets[_preset].buttons_long[i].value = 0;
+            // _presets[_preset].buttons_long[i].value = 0;
         }
     }
     
@@ -187,6 +163,44 @@ void ControlsManager::checkInactiveEncoders() {
             
             // Réinitialiser le timestamp pour éviter l'appel répétitif
             getEncoder(i).lastActivity = 0;
+        }
+    }
+}
+
+void ControlsManager::getPresetControls(uint8_t preset) {
+    Serial.print("Envoi des contrôles du preset ");
+    Serial.println(preset);
+    
+    if (preset < 8) {
+        for (int i = 0; i < 8; ++i) {
+            MidiControl& encoder = _presets[preset].encoder[i];
+            Serial.print("  Encoder ");
+            Serial.print(i);
+            Serial.print(": Type=");
+            Serial.print(static_cast<uint8_t>(encoder.type));
+            Serial.print(", Number=");
+            Serial.print(encoder.number);
+            Serial.print(", Channel=");
+            Serial.println(encoder.channel);
+            
+            // Envoyer les données via SysEx
+            uint8_t packet[9] = { 240, 111, 12, preset, (uint8_t)i,
+                                  static_cast<uint8_t>(encoder.type),
+                                  encoder.number,
+                                  encoder.channel,
+                                  247 };
+            usb_midi.writePacket(packet);
+            usb_midi.write(packet, 9);
+                delay(2); // Petit délai pour éviter de saturer l'USB
+            uint8_t buttonShortPacket[10] = { 240, 111, 13, preset, (uint8_t)i,
+                                  static_cast<uint8_t>(_presets[preset].buttons_short[i].type),
+                                  _presets[preset].buttons_short[i].number,
+                                  _presets[preset].buttons_short[i].channel,
+                                    _presets[preset].buttons_short[i].toggleMode ? 1 : 0,
+                                  247 };
+            usb_midi.writePacket(buttonShortPacket);
+            usb_midi.write(buttonShortPacket, 10);
+            delay(2); // Petit délai pour éviter de saturer l'USB
         }
     }
 }

@@ -3,13 +3,14 @@
 #include "../core/controls.h"
 #include "../core/actions.h"
 #include "../view/display.h"
-
+#include "../core/jsonManager.h"
 
 bool isSysExContinued = false;
 size_t sysExBufferSize = 0;
 uint8_t sysExBuffer[MIDI_MAX_PACKET_SIZE * 10];
 
-void setupMIDI() {
+void setupMIDI()
+{
   USBDevice.setManufacturerDescriptor("KBD");
   USBDevice.setProductDescriptor("param8");
   usb_midi.begin();
@@ -43,96 +44,118 @@ void setupMIDI() {
 //     }
 // }
 
-void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel) {
-  uint8_t packet[4] = { 0x0A, 0, 0, 0 };
+void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel)
+{      
+      lastInputTime = millis();
+if (screenSaverActive) {
+    screenSaverActive = false;
+    showDisplay(); // réaffiche l'UI normale
+}
+  uint8_t packet[4] = {0x0A, 0, 0, 0};
   // Serial.print("Sending MIDI: ");
   // Serial.print(type);
   // Serial.print(", Number: ");
   // Serial.print(number);
   // Serial.print(", Value: ");
-  // Serial.println(value);  
-  switch (type) {
-    case MIDI_NOTE:
-      packet[1] = (uint8_t)(0x90 | (channel & 0x0F));
-      packet[2] = number;
-      packet[3] = value;
-      usb_midi.writePacket(packet);
-      break;
-    case MIDI_CC:
-      packet[1] = (uint8_t)(0xB0 | (channel & 0x0F));
-      packet[2] = number;
-      packet[3] = value;
-      usb_midi.writePacket(packet);
-      break;
-    case MIDI_PC:
-      uint8_t pcPacket[3] = { 0x0A, (uint8_t)(0xC0 | (channel & 0x0F)), number };
-      usb_midi.write(pcPacket[1]);
-      usb_midi.write(pcPacket[2]);
-      break;
+  // Serial.println(value);
+  switch (type)
+  {
+  case MIDI_NOTE:
+    packet[1] = (uint8_t)(0x90 | (channel & 0x0F));
+    packet[2] = number;
+    packet[3] = value;
+    usb_midi.writePacket(packet);
+    break;
+  case MIDI_CC:
+    packet[1] = (uint8_t)(0xB0 | (channel & 0x0F));
+    packet[2] = number;
+    packet[3] = value;
+    usb_midi.writePacket(packet);
+    break;
+  case MIDI_PC:
+    uint8_t pcPacket[3] = {0x0A, (uint8_t)(0xC0 | (channel & 0x0F)), number};
+    usb_midi.write(pcPacket[1]);
+    usb_midi.write(pcPacket[2]);
+    break;
   }
 }
 
-
-void midiRead() {
-  if (usb_midi.available()) {
+void midiRead()
+{
+  if (usb_midi.available())
+  {
     uint8_t packet[MIDI_MAX_PACKET_SIZE];
     usb_midi.readPacket(packet);
     uint8_t cable = (packet[0] >> 4) + 1;
-      if (isSysExContinued) handleSysExContinuation(packet);
-      else {
-        if (packet[1] == SYSEX_START_BYTE) handleSysExStart(packet);
-        else handleMIDIDAWMessage(packet);
-      }
+    if (isSysExContinued)
+      handleSysExContinuation(packet);
+    else
+    {
+      if (packet[1] == SYSEX_START_BYTE)
+        handleSysExStart(packet);
+      else
+        handleMIDIDAWMessage(packet);
+    };
+    lastInputTime = millis();
+    if (screenSaverActive) {
+    screenSaverActive = false;
+    showDisplay(); // réaffiche l'UI normale
+}
   }
 }
 
-void handleMIDIDAWMessage(uint8_t *packet) {
+void handleMIDIDAWMessage(uint8_t *packet)
+{
   uint8_t channel = (packet[1] & 0x0F);
-  switch (packet[1] & 0xF0) {
-    case 0x80:  // Note off
-      break;
-    case 0x90:  // Note on
-      break;
-    case 0xB0:  // Control change
-      {
-        uint8_t control = packet[2];
-        uint8_t value = packet[3];
-        onControlChange(channel, control, value);
-        break;
-      }
-    case 0xC0:  // Program change
-      {
-        uint8_t program = packet[2] & 0x0F;
+  switch (packet[1] & 0xF0)
+  {
+  case 0x80: // Note off
+    break;
+  case 0x90: // Note on
+    break;
+  case 0xB0: // Control change
+  {
+    uint8_t control = packet[2];
+    uint8_t value = packet[3];
+    onControlChange(channel, control, value);
+    break;
+  }
+  case 0xC0: // Program change
+  {
+    uint8_t program = packet[2] & 0x0F;
 
-
-        // Serial.print("Program Change - Program: ");
-        // Serial.print(program);
-        break;
-      }
-    case 0xE0:  // Pitch Bend
-      {
-        uint16_t pitchBendValue = (packet[3] << 7) | packet[2];
-        // Serial.print("Pitch Bend - Value: ");
-        // Serial.print(pitchBendValue);
-        break;
-      }
-    default:
-      // Serial.print("Unknown MIDI message type ");
-      break;
+    // Serial.print("Program Change - Program: ");
+    // Serial.print(program);
+    break;
+  }
+  case 0xE0: // Pitch Bend
+  {
+    uint16_t pitchBendValue = (packet[3] << 7) | packet[2];
+    // Serial.print("Pitch Bend - Value: ");
+    // Serial.print(pitchBendValue);
+    break;
+  }
+  default:
+    // Serial.print("Unknown MIDI message type ");
+    break;
   }
 }
 
-void clearSysExBuffer() {
+void clearSysExBuffer()
+{
   memset(sysExBuffer, 0, sizeof(sysExBuffer));
   sysExBufferSize = 0;
   isSysExContinued = false;
 }
 
-void handleSysExMessage(uint8_t *packet) {
+void handleSysExMessage(uint8_t *packet)
+{
   memcpy(sysExBuffer + sysExBufferSize, packet + 1, MIDI_MAX_PACKET_SIZE - 1);
-  for (size_t i = 1; i < MIDI_MAX_PACKET_SIZE; i++) {
+  for (size_t i = 1; i < MIDI_MAX_PACKET_SIZE; i++)
+  {
     sysExBufferSize++;
-    if (packet[i] == SYSEX_END_BYTE) {
+    if (packet[i] == SYSEX_END_BYTE)
+    {
       onSysEx(sysExBuffer, sysExBufferSize);
       clearSysExBuffer();
       return;
@@ -140,89 +163,158 @@ void handleSysExMessage(uint8_t *packet) {
   }
 }
 
-void handleSysExStart(uint8_t *packet) {
+void handleSysExStart(uint8_t *packet)
+{
   clearSysExBuffer();
   handleSysExMessage(packet);
   isSysExContinued = true;
 }
 
-void handleSysExContinuation(uint8_t *packet) {
+void handleSysExContinuation(uint8_t *packet)
+{
   handleSysExMessage(packet);
 }
 
-
-void onControlChange(uint8_t channel, uint8_t control, uint8_t value){
+void onControlChange(uint8_t channel, uint8_t control, uint8_t value)
+{
   controls.onControlChange(channel, control, value);
 };
 
-void onSysEx(const uint8_t* sysex, size_t len) {
-    if (len < 5) return; // Maintenant on a besoin d'au moins 5 octets
+void onSysEx(const uint8_t *sysex, size_t len)
+{
+  if (len < 5)
+    return; // Maintenant on a besoin d'au moins 5 octets
 
-    uint8_t constructor_byte = sysex[1];
-    uint8_t status_byte = sysex[2];
-    Serial.print("Received SysEx - Constructor: ");
-    Serial.print(constructor_byte);
-    Serial.print(", Status: ");
-    Serial.println(status_byte);
-    uint8_t param_number = sysex[3];
-    uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
+  uint8_t constructor_byte = sysex[1];
+  uint8_t status_byte = sysex[2];
+  Serial.print("Received SysEx - Constructor: ");
+  Serial.print(constructor_byte);
+  Serial.print(", Status: ");
+  Serial.println(status_byte);
+  uint8_t param_number = sysex[3];
+  uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
   Serial.print("Param Number: ");
   Serial.print(param_number);
-    // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
-    const uint8_t* char_data = sysex + 5;
-    size_t char_data_len = len > 6 ? len - 6 : 0; // -6 pour F0, constructeur, status, param, staticOverlay, F7
+  // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
+  const uint8_t *char_data = sysex + 5;
+  size_t char_data_len = len > 6 ? len - 6 : 0; // -6 pour F0, constructeur, status, param, staticOverlay, F7
 
-    char ascii_string[20] = {0}; // 10 caractères max + \0
-    decode_ascii_sysex(char_data, char_data_len, ascii_string, sizeof(ascii_string));
+  char ascii_string[20] = {0}; // 10 caractères max + \0
+  decode_ascii_sysex(char_data, char_data_len, ascii_string, sizeof(ascii_string));
 
-    // Gestion des différents status_byte
-    switch (status_byte) {
-        case 0:
-            if (strlen(ascii_string) > 0) {
-                faders[param_number]->setParamName(ascii_string);
-            } else {
-                // String vide, passe une string vide
-                faders[param_number]->setParamName("");
-            }
-            break;
-        
-        case 1:
-            faders[param_number]->updateTitle(ascii_string);
-            break;
-            
-        case 2:
-            // Stocke la ligne reçue dans la boîte de gauche
-            updateDisplayBox("left", ascii_string, staticOverlay == 1);
-            break;
-            
-        case 3:
-            // Stocke la ligne reçue dans la boîte de droite
-            updateDisplayBox("right", ascii_string, staticOverlay == 1);
-            break;
-            
-        case 5:
-            // requete de numero de preset
-            Serial.print("Réponse SysEx: Envoi du preset actuel ");
-            uint8_t preset = controls.getPreset();
-            sendPresetSysEx(preset);
-            break;
-
+  // Gestion des différents status_byte
+  switch (status_byte)
+  {
+  case 0:
+    if (strlen(ascii_string) > 0)
+    {
+      faders[param_number]->setParamName(ascii_string);
     }
+    else
+    {
+      // String vide, passe une string vide
+      faders[param_number]->setParamName("");
+    }
+    break;
+
+  case 1:
+    faders[param_number]->updateTitle(ascii_string);
+    break;
+
+  case 2:
+    // Stocke la ligne reçue dans la boîte de gauche
+    updateDisplayBox("left", ascii_string, staticOverlay == 1);
+    break;
+
+  case 3:
+    // Stocke la ligne reçue dans la boîte de droite
+    updateDisplayBox("right", ascii_string, staticOverlay == 1);
+    break;
+
+  case 5:
+  {
+    // requete de numero de preset
+    Serial.print("Réponse SysEx: Envoi du preset actuel ");
+    uint8_t preset = controls.getPreset();
+    sendPresetSysEx(preset);
+    break;
+  }
+  case 7:
+  {
+    Serial.println("dump des controls reçue");
+    controls.getPresetControls(param_number);
+    break;
+  }
+  case 13:
+  {
+    Serial.println("Configuration des encoders reçue");
+    // Chaque contrôle utilise 3 octets: type, number, channel
+    uint8_t preset = sysex[3];
+    param_number = sysex[4];
+    uint8_t type = sysex[5];
+    uint8_t number = sysex[6];
+    uint8_t channel = sysex[7];
+    controls.setEncoder(preset, param_number, MIDI_CC, number, channel);
+    Serial.print("  Contrôle ");
+    Serial.print(param_number);
+    Serial.print(": Type=");
+    Serial.print("1");
+    Serial.print(", Numéro=");
+    Serial.print(number);
+    Serial.print(", Canal=");
+    Serial.println(channel);
+    if (preset == controls.getPreset()) updateFaderTitles();
+    json.save();
+    break;
+  }
+  case 12:
+  {
+    Serial.println("Configuration des boutons courts reçue (nouveau format)");
+    // Structure : F0, constructeur, preset, status, type, control_number, channel, toggle, F7
+    uint8_t preset = sysex[3];
+    param_number = sysex[4];
+    ControlMidiType _type =  (sysex[5] == 0) ? MIDI_CC : MIDI_NOTE ;
+    uint8_t control = sysex[6];
+    uint8_t channel = sysex[7];
+    bool toggleMode = sysex[8] != 0;
+    controls.setButtonShort(preset, param_number, _type, control, channel, toggleMode);
+    Serial.print("  Contrôle ");
+    Serial.print(param_number);
+    Serial.print(": Type=");
+    Serial.print(_type);
+    Serial.print(", Canal=");
+    Serial.print(channel);
+    Serial.print(", ToggleMode=");
+    Serial.println(toggleMode);
+    if (preset == controls.getPreset()) updateFaderTitles();
+    json.save();
+    break;
+  } 
+  default:
+    Serial.print("Unknown SysEx status byte: ");
+    Serial.println(status_byte);
+    break;
+  }
 }
 
-void decode_ascii_sysex(const uint8_t* data, size_t len, char* out, size_t out_len) {
-    size_t out_idx = 0;
-    for (size_t i = 0; i + 1 < len && out_idx + 1 < out_len; i += 2) {
-        uint8_t type = data[i];
-        uint8_t val = data[i + 1];
-        char c = '_'; // Par défaut
+void decode_ascii_sysex(const uint8_t *data, size_t len, char *out, size_t out_len)
+{
+  size_t out_idx = 0;
+  for (size_t i = 0; i + 1 < len && out_idx + 1 < out_len; i += 2)
+  {
+    uint8_t type = data[i];
+    uint8_t val = data[i + 1];
+    char c = '_'; // Par défaut
 
-        if (type == 0 && val <= 94) {
-            c = (char)(val + 32); // ASCII standard
-        } else if (type == 1 && val <= 127) {
-            c = (char)(val + 128); // ASCII étendu
-        }
-        out[out_idx++] = c;
+    if (type == 0 && val <= 94)
+    {
+      c = (char)(val + 32); // ASCII standard
     }
-    out[out_idx] = '\0';
+    else if (type == 1 && val <= 127)
+    {
+      c = (char)(val + 128); // ASCII étendu
+    }
+    out[out_idx++] = c;
+  }
+  out[out_idx] = '\0';
 }

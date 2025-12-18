@@ -71,12 +71,14 @@ void FaderWidget::drawTitle() {
         u8g2.drawBox(x_offset, y_offset, area_w, area_h);
         if(strcmp(title, "******") != 0){
             u8g2.setDrawColor(1);
-            u8g2.setFont(u8g2_font_helvB10_tf); //u8g2_font_7x14B_tr  u8g2_font_7x14_tf u8g2_font_helvB12_te
+            u8g2.setFontMode(1); // active le smooth font
+u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
+            // u8g2.setFont(u8g2_font_helvB10_tf); //u8g2_font_7x14B_tr  u8g2_font_7x14_tf u8g2_font_helvB12_te
             int text_width = u8g2.getStrWidth(title);
             int text_x = x_offset + (area_w - text_width) / 2;
             int text_y = y_offset + u8g2.getAscent() - 2;
 
-            u8g2.setCursor(text_x, text_y + 4); // +2 pour un peu d'espace sous le texte
+            u8g2.setCursor(text_x, text_y + 6); // +2 pour un peu d'espace sous le texte
             u8g2.print(title);
         }
         u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);

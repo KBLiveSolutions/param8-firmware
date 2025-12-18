@@ -4,9 +4,11 @@
 extern bool shiftPressed;
 extern bool latchPressed;
 extern bool revertMode;
+extern unsigned long lastInputTime;
 
 void onButtonShortPress(uint8_t idx);
 void onRelativeEncoderChange(uint8_t idx, int value);
+void onAbsoluteEncoderChange(uint8_t idx, int newPos);
 void updateFaderTitles();
 void sendPresetSysEx(uint8_t preset);
 void onShiftPress();
@@ -16,5 +18,5 @@ void onLatchRelease();
 void releaseLatchAndSend();
 void sendRevertEvents();
 void setRevertModeLed(bool on);
-void onButtonPressedReleased(uint8_t, bool);
-void onButtonRelease(uint8_t idx); 
+void onButtonPressed(uint8_t);
+void onButtonReleased(uint8_t);

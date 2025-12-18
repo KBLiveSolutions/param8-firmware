@@ -26,6 +26,8 @@ U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2_2(U8G2_R0, /* cs=*/13, /* dc=*/12, /* r
 #include "view/display.h"
 #include "core/actions.h"
 
+#define SCREEN_SAVER_DELAY 60000 // 1 minute d'inactivité
+
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -52,17 +54,22 @@ unsigned long lastInactivityCheck = 0;
 const unsigned long inactivityCheckInterval = 250;  // Vérifier toutes les 250ms
 
 void loop() {
-  midiRead();
-  encoders.read();
-  readButtons();
-  updateDisplay();
-      if (revertMode) {
-        pulseLedWhite(8);
+    midiRead();
+    encoders.read();
+    readButtons();
+    updateDisplay();
+
+    unsigned long currentTime = millis();
+    if (currentTime - lastInactivityCheck >= inactivityCheckInterval) {
+        controls.checkInactiveEncoders();
+        lastInactivityCheck = currentTime;
     }
-  // Vérifier les encodeurs inactifs périodiquement
-  unsigned long currentTime = millis();
-  if (currentTime - lastInactivityCheck >= inactivityCheckInterval) {
-    controls.checkInactiveEncoders();
-    lastInactivityCheck = currentTime;
-  }
+
+    // Screen saver
+    if (!screenSaverActive && currentTime - lastInputTime > SCREEN_SAVER_DELAY) {
+        screenSaverActive = true;
+    }
+    if (screenSaverActive) {
+        runScreenSaver();
+    }
 }

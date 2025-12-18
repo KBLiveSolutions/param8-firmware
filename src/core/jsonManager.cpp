@@ -48,14 +48,13 @@ void JsonManager::setButtonShort(uint8_t preset, uint8_t btn, int v0, int v1) {
     arr[1] = v1;
 }
 
-JsonArray JsonManager::getButtonLong(uint8_t preset, uint8_t btn) {
-    return _doc[String(preset)]["buttons_long"][String(btn)].as<JsonArray>();
+int JsonManager::getButtonToggleMode(uint8_t preset, uint8_t btn) {
+    return _doc[String(preset)]["buttons_toggle"][String(btn)] | 0;
 }
 
-void JsonManager::setButtonLong(uint8_t preset, uint8_t btn, int v0, int v1) {
-    JsonArray arr = _doc[String(preset)]["buttons_long"][String(btn)].to<JsonArray>();
+void JsonManager::setButtonToggleMode(uint8_t preset, uint8_t btn, int v0) {
+    JsonArray arr = _doc[String(preset)]["buttons_toggle"][String(btn)].to<JsonArray>();
     arr[0] = v0;
-    arr[1] = v1;
 }
 
 JsonArray JsonManager::getEncoder(uint8_t preset, uint8_t enc) {
@@ -77,40 +76,46 @@ ControlData JsonManager::getControlData(const char* control_type, uint8_t preset
     return data;
 }
 
-void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int v0, int v1) {
+void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel) {
     JsonArray arr = _doc[String(preset)]["encoders"][String(enc)].to<JsonArray>();
-    arr[0] = v0;
-    arr[1] = v1;
+    arr[0] = type;
+    arr[1] = number;
+    arr[2] = channel;
 }
 
 void setupJsonManager() {
-    Serial.println("Initializing LittleFS...");
+    Serial.println("[setupJsonManager] Initializing LittleFS...");
+    unsigned long t0 = millis();
     if (!LittleFS.begin()) {
-        Serial.println("ERROR: Failed to mount LittleFS");
+        Serial.println("[setupJsonManager] ERROR: Failed to mount LittleFS");
         return;
     }
-    Serial.println("LittleFS mounted successfully");
-    
-    // Load JSON configuration
-    Serial.println("Loading JSON configuration...");
+    Serial.print("[setupJsonManager] LittleFS mounted in ");
+    Serial.print(millis() - t0);
+    Serial.println(" ms");
+
+    Serial.println("[setupJsonManager] Loading JSON configuration...");
+    unsigned long t1 = millis();
     if (json.load()) {
         int mode = json.getMode();
-        Serial.print("JSON loaded successfully, mode: ");
+        Serial.print("[setupJsonManager] JSON loaded successfully in ");
+        Serial.print(millis() - t1);
+        Serial.println(" ms");
+        Serial.print("[setupJsonManager] Mode: ");
         Serial.println(mode);
-        
+
         // Test: Vérifier quelques valeurs
         ControlData testData = json.getControlData("encoders", 0, 0);
-        Serial.print("Test encoder[0][0]: type=");
+        Serial.print("[setupJsonManager] Test encoder[0][0]: type=");
         Serial.print(testData.value0);
         Serial.print(", number=");
         Serial.print(testData.value1);
         Serial.print(", channel=");
         Serial.println(testData.value2);
     } else {
-        Serial.println("ERROR: Failed to load JSON configuration");
-        Serial.println("Trying to create default data.json file...");
-        
-        // Créer un fichier de configuration par défaut si il n'existe pas
+        Serial.println("[setupJsonManager] ERROR: Failed to load JSON configuration");
+        Serial.println("[setupJsonManager] Trying to create default data.json file...");
+        unsigned long t2 = millis();
         File defaultFile = LittleFS.open("/data.json", "w");
         if (defaultFile) {
             defaultFile.print(R"({
@@ -131,11 +136,15 @@ void setupJsonManager() {
   }
 })");
             defaultFile.close();
-            Serial.println("Default data.json created, retrying load...");
-            
-            // Retry loading
+            Serial.print("[setupJsonManager] Default data.json created in ");
+            Serial.print(millis() - t2);
+            Serial.println(" ms");
+            Serial.println("[setupJsonManager] Retrying load...");
+            unsigned long t3 = millis();
             if (json.load()) {
-                Serial.println("JSON loaded successfully after creating default file");
+                Serial.print("[setupJsonManager] JSON loaded successfully after creating default file in ");
+                Serial.print(millis() - t3);
+                Serial.println(" ms");
             }
         }
     }

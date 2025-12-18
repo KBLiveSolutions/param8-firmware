@@ -16,13 +16,13 @@ void updateButton(uint8_t idx, bool reading) {
   if (buttons[idx].lastState != buttons[idx].currentState) {
     if (!buttons[idx].currentState) { // Bouton appuyé (active bas)
       if (buttons[idx].pressedTime == 0) {
-        onButtonPressedReleased(idx, true);
+        onButtonPressed(idx);
         // Vient d'être pressé
         buttons[idx].pressedTime = now;
         buttons[idx].shortPressEventPending = false;
       }
     } else {
-      onButtonPressedReleased(idx, false);
+      onButtonReleased(idx);
       // Bouton relâché
       if (buttons[idx].pressedTime != 0) {
         buttons[idx].shortPressEventPending = true;
