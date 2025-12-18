@@ -43,9 +43,10 @@ void setup() {
   sendPresetSysEx(controls.getPreset());
   encoders.setup();
   setupButtons();
-  setupLeds();
+//   setupLeds();
   Serial.println("=== STARTUP COMPLETE ===");
   delay(100);     // Stabilisation finale
+
 }
 
 unsigned long lastDisplay = 0;

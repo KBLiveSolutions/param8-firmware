@@ -136,8 +136,11 @@ void ControlsManager::onControlChange(uint8_t channel, uint8_t control, uint8_t 
             encoders.positions[i] = value; 
         }
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {
-            if(value > 63) showLed(i, 255, 255, 255); 
-            else showLed(i, 0, 0, 0); // Éteint la LED si la valeur est inférieure ou égale à 63
+            // if(value > 63) showLed(i, 255, 255, 255); 
+            // else showLed(i, 0, 0, 0); // Éteint la LED si la valeur est inférieure ou égale à 
+             if(value > 63) getButtonShort(i).buttonState = true;
+             else getButtonShort(i).buttonState = false;  
+             faders[i]->drawButtonName();
             getButtonShort(i).value = value;
         }
     }

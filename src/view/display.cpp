@@ -67,9 +67,7 @@ void updateDisplay() {
             u8g2.drawBox(area_x, area_y, area_w, area_h);
             u8g2.setDrawColor(1);
             u8g2.drawFrame(area_x, area_y, area_w, area_h);
-            u8g2.setFontMode(1); // active le smooth font
-u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
-            // u8g2.setFont(u8g2_font_7x14B_tr);
+            u8g2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2.getStrWidth(right_box_text);
             int text_x = (256 - text_width) / 2;
             u8g2.setCursor(text_x, text_y);
@@ -83,9 +81,7 @@ u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
             u8g2_2.drawBox(area_x, area_y, area_w, area_h);
             u8g2_2.setDrawColor(1);
             u8g2_2.drawFrame(area_x, area_y, area_w, area_h);
-            u8g2.setFontMode(1); // active le smooth font
-u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
-            // u8g2_2.setFont(u8g2_font_7x14B_tr);
+            u8g2_2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2_2.getStrWidth(left_box_text);
             int text_x = (256 - text_width) / 2;
             u8g2_2.setCursor(text_x, text_y);
@@ -136,9 +132,7 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
         if (strcmp(side, "right") == 0) {
             u8g2.setDrawColor(1);
             u8g2.drawFrame(area_x, area_y, area_w, area_h);
-            // u8g2.setFont(u8g2_font_7x14B_tr);
-            u8g2.setFontMode(1); // active le smooth font
-u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
+            u8g2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2.getStrWidth(text);
             int text_x = (256 - text_width) / 2;
             u8g2.setCursor(text_x, text_y);
@@ -148,10 +142,7 @@ u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
         if (strcmp(side, "left") == 0) {
             u8g2_2.setDrawColor(1);
             u8g2_2.drawFrame(area_x, area_y, area_w, area_h);
-            // u8g2_2.setFont(u8g2_font_7x14B_tr);
-
-            u8g2.setFontMode(1); // active le smooth font
-u8g2.setFont(u8g2_font_unifont_t_symbols); // exemple de police smooth
+            u8g2_2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2_2.getStrWidth(text);
             int text_x = (256 - text_width) / 2;
             u8g2_2.setCursor(text_x, text_y);

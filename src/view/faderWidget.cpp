@@ -1,4 +1,5 @@
 #include "display.h"
+#include "../core/controls.h"
 
 FaderWidget::FaderWidget(U8G2 &u8g2, const char* initialTitle, int x, int y, int boutonNumber)
     : u8g2(u8g2), value(0), x_offset(x), y_offset(y), boutonNumber(boutonNumber)
@@ -18,6 +19,12 @@ void FaderWidget::setParamName(const char* txt) {
     setTitle(txt);
 }
 
+void FaderWidget::setButtonName(const char* txt) {
+    strncpy(buttonName, txt, sizeof(buttonName));
+    buttonName[sizeof(buttonName)-1] = '\0';
+    if(!display_active) drawButtonName();
+}
+
 void FaderWidget::showParamName() {
     setTitle(paramName);
 }
@@ -25,7 +32,7 @@ void FaderWidget::showParamName() {
 void FaderWidget::drawTitle() {
     // Le titre est affiché en grand, centré verticalement sur le fader
     int area_x = x_offset;
-    int area_y = y_offset + ((boutonNumber > 3) ? 0 : 12);
+    int area_y = y_offset + ((boutonNumber > 3) ? 0 : 8);
     int area_w = 128;
     int area_h = 16;
 
@@ -38,7 +45,7 @@ void FaderWidget::drawTitle() {
     if(strcmp(paramName, "******") != 0){
         int param_width = u8g2.getStrWidth(title);
         int param_x = x_offset + (128 - param_width) / 2;
-        int param_y = y_offset + ((boutonNumber > 3) ? 12 : 24);
+        int param_y = y_offset + ((boutonNumber > 3) ? 14 : 22);
         // Texte blanc
         u8g2.setDrawColor(1);
         u8g2.setCursor(param_x, param_y);
@@ -49,7 +56,7 @@ void FaderWidget::drawTitle() {
 
 void FaderWidget::drawFader() {
     int area_x = x_offset;
-    int area_y = y_offset + ((boutonNumber > 3) ? 16 : 28);
+    int area_y = y_offset + ((boutonNumber > 3) ? 16 : 24);
     int area_w = 128;
     int area_h = 8;
 
@@ -58,9 +65,9 @@ void FaderWidget::drawFader() {
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
     int BAR_W = 120;
-    int BAR_H = 4;
+    int BAR_H = 5;
     int BAR_X = area_x + 4;
-    int BAR_Y = area_y;
+    int BAR_Y = area_y + 1;
 
     if(strcmp(title, "******") != 0){
         u8g2.setDrawColor(1);
@@ -74,41 +81,47 @@ void FaderWidget::drawFader() {
 // Nouvelle méthode à ajouter dans la classe
 void FaderWidget::drawButtonName() {
     // Liste des vrais noms de boutons
-    static const char* buttonNames[] = {
-        "Track -", "Track +", "Hotswap", "A/B",
-        "Device -", "Device +", "Bank -", "Bank +"
-    };
+    // static const char* buttonNames[] = {
+    //     "Track -", "Track +", "Hotswap", "A/B",
+    //     "Device -", "Device +", "Bank -", "Bank +"
+    // };
     int area_x = x_offset;
-    int area_y = y_offset + ((boutonNumber > 3) ? 20 : 0); // sous le fader plus haut
+    int area_y = y_offset + ((boutonNumber > 3) ? 24 : 0); // sous le fader plus haut
     int area_w = 128;
-    int area_h = 12;
+    int area_h = 8;
 
     // Choix du nom selon boutonNumber (doit être entre 0 et 7)
-    const char* buttonName = "Button ?";
-    if (boutonNumber >= 0 && boutonNumber < 8) {
-        buttonName = buttonNames[boutonNumber];
-    }
-
+    // const char* buttonName = "Button ?";
+    // if (boutonNumber >= 0 && boutonNumber < 8) {
+    //     buttonName = buttonNames[boutonNumber];
+    // }
+    int box_width = 120;
+    
     // Efface la zone du bouton uniquement
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
-    u8g2.setFont(u8g2_font_6x10_tr);
+    u8g2.setFont(u8g2_font_5x8_tr);
     int text_width = u8g2.getStrWidth(buttonName);
     int box_x = x_offset + (128 - text_width - 8) / 2;
-    int box_y = area_y;
-    int box_w = text_width + 8;
-    int box_h = 14;
 
     // Encadré
-    u8g2.setDrawColor(1);
-    u8g2.drawFrame(x_offset + 12, area_y + 4, 6, 6);
+    bool state = controls.getButtonShort(boutonNumber).buttonState;
+    if(state){
+    u8g2.setDrawColor(3);
+    u8g2.drawBox(area_x + 4, area_y , box_width, area_h);
+    u8g2.setDrawColor(0); // 2 = gris moyen sur certains écrans
+    // u8g2.setDrawColor(1);
+    // u8g2.drawFrame(box_x - 8, area_y + 1, 6, 6);
+    }
+    else{
+    u8g2.setDrawColor(3); // 2 = gris moyen sur certains écrans
+    }   
 
     // Texte centré, en gris si supporté
-    u8g2.setDrawColor(2); // 2 = gris moyen sur certains écrans
-    u8g2.setCursor(box_x + 4, box_y + 10);
+    // u8g2.setDrawColor(1); // 2 = gris moyen sur certains écrans
+    u8g2.setCursor(box_x + 4, area_y + 7);
     u8g2.print(buttonName);
-    u8g2.setDrawColor(1); // repasse en blanc pour le reste
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 

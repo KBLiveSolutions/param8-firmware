@@ -9,6 +9,7 @@ public:
     U8G2 &u8g2;
     char title[20];
     char paramName[20];
+    char buttonName[20];
     int value;
     int oldValue;
     int x_offset, y_offset;
@@ -26,5 +27,6 @@ public:
     void drawButtonName();
     void updateTitle(const char* txt);
     void setParamName(const char* txt);
+    void setButtonName(const char* txt);
     void showParamName();
 };

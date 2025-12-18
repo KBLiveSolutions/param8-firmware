@@ -224,6 +224,27 @@ void updateFaderTitles()
         int channel = controls.getEncoder(i).channel;
         snprintf(buf, sizeof(buf), "CC%d / %d", number, channel + 1);
         faders[i]->setParamName(buf);
+        if(controls.getPreset() == 7){
+                    static const char* buttonNames[] = {
+            "Track -", "Track +", "Hotswap", "A/B",
+            "Device -", "Device +", "Bank -", "Bank +"
+        };
+        snprintf(buf, sizeof(buf), buttonNames[i]);
+        }        
+        else if(controls.getPreset() == 6){
+                    static const char* buttonNames[] = {
+            "Metronome", "Arr. Rec", "Play/Stop", "Capture",
+            "Track -", "Track +", "Arr. Loop", "Arm Track"
+        };
+        snprintf(buf, sizeof(buf), buttonNames[i]);
+        }
+        else{
+        ControlMidiType type = controls.getButtonShort(i).type;
+        number = controls.getButtonShort(i).number;
+        channel = controls.getButtonShort(i).channel;
+        snprintf(buf, sizeof(buf), (type==MIDI_CC) ? "CC%d / %d" : "Note%d / %d", number, channel + 1);
+        }
+        faders[i]->setButtonName(buf);
     }
 }
 
