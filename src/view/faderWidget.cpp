@@ -11,7 +11,7 @@ FaderWidget::FaderWidget(U8G2 &u8g2, const char* initialTitle, int x, int y, int
 void FaderWidget::setTitle(const char* txt) {
     strncpy(title, txt, sizeof(title));
     title[sizeof(title)-1] = '\0';
-    if(!display_active) drawTitle();
+    if(!display_active) drawFader();
 }
 
 void FaderWidget::setParamName(const char* txt) {
@@ -56,24 +56,43 @@ void FaderWidget::drawTitle() {
 
 void FaderWidget::drawFader() {
     int area_x = x_offset;
-    int area_y = y_offset + ((boutonNumber > 3) ? 16 : 24);
+    int area_y = y_offset + ((boutonNumber > 3) ? 0 : 8);
     int area_w = 128;
-    int area_h = 8;
+    int area_h = 24;
 
     // Efface la zone du fader uniquement
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
     int BAR_W = 120;
-    int BAR_H = 5;
+    int BAR_H = 20;
     int BAR_X = area_x + 4;
     int BAR_Y = area_y + 1;
 
     if(strcmp(title, "******") != 0){
+        // Active le mode transparent pour le texte
+        u8g2.setFontMode(1);
+        
+        // Dessine le cadre du fader
         u8g2.setDrawColor(1);
         u8g2.drawFrame(BAR_X, BAR_Y, BAR_W, BAR_H);
+        
+        // Dessine le remplissage du fader
         int fillWidth = map(value, 0, 127, 0, BAR_W);
         u8g2.drawBox(BAR_X, BAR_Y, fillWidth, BAR_H);
+        
+        // Dessine le titre centré dans le fader en mode XOR
+        u8g2.setFont(u8g2_font_8x13B_tr);
+        int text_width = u8g2.getStrWidth(title);
+        int text_x = BAR_X + (BAR_W - text_width) / 2;
+        int text_y = BAR_Y + 14; // centré verticalement dans la barre
+        
+        u8g2.setDrawColor(2); // mode XOR : blanc sur noir, noir sur blanc
+        u8g2.drawStr(text_x, text_y, title);
+        
+        // Repasse en mode normal
+        u8g2.setFontMode(0);
+        u8g2.setDrawColor(1);
     }
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
@@ -131,7 +150,7 @@ void FaderWidget::updateTitle(const char* txt) {
     Serial.print("Texte: ");
     Serial.println(title);
     if(!display_active){
-    drawTitle();
+    // drawTitle();
     drawFader();
     }
 }
@@ -159,7 +178,7 @@ void FaderWidget::draw() {
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
     drawFader(); // d'abord le fader
-    drawTitle(); // puis le titre par-dessus
+    // drawTitle(); // puis le titre par-dessus
     drawButtonName();
 
     // Mise à jour de toute la zone
