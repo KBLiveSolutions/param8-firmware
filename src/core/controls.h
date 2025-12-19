@@ -15,7 +15,6 @@ struct MidiControl {
     uint8_t value = 0; // Valeur réelle synchronisée avec Live
     bool toggleMode = false; // Pour les boutons : mode toggle ou momentané
     unsigned long lastActivity = 0; // Timestamp de la dernière activité
-    bool buttonState = false; // Pour les boutons : état actuel (appuyé ou non)
 };
 
 struct PresetControls {

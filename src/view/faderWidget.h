@@ -10,6 +10,7 @@ public:
     char title[20];
     char paramName[20];
     char buttonName[20];
+    char buttonText[20];
     int value;
     int oldValue;
     int x_offset, y_offset;
@@ -24,9 +25,10 @@ public:
     void draw();
     void drawFader();
     void drawTitle();
-    void drawButtonName();
+    void setButtonName(const char* txt);
+    void drawButtonName(const char* txt, bool);
+    void updateButtonName(bool);
     void updateTitle(const char* txt);
     void setParamName(const char* txt);
-    void setButtonName(const char* txt);
     void showParamName();
 };

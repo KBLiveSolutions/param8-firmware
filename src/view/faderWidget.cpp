@@ -22,7 +22,12 @@ void FaderWidget::setParamName(const char* txt) {
 void FaderWidget::setButtonName(const char* txt) {
     strncpy(buttonName, txt, sizeof(buttonName));
     buttonName[sizeof(buttonName)-1] = '\0';
-    if(!display_active) drawButtonName();
+    strncpy(buttonText, txt, sizeof(buttonText));
+    if(!display_active) drawButtonName(txt, false);
+}
+
+void FaderWidget::updateButtonName(bool state) {
+    drawButtonName(buttonText, state);
 }
 
 void FaderWidget::showParamName() {
@@ -98,22 +103,11 @@ void FaderWidget::drawFader() {
 }
 
 // Nouvelle méthode à ajouter dans la classe
-void FaderWidget::drawButtonName() {
-    // Liste des vrais noms de boutons
-    // static const char* buttonNames[] = {
-    //     "Track -", "Track +", "Hotswap", "A/B",
-    //     "Device -", "Device +", "Bank -", "Bank +"
-    // };
+void FaderWidget::drawButtonName(const char* txt, bool state) {
     int area_x = x_offset;
     int area_y = y_offset + ((boutonNumber > 3) ? 24 : 0); // sous le fader plus haut
     int area_w = 128;
     int area_h = 8;
-
-    // Choix du nom selon boutonNumber (doit être entre 0 et 7)
-    // const char* buttonName = "Button ?";
-    // if (boutonNumber >= 0 && boutonNumber < 8) {
-    //     buttonName = buttonNames[boutonNumber];
-    // }
     int box_width = 120;
     
     // Efface la zone du bouton uniquement
@@ -121,13 +115,12 @@ void FaderWidget::drawButtonName() {
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
     u8g2.setFont(u8g2_font_5x8_tr);
-    int text_width = u8g2.getStrWidth(buttonName);
+    int text_width = u8g2.getStrWidth(txt);
     int box_x = x_offset + (128 - text_width - 8) / 2;
 
     // Encadré
-    bool state = controls.getButtonShort(boutonNumber).buttonState;
     if(state){
-    u8g2.setDrawColor(3);
+    u8g2.setDrawColor(1);
     u8g2.drawBox(area_x + 4, area_y , box_width, area_h);
     u8g2.setDrawColor(0); // 2 = gris moyen sur certains écrans
     // u8g2.setDrawColor(1);
@@ -140,7 +133,7 @@ void FaderWidget::drawButtonName() {
     // Texte centré, en gris si supporté
     // u8g2.setDrawColor(1); // 2 = gris moyen sur certains écrans
     u8g2.setCursor(box_x + 4, area_y + 7);
-    u8g2.print(buttonName);
+    u8g2.print(txt);
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
@@ -179,7 +172,7 @@ void FaderWidget::draw() {
 
     drawFader(); // d'abord le fader
     // drawTitle(); // puis le titre par-dessus
-    drawButtonName();
+    updateButtonName(false);
 
     // Mise à jour de toute la zone
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);

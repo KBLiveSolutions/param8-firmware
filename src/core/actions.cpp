@@ -28,12 +28,27 @@ void onShiftPress()
             revertEncoderEventCount[i] = 0;
         }
     }
+    for (int i = 0; i < 8; ++i)
+    {
+
+        char buf[24];
+        static const char* buttonNames[] = {
+            "Preset 1", "Preset 2", "Preset 3", "Preset 4",
+            "Preset 5", "Preset 6", "Global", "Device"
+        };
+        snprintf(buf, sizeof(buf), buttonNames[i]);
+        faders[i]->drawButtonName(buf, i==controls.getPreset());
+    }
 }
 
 void onShiftRelease()
 {
     shiftPressed = false;
-    sendMidiMessage(0, 110, 0, 7);
+    sendMidiMessage(0, 110, 0, 7);    
+    for (int i = 0; i < 8; ++i)
+    {
+    faders[i]->updateButtonName(controls.getButtonShort(i).value);
+    }
 }
 
 void onLatchPress()
@@ -101,22 +116,21 @@ void onButtonPressed(uint8_t idx)
     }
     if (shiftPressed)
     {
-        blinkLedBlue(idx, 2);
+        // blinkLedBlue(idx, 2);
+
         char buf[24];
-        snprintf(buf, sizeof(buf), "Preset %d", idx + 1);
-        buf[sizeof(buf) - 1] = '\0';
+        static const char* buttonNames[] = {
+            "Preset 1", "Preset 2", "Preset 3", "Preset 4",
+            "Preset 5", "Preset 6", "Global", "Device"
+        };
+        snprintf(buf, sizeof(buf), buttonNames[idx]);
+        faders[idx]->drawButtonName(buf,true);
         updateDisplayBox("left", buf);
         updateDisplayBox("right", buf);
 
         controls.setPreset(idx);
         updateFaderTitles();
         sendPresetSysEx(idx);
-
-        // ControlMidiType type_long = controls.getButtonLong(idx).type;
-        // uint8_t number_long = controls.getButtonLong(idx).number;
-        // uint8_t channel_long = controls.getButtonLong(idx).channel;
-        // sendMidiMessage(type_long, number_long, 127, channel_long);
-        // sendMidiMessage(type_long, number_long, 0, channel_long);
         return;
     }
     else
@@ -222,7 +236,7 @@ void updateFaderTitles()
         char buf[24];
         int number = controls.getEncoder(i).number;
         int channel = controls.getEncoder(i).channel;
-        snprintf(buf, sizeof(buf), "CC%d / %d", number, channel + 1);
+        snprintf(buf, sizeof(buf), "CC: %d Ch: %d", number, channel + 1);
         faders[i]->setParamName(buf);
         if(controls.getPreset() == 7){
                     static const char* buttonNames[] = {
@@ -234,7 +248,7 @@ void updateFaderTitles()
         else if(controls.getPreset() == 6){
                     static const char* buttonNames[] = {
             "Metronome", "Arr. Rec", "Play/Stop", "Capture",
-            "Track -", "Track +", "Arr. Loop", "Arm Track"
+            "Mute", "Solo", "Arr. Loop", "-> Default"
         };
         snprintf(buf, sizeof(buf), buttonNames[i]);
         }
@@ -242,7 +256,7 @@ void updateFaderTitles()
         ControlMidiType type = controls.getButtonShort(i).type;
         number = controls.getButtonShort(i).number;
         channel = controls.getButtonShort(i).channel;
-        snprintf(buf, sizeof(buf), (type==MIDI_CC) ? "CC%d / %d" : "Note%d / %d", number, channel + 1);
+        snprintf(buf, sizeof(buf), (type==MIDI_CC) ? "CC: %d Ch: %d" : "Note: %d Ch: %d", number, channel + 1);
         }
         faders[i]->setButtonName(buf);
     }

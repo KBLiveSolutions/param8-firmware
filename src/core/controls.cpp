@@ -68,20 +68,6 @@ void ControlsManager::setDefaults() {
         
         for(int i = 0; i < 8; ++i) {
             ControlData data = json.getControlData("encoders", _preset, i);
-            
-            Serial.print("  Encoder ");
-            Serial.print(i);
-            Serial.print(" - Raw data: type=");
-            Serial.print(data.value0);  // Devrait être 0 (CC)
-            Serial.print(", number=");
-            Serial.print(data.value1);  // Devrait être 10, 11, 12, etc.
-            Serial.print(", channel=");
-            Serial.println(data.value2); // Devrait être 0
-            
-            if (data.value1 == 0) {
-                Serial.println("    ❌ PROBLÈME: CC number = 0 au lieu de la vraie valeur!");
-            }
-            
             ControlMidiType type = static_cast<ControlMidiType>(data.value0);
             uint8_t number = static_cast<uint8_t>(data.value1);
             uint8_t channel = static_cast<uint8_t>(data.value2);
@@ -98,18 +84,7 @@ void ControlsManager::setDefaults() {
             bool toggleMode = json.getButtonToggleMode(_preset, i) > 0;
             setButtonShort(_preset, i, type, number, channel, toggleMode);
             
-            // AJOUTER : Initialiser les valeurs des boutons
             _presets[_preset].buttons_short[i].value = 0;
-            
-            // Charger la configuration des boutons longs  
-            // data = json.getControlData("buttons_long", _preset, i);
-            // type = static_cast<ControlMidiType>(data.value0);
-            // number = static_cast<uint8_t>(data.value1);
-            // channel = static_cast<uint8_t>(data.value2);
-            // setButtonLong(_preset, i, type, number, channel);
-            
-            // AJOUTER : Initialiser les valeurs des boutons
-            // _presets[_preset].buttons_long[i].value = 0;
         }
     }
     
@@ -136,11 +111,8 @@ void ControlsManager::onControlChange(uint8_t channel, uint8_t control, uint8_t 
             encoders.positions[i] = value; 
         }
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {
-            // if(value > 63) showLed(i, 255, 255, 255); 
-            // else showLed(i, 0, 0, 0); // Éteint la LED si la valeur est inférieure ou égale à 
-             if(value > 63) getButtonShort(i).buttonState = true;
-             else getButtonShort(i).buttonState = false;  
-             faders[i]->drawButtonName();
+            bool state = value >63;
+            faders[i]->updateButtonName(state);
             getButtonShort(i).value = value;
         }
     }
@@ -171,14 +143,6 @@ void ControlsManager::getPresetControls(uint8_t preset) {
     if (preset < 8) {
         for (int i = 0; i < 8; ++i) {
             MidiControl& encoder = _presets[preset].encoder[i];
-            Serial.print("  Encoder ");
-            Serial.print(i);
-            Serial.print(": Type=");
-            Serial.print(static_cast<uint8_t>(encoder.type));
-            Serial.print(", Number=");
-            Serial.print(encoder.number);
-            Serial.print(", Channel=");
-            Serial.println(encoder.channel);
             
             // Envoyer les données via SysEx
             uint8_t packet[9] = { 240, 111, 12, preset, (uint8_t)i,

@@ -45,12 +45,13 @@ void setupMIDI()
 // }
 
 void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel)
-{      
-      lastInputTime = millis();
-if (screenSaverActive) {
+{
+  lastInputTime = millis();
+  if (screenSaverActive)
+  {
     screenSaverActive = false;
     showDisplay(); // réaffiche l'UI normale
-}
+  }
   uint8_t packet[4] = {0x0A, 0, 0, 0};
   // Serial.print("Sending MIDI: ");
   // Serial.print(type);
@@ -97,10 +98,11 @@ void midiRead()
         handleMIDIDAWMessage(packet);
     };
     lastInputTime = millis();
-    if (screenSaverActive) {
-    screenSaverActive = false;
-    showDisplay(); // réaffiche l'UI normale
-}
+    if (screenSaverActive)
+    {
+      screenSaverActive = false;
+      showDisplay(); // réaffiche l'UI normale
+    }
   }
 }
 
@@ -206,15 +208,31 @@ void onSysEx(const uint8_t *sysex, size_t len)
   switch (status_byte)
   {
   case 0:
-    if (strlen(ascii_string) > 0)
-    {
-      faders[param_number]->setParamName(ascii_string);
-    }
+    if (param_number < 8)
+      {
+        if (strlen(ascii_string) > 0)
+        {
+          faders[param_number]->setParamName(ascii_string);
+        }
+        else
+        {
+          // String vide, passe une string vide
+          faders[param_number]->setParamName("");
+        }
+      }
     else
-    {
-      // String vide, passe une string vide
-      faders[param_number]->setParamName("");
+    {        if (strlen(ascii_string) > 0)
+        {
+          faders[param_number-8]->setButtonName(ascii_string);
+        }
+        else
+        {
+          // String vide, passe une string vide
+          faders[param_number-8]->setButtonName("");
+        }
+
     }
+
     break;
 
   case 1:
@@ -263,7 +281,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     Serial.print(number);
     Serial.print(", Canal=");
     Serial.println(channel);
-    if (preset == controls.getPreset()) updateFaderTitles();
+    if (preset == controls.getPreset())
+      updateFaderTitles();
     json.save();
     break;
   }
@@ -273,7 +292,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     // Structure : F0, constructeur, preset, status, type, control_number, channel, toggle, F7
     uint8_t preset = sysex[3];
     param_number = sysex[4];
-    ControlMidiType _type =  (sysex[5] == 0) ? MIDI_CC : MIDI_NOTE ;
+    ControlMidiType _type = (sysex[5] == 0) ? MIDI_CC : MIDI_NOTE;
     uint8_t control = sysex[6];
     uint8_t channel = sysex[7];
     bool toggleMode = sysex[8] != 0;
@@ -286,10 +305,11 @@ void onSysEx(const uint8_t *sysex, size_t len)
     Serial.print(channel);
     Serial.print(", ToggleMode=");
     Serial.println(toggleMode);
-    if (preset == controls.getPreset()) updateFaderTitles();
+    if (preset == controls.getPreset())
+      updateFaderTitles();
     json.save();
     break;
-  } 
+  }
   default:
     Serial.print("Unknown SysEx status byte: ");
     Serial.println(status_byte);
