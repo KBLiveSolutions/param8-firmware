@@ -14,6 +14,10 @@ uint8_t revertEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t revertEncoderEventCount[8] = {0};
 unsigned long lastInputTime = 0;
 
+// Pour le mode absolu : on stocke juste la dernière valeur et si elle a changé
+uint8_t latchAbsoluteValue[8] = {0};
+bool latchAbsoluteChanged[8] = {false};
+
 void onShiftPress()
 {
     shiftPressed = true;
@@ -39,6 +43,11 @@ void onShiftPress()
         snprintf(buf, sizeof(buf), buttonNames[i]);
         faders[i]->drawButtonName(buf, i==controls.getPreset());
     }
+    updateDisplayBox("left", "LEFT", staticOverlay == 1);
+    updateDisplayBox("right", "RIGHT", staticOverlay == 1);
+    // updateDisplayBox("left", left_box_text, staticOverlay == 1);
+    // updateDisplayBox("right", right_box_text, staticOverlay == 1);
+    
 }
 
 void onShiftRelease()
@@ -222,10 +231,21 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     if (newValue > 127)
         newValue = 127;
     controls.getEncoder(idx).value = newValue;
-    sendMidiMessage(type, number, (uint8_t)newValue, channel);
+    
+    if (!latchPressed)
+    {
+        sendMidiMessage(type, number, (uint8_t)newValue, channel);
+    }
+    else
+    {
+        // En mode latch, on stocke juste la dernière valeur
+        latchAbsoluteValue[idx] = (uint8_t)newValue;
+        latchAbsoluteChanged[idx] = true;
+    }
+    
     updateFader(idx, (uint8_t)newValue);
     char buffer[16];
-    sprintf(buffer, "%d", newValue); // pour un int
+    sprintf(buffer, "%d", newValue);
     faders[idx]->updateTitle(buffer);
 }
 
@@ -236,7 +256,7 @@ void updateFaderTitles()
         char buf[24];
         int number = controls.getEncoder(i).number;
         int channel = controls.getEncoder(i).channel;
-        snprintf(buf, sizeof(buf), "CC: %d Ch: %d", number, channel + 1);
+        snprintf(buf, sizeof(buf), "CC%d/%d", number, channel + 1);
         faders[i]->setParamName(buf);
         if(controls.getPreset() == 7){
                     static const char* buttonNames[] = {
@@ -256,7 +276,7 @@ void updateFaderTitles()
         ControlMidiType type = controls.getButtonShort(i).type;
         number = controls.getButtonShort(i).number;
         channel = controls.getButtonShort(i).channel;
-        snprintf(buf, sizeof(buf), (type==MIDI_CC) ? "CC: %d Ch: %d" : "Note: %d Ch: %d", number, channel + 1);
+        snprintf(buf, sizeof(buf), (type==MIDI_CC) ? "CC%d/%d" : "Note%d/%d", number, channel + 1);
         }
         faders[i]->setButtonName(buf);
     }
@@ -271,7 +291,20 @@ void sendPresetSysEx(uint8_t preset)
 
 void releaseLatchAndSend()
 {
-    // Trouver le nombre maximum d'événements parmi tous les encodeurs
+    // Envoyer les dernières valeurs absolues stockées
+    for (int i = 0; i < 8; ++i)
+    {
+        if (latchAbsoluteChanged[i])
+        {
+            uint8_t channel = controls.getEncoder(i).channel;
+            ControlMidiType type = controls.getEncoder(i).type;
+            uint8_t number = controls.getEncoder(i).number;
+            sendMidiMessage(type, number, latchAbsoluteValue[i], channel);
+            latchAbsoluteChanged[i] = false;
+        }
+    }
+
+    // Trouver le nombre maximum d'événements parmi tous les encodeurs (mode relatif)
     uint8_t maxEvents = 0;
     for (int i = 0; i < 8; ++i)
     {
@@ -281,12 +314,11 @@ void releaseLatchAndSend()
         }
     }
 
-    // Envoyer les événements de manière entrelacée
+    // Envoyer les événements de manière entrelacée (mode relatif)
     for (uint8_t eventIndex = 0; eventIndex < maxEvents; ++eventIndex)
     {
         for (int i = 0; i < 8; ++i)
         {
-            // Vérifier s'il y a encore des événements pour cet encodeur
             if (eventIndex < latchEncoderEventCount[i])
             {
                 uint8_t channel = controls.getEncoder(i).channel;
@@ -294,7 +326,7 @@ void releaseLatchAndSend()
                 uint8_t number = controls.getEncoder(i).number;
 
                 sendMidiMessage(type, number, latchEncoderEvents[i][eventIndex], channel);
-                delay(1); // Délai plus court car on alterne entre les encodeurs
+                delay(1);
             }
         }
     }

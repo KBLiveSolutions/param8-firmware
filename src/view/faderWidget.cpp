@@ -50,7 +50,7 @@ void FaderWidget::drawTitle() {
     if(strcmp(paramName, "******") != 0){
         int param_width = u8g2.getStrWidth(title);
         int param_x = x_offset + (128 - param_width) / 2;
-        int param_y = y_offset + ((boutonNumber > 3) ? 14 : 22);
+        int param_y = y_offset + ((boutonNumber > 3) ? 8 : 16); //14 : 22);
         // Texte blanc
         u8g2.setDrawColor(1);
         u8g2.setCursor(param_x, param_y);
@@ -70,29 +70,31 @@ void FaderWidget::drawFader() {
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
     int BAR_W = 120;
-    int BAR_H = 20;
+    int BAR_H = 5;
     int BAR_X = area_x + 4;
     int BAR_Y = area_y + 1;
+    int FADER_H = 5; // Hauteur de la bande du fader en bas
 
     if(strcmp(title, "******") != 0){
         // Active le mode transparent pour le texte
         u8g2.setFontMode(1);
         
-        // Dessine le cadre du fader
+        // Dessine le cadre du rectangle principal
         u8g2.setDrawColor(1);
-        u8g2.drawFrame(BAR_X, BAR_Y, BAR_W, BAR_H);
         
-        // Dessine le remplissage du fader
-        int fillWidth = map(value, 0, 127, 0, BAR_W);
-        u8g2.drawBox(BAR_X, BAR_Y, fillWidth, BAR_H);
+        // Dessine la bande du fader en bas du rectangle (4px de haut)
+        int fillWidth = map(value, 0, 127, 0, BAR_W - 2);
+        int fader_y = BAR_Y + BAR_H - FADER_H - 1 + 17; // Position en bas du rectangle
+        u8g2.drawFrame(BAR_X, fader_y, BAR_W, BAR_H);
+        u8g2.drawBox(BAR_X + 1, fader_y, fillWidth, FADER_H);
         
-        // Dessine le titre centré dans le fader en mode XOR
+        // Dessine le titre centré dans la partie supérieure du rectangle
         u8g2.setFont(u8g2_font_8x13B_tr);
         int text_width = u8g2.getStrWidth(title);
         int text_x = BAR_X + (BAR_W - text_width) / 2;
-        int text_y = BAR_Y + 14; // centré verticalement dans la barre
+        int text_y = BAR_Y + 12; // centré verticalement au-dessus de la bande
         
-        u8g2.setDrawColor(2); // mode XOR : blanc sur noir, noir sur blanc
+        u8g2.setDrawColor(1);
         u8g2.drawStr(text_x, text_y, title);
         
         // Repasse en mode normal
@@ -108,7 +110,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
     int area_y = y_offset + ((boutonNumber > 3) ? 24 : 0); // sous le fader plus haut
     int area_w = 128;
     int area_h = 8;
-    int box_width = 120;
+    int box_width = 124;
     
     // Efface la zone du bouton uniquement
     u8g2.setDrawColor(0);
