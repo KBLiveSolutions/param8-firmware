@@ -201,7 +201,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   const uint8_t *char_data = sysex + 5;
   size_t char_data_len = len > 6 ? len - 6 : 0; // -6 pour F0, constructeur, status, param, staticOverlay, F7
 
-  char ascii_string[20] = {0}; // 10 caractères max + \0
+  char ascii_string[32] = {0}; // 10 caractères max + \0
   decode_ascii_sysex(char_data, char_data_len, ascii_string, sizeof(ascii_string));
 
   // Gestion des différents status_byte

@@ -1,6 +1,13 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 
+enum FaderLayout {
+    LAYOUT_DYNAMIC,
+    LAYOUT_COMPACT
+};
+
+extern FaderLayout faderLayout;
+
 class FaderWidget {
 public:
     static const int BAR_W = 118;
@@ -16,7 +23,6 @@ public:
     int x_offset, y_offset;
     int boutonNumber;
 
-    // Déclaration seulement !
     FaderWidget(U8G2 &u8g2, const char* title, int x, int y, int boutonNumber);
 
     void setTitle(const char* txt);
@@ -24,6 +30,8 @@ public:
     void setEmpty();
     void draw();
     void drawFader();
+    void drawFaderDynamic();
+    void drawFaderCompact();
     void drawTitle();
     void setButtonName(const char* txt);
     void drawButtonName(const char* txt, bool);

@@ -1,6 +1,8 @@
 #include "display.h"
 #include "../core/controls.h"
 
+FaderLayout faderLayout = LAYOUT_COMPACT;
+
 FaderWidget::FaderWidget(U8G2 &u8g2, const char* initialTitle, int x, int y, int boutonNumber)
     : u8g2(u8g2), value(0), x_offset(x), y_offset(y), boutonNumber(boutonNumber)
 {
@@ -16,7 +18,14 @@ void FaderWidget::setTitle(const char* txt) {
 
 void FaderWidget::setParamName(const char* txt) {
     strncpy(paramName, txt, sizeof(paramName));
-    setTitle(txt);
+    paramName[sizeof(paramName)-1] = '\0';
+    if(faderLayout == LAYOUT_COMPACT) {
+        title[0] = '\0';
+    } else {
+        strncpy(title, txt, sizeof(title));
+        title[sizeof(title)-1] = '\0';
+    }
+    if(!display_active) drawFader();
 }
 
 void FaderWidget::setButtonName(const char* txt) {
@@ -31,27 +40,26 @@ void FaderWidget::updateButtonName(bool state) {
 }
 
 void FaderWidget::showParamName() {
-    setTitle(paramName);
+    if(faderLayout == LAYOUT_DYNAMIC)
+        setTitle(paramName);
+    else
+        if(!display_active) drawFader();
 }
 
 void FaderWidget::drawTitle() {
-    // Le titre est affiché en grand, centré verticalement sur le fader
     int area_x = x_offset;
     int area_y = y_offset + ((boutonNumber > 3) ? 0 : 8);
     int area_w = 128;
     int area_h = 16;
 
-    // Efface la zone du titre uniquement
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
-    // Police plus grande
     u8g2.setFont(u8g2_font_8x13B_tr);
     if(strcmp(paramName, "******") != 0){
         int param_width = u8g2.getStrWidth(title);
         int param_x = x_offset + (128 - param_width) / 2;
-        int param_y = y_offset + ((boutonNumber > 3) ? 8 : 16); //14 : 22);
-        // Texte blanc
+        int param_y = y_offset + ((boutonNumber > 3) ? 8 : 16);
         u8g2.setDrawColor(1);
         u8g2.setCursor(param_x, param_y);
         u8g2.print(title);
@@ -60,12 +68,18 @@ void FaderWidget::drawTitle() {
 }
 
 void FaderWidget::drawFader() {
+    if(faderLayout == LAYOUT_COMPACT)
+        drawFaderCompact();
+    else
+        drawFaderDynamic();
+}
+
+void FaderWidget::drawFaderDynamic() {
     int area_x = x_offset;
     int area_y = y_offset + ((boutonNumber > 3) ? 0 : 8);
     int area_w = 128;
     int area_h = 24;
 
-    // Efface la zone du fader uniquement
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
@@ -73,33 +87,191 @@ void FaderWidget::drawFader() {
     int BAR_H = 5;
     int BAR_X = area_x + 4;
     int BAR_Y = area_y + 1;
-    int FADER_H = 5; // Hauteur de la bande du fader en bas
+    int FADER_H = 5;
 
     if(strcmp(title, "******") != 0){
-        // Active le mode transparent pour le texte
         u8g2.setFontMode(1);
-        
-        // Dessine le cadre du rectangle principal
         u8g2.setDrawColor(1);
-        
-        // Dessine la bande du fader en bas du rectangle (4px de haut)
+
         int fillWidth = map(value, 0, 127, 0, BAR_W - 2);
-        int fader_y = BAR_Y + BAR_H - FADER_H - 1 + 17; // Position en bas du rectangle
+        int fader_y = BAR_Y + BAR_H - FADER_H - 1 + 17;
         u8g2.drawFrame(BAR_X, fader_y, BAR_W, BAR_H);
         u8g2.drawBox(BAR_X + 1, fader_y, fillWidth, FADER_H);
-        
-        // Dessine le titre centré dans la partie supérieure du rectangle
+
         u8g2.setFont(u8g2_font_8x13B_tr);
         int text_width = u8g2.getStrWidth(title);
         int text_x = BAR_X + (BAR_W - text_width) / 2;
-        int text_y = BAR_Y + 12; // centré verticalement au-dessus de la bande
-        
+        int text_y = BAR_Y + 12;
+
         u8g2.setDrawColor(1);
         u8g2.drawStr(text_x, text_y, title);
-        
-        // Repasse en mode normal
+
         u8g2.setFontMode(0);
         u8g2.setDrawColor(1);
+    }
+    u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
+}
+
+void FaderWidget::drawFaderCompact() {
+    int area_x = x_offset;
+    int area_y = y_offset + ((boutonNumber > 3) ? 0 : 8);
+    int area_w = 128;
+    int area_h = 24;
+
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(area_x, area_y, area_w, area_h);
+
+    if(strcmp(paramName, "******") != 0){
+        u8g2.setDrawColor(1);
+
+        int MARGIN = 4;
+        int GAP = 2;
+        int TPAD = 2;
+        int col_name_w = 48;
+        int col_pie_w  = 20;
+        int col_val_w  = 48;
+        int col_name_x = area_x + MARGIN;
+        int col_pie_x  = col_name_x + col_name_w + GAP;
+        int col_val_x  = col_pie_x + col_pie_w + GAP;
+
+        // --- Left: param name, right-justified, 2 lines max ---
+        u8g2.setFont(u8g2_font_helvB08_te); // u8g2_font_luBS08_te
+        int charW = 5;
+        int textW = col_name_w - TPAD * 2;
+        int maxChars = textW / charW;
+        int len = strlen(paramName);
+
+        if(len <= maxChars) {
+            int w = u8g2.getStrWidth(paramName);
+            u8g2.drawStr(col_name_x + col_name_w - TPAD - w, area_y + 14, paramName);
+        } else {
+            char line1[21], line2[21];
+            int brk = -1;
+            for(int i = 0; i < len && i < maxChars; i++)
+                if(paramName[i] == ' ') brk = i;
+            if(brk > 0) {
+                strncpy(line1, paramName, brk);
+                line1[brk] = '\0';
+                strncpy(line2, paramName + brk + 1, sizeof(line2) - 1);
+                line2[sizeof(line2)-1] = '\0';
+            } else {
+                strncpy(line1, paramName, maxChars);
+                line1[maxChars] = '\0';
+                strncpy(line2, paramName + maxChars, sizeof(line2) - 1);
+                line2[sizeof(line2)-1] = '\0';
+            }
+            if((int)strlen(line2) > maxChars) line2[maxChars] = '\0';
+
+            int w1 = u8g2.getStrWidth(line1);
+            int w2 = u8g2.getStrWidth(line2);
+            u8g2.drawStr(col_name_x + col_name_w - TPAD - w1, area_y + 10, line1);
+            u8g2.drawStr(col_name_x + col_name_w - TPAD - w2, area_y + 21, line2);
+        }
+// --- Center: pie indicator ---
+int pie_cx = col_pie_x + col_pie_w / 2;
+int pie_cy = area_y + area_h / 2;
+
+int r_outer = 9;
+int r_inner = 6;
+
+const float PI2 = 6.2831853f;
+
+float limit_deg = 120.0f + (value / 127.0f) * 300.0f;
+float limit_rad = limit_deg * PI / 180.0f;
+
+// --- Remplissage de la couronne ---
+for (int dy = -r_outer; dy <= r_outer; dy++) {
+    for (int dx = -r_outer; dx <= r_outer; dx++) {
+
+        int d2 = dx * dx + dy * dy;
+
+        if (d2 > r_outer * r_outer)
+            continue;
+
+        if (d2 < r_inner * r_inner)
+            continue;
+
+        float a = atan2f((float)dy, (float)dx);
+
+        while (a < 120.0f * PI / 180.0f)
+            a += PI2;
+
+        if (a <= limit_rad)
+            u8g2.drawPixel(pie_cx + dx, pie_cy + dy);
+    }
+}
+
+u8g2.drawCircle(pie_cx, pie_cy, r_outer);
+u8g2.drawCircle(pie_cx, pie_cy, r_inner);
+u8g2.drawCircle(pie_cx, pie_cy, r_outer);
+u8g2.drawCircle(pie_cx, pie_cy, r_inner);
+
+// Effacer le secteur vide
+u8g2.setDrawColor(0);
+
+for (float a = 60.0f; a <= 120.0f; a += 1.0f)
+{
+    float r = a * PI / 180.0f;
+
+    int x1 = pie_cx + roundf(cosf(r) * (r_inner - 1));
+    int y1 = pie_cy + roundf(sinf(r) * (r_inner - 1));
+
+    int x2 = pie_cx + roundf(cosf(r) * (r_outer + 1));
+    int y2 = pie_cy + roundf(sinf(r) * (r_outer + 1));
+
+    u8g2.drawLine(x1, y1, x2, y2);
+}
+
+u8g2.setDrawColor(1);
+
+// Fermer à 5h
+{
+    float r = 60.0f * PI / 180.0f;
+
+    u8g2.drawLine(
+        pie_cx + roundf(cosf(r) * r_inner),
+        pie_cy + roundf(sinf(r) * r_inner),
+        pie_cx + roundf(cosf(r) * r_outer),
+        pie_cy + roundf(sinf(r) * r_outer));
+}
+
+// Fermer à 7h
+{
+    float r = 120.0f * PI / 180.0f;
+
+    u8g2.drawLine(
+        pie_cx + roundf(cosf(r) * r_inner),
+        pie_cy + roundf(sinf(r) * r_inner),
+        pie_cx + roundf(cosf(r) * r_outer),
+        pie_cy + roundf(sinf(r) * r_outer));
+}
+        // --- Right: param value, left-justified, 2 lines max ---
+        u8g2.setFont(u8g2_font_6x10_tf);
+        int valMaxChars = (col_val_w - TPAD * 2) / charW;
+        int vlen = strlen(title);
+
+        if(vlen <= valMaxChars) {
+            u8g2.drawStr(col_val_x + TPAD, area_y + 14, title);
+        } else {
+            char vl1[21], vl2[21];
+            int vbrk = -1;
+            for(int i = 0; i < vlen && i < valMaxChars; i++)
+                if(title[i] == ' ') vbrk = i;
+            if(vbrk > 0) {
+                strncpy(vl1, title, vbrk);
+                vl1[vbrk] = '\0';
+                strncpy(vl2, title + vbrk + 1, sizeof(vl2) - 1);
+                vl2[sizeof(vl2)-1] = '\0';
+            } else {
+                strncpy(vl1, title, valMaxChars);
+                vl1[valMaxChars] = '\0';
+                strncpy(vl2, title + valMaxChars, sizeof(vl2) - 1);
+                vl2[sizeof(vl2)-1] = '\0';
+            }
+            if((int)strlen(vl2) > valMaxChars) vl2[valMaxChars] = '\0';
+            u8g2.drawStr(col_val_x + TPAD, area_y + 9, vl1);
+            u8g2.drawStr(col_val_x + TPAD, area_y + 18, vl2);
+        }
     }
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
