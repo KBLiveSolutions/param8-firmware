@@ -189,14 +189,9 @@ void onSysEx(const uint8_t *sysex, size_t len)
 
   uint8_t constructor_byte = sysex[1];
   uint8_t status_byte = sysex[2];
-  Serial.print("Received SysEx - Constructor: ");
-  Serial.print(constructor_byte);
-  Serial.print(", Status: ");
-  Serial.println(status_byte);
   uint8_t param_number = sysex[3];
   uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
-  Serial.print("Param Number: ");
-  Serial.println(param_number);
+
   // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
   const uint8_t *char_data = sysex + 5;
   size_t char_data_len = len > 6 ? len - 6 : 0; // -6 pour F0, constructeur, status, param, staticOverlay, F7
@@ -252,14 +247,12 @@ void onSysEx(const uint8_t *sysex, size_t len)
   case 5:
   {
     // requete de numero de preset
-    Serial.print("Réponse SysEx: Envoi du preset actuel ");
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
     break;
   }
   case 7:
   {
-    Serial.println("dump des controls reçue");
     controls.getPresetControls(param_number);
     break;
   }
@@ -273,14 +266,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t number = sysex[6];
     uint8_t channel = sysex[7];
     controls.setEncoder(preset, param_number, MIDI_CC, number, channel);
-    Serial.print("  Contrôle ");
-    Serial.print(param_number);
-    Serial.print(": Type=");
-    Serial.print("1");
-    Serial.print(", Numéro=");
-    Serial.print(number);
-    Serial.print(", Canal=");
-    Serial.println(channel);
     if (preset == controls.getPreset())
       updateFaderTitles();
     json.save();
@@ -297,22 +282,28 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t channel = sysex[7];
     bool toggleMode = sysex[8] != 0;
     controls.setButtonShort(preset, param_number, _type, control, channel, toggleMode);
-    Serial.print("  Contrôle ");
-    Serial.print(param_number);
-    Serial.print(": Type=");
-    Serial.print(_type);
-    Serial.print(", Canal=");
-    Serial.print(channel);
-    Serial.print(", ToggleMode=");
-    Serial.println(toggleMode);
     if (preset == controls.getPreset())
       updateFaderTitles();
     json.save();
     break;
   }
+  case 14:
+  {
+    uint8_t layout = sysex[3];
+    if (layout <= 2) {
+      faderLayout = static_cast<FaderLayout>(layout);
+      json.setLayout(layout);
+      json.save();
+      for (int i = 0; i < 8; i++) {
+        if (faderLayout == LAYOUT_DYNAMIC)
+          faders[i]->showParamName();
+        else
+          faders[i]->draw();
+      }
+    }
+    break;
+  }
   default:
-    Serial.print("Unknown SysEx status byte: ");
-    Serial.println(status_byte);
     break;
   }
 }

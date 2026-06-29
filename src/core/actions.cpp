@@ -43,11 +43,8 @@ void onShiftPress()
         snprintf(buf, sizeof(buf), buttonNames[i]);
         faders[i]->drawButtonName(buf, i==controls.getPreset());
     }
-    updateDisplayBox("left", "LEFT", staticOverlay == 1);
-    updateDisplayBox("right", "RIGHT", staticOverlay == 1);
-    // updateDisplayBox("left", left_box_text, staticOverlay == 1);
-    // updateDisplayBox("right", right_box_text, staticOverlay == 1);
-    
+    //updateDisplayBox("left", "LEFT", staticOverlay == 1);
+    //updateDisplayBox("right", "RIGHT", staticOverlay == 1);
 }
 
 void onShiftRelease()
@@ -139,6 +136,7 @@ void onButtonPressed(uint8_t idx)
 
         controls.setPreset(idx);
         updateFaderTitles();
+        updateFaderValues();
         sendPresetSysEx(idx);
         return;
     }
@@ -279,6 +277,17 @@ void updateFaderTitles()
         snprintf(buf, sizeof(buf), (type==MIDI_CC) ? "CC%d/%d" : "Note%d/%d", number, channel + 1);
         }
         faders[i]->setButtonName(buf);
+    }
+}
+
+void updateFaderValues()
+{
+    for(int i = 0; i < 8; i++) {
+        uint8_t val = controls.getEncoder(i).value;
+        faders[i]->setValue(val);
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", val);
+        faders[i]->updateTitle(buf);
     }
 }
 

@@ -3,7 +3,8 @@
 
 enum FaderLayout {
     LAYOUT_DYNAMIC,
-    LAYOUT_COMPACT
+    LAYOUT_COMPACT,
+    LAYOUT_STACKED
 };
 
 extern FaderLayout faderLayout;
@@ -32,6 +33,7 @@ public:
     void drawFader();
     void drawFaderDynamic();
     void drawFaderCompact();
+    void drawFaderStacked();
     void drawTitle();
     void setButtonName(const char* txt);
     void drawButtonName(const char* txt, bool);

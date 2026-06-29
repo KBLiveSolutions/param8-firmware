@@ -39,7 +39,11 @@ void setup() {
   delay(100);
   setupDisplay();
   controls.setDefaults();
+  int savedLayout = json.getLayout();
+  if (savedLayout >= 0 && savedLayout <= 2)
+    faderLayout = static_cast<FaderLayout>(savedLayout);
   updateFaderTitles();
+  updateFaderValues();
   sendPresetSysEx(controls.getPreset());
   encoders.setup();
   setupButtons();

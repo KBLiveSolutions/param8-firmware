@@ -34,6 +34,14 @@ void JsonManager::setMode(int mode) {
     _doc["mode"] = mode;
 }
 
+int JsonManager::getLayout() {
+    return _doc["layout"] | 0;
+}
+
+void JsonManager::setLayout(int layout) {
+    _doc["layout"] = layout;
+}
+
 JsonObject JsonManager::getPreset(uint8_t idx) {
     return _doc[String(idx)].as<JsonObject>();
 }

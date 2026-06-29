@@ -18,6 +18,9 @@ public:
     int getMode();
     void setMode(int mode);
 
+    int getLayout();
+    void setLayout(int layout);
+
     JsonObject getPreset(uint8_t idx);
 
     JsonArray getButtonShort(uint8_t preset, uint8_t btn);

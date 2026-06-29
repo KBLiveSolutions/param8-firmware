@@ -19,7 +19,7 @@ void FaderWidget::setTitle(const char* txt) {
 void FaderWidget::setParamName(const char* txt) {
     strncpy(paramName, txt, sizeof(paramName));
     paramName[sizeof(paramName)-1] = '\0';
-    if(faderLayout == LAYOUT_COMPACT) {
+    if(faderLayout == LAYOUT_COMPACT || faderLayout == LAYOUT_STACKED) {
         title[0] = '\0';
     } else {
         strncpy(title, txt, sizeof(title));
@@ -70,6 +70,8 @@ void FaderWidget::drawTitle() {
 void FaderWidget::drawFader() {
     if(faderLayout == LAYOUT_COMPACT)
         drawFaderCompact();
+    else if(faderLayout == LAYOUT_STACKED)
+        drawFaderStacked();
     else
         drawFaderDynamic();
 }
@@ -167,84 +169,29 @@ void FaderWidget::drawFaderCompact() {
             u8g2.drawStr(col_name_x + col_name_w - TPAD - w1, area_y + 10, line1);
             u8g2.drawStr(col_name_x + col_name_w - TPAD - w2, area_y + 21, line2);
         }
-// --- Center: pie indicator ---
-int pie_cx = col_pie_x + col_pie_w / 2;
-int pie_cy = area_y + area_h / 2;
+        // --- Center: knob arc indicator ---
+        int pie_cx = col_pie_x + col_pie_w / 2;
+        int pie_cy = area_y + area_h / 2;
+        int arc_r = 9;
 
-int r_outer = 9;
-int r_inner = 6;
+        float start_rad = 2.3562f;   // 135° = 8h
+        float sweep = 4.7124f;       // 270°
+        float val_rad = start_rad + (value / 127.0f) * sweep;
 
-const float PI2 = 6.2831853f;
+        // Full track arc (8h to 4h)
+        u8g2.setDrawColor(1);
+        for(float a = start_rad; a <= start_rad + sweep; a += 0.05f) {
+            u8g2.drawPixel(pie_cx + (int)roundf(cosf(a) * arc_r),
+                           pie_cy + (int)roundf(sinf(a) * arc_r));
+        }
 
-float limit_deg = 120.0f + (value / 127.0f) * 300.0f;
-float limit_rad = limit_deg * PI / 180.0f;
-
-// --- Remplissage de la couronne ---
-for (int dy = -r_outer; dy <= r_outer; dy++) {
-    for (int dx = -r_outer; dx <= r_outer; dx++) {
-
-        int d2 = dx * dx + dy * dy;
-
-        if (d2 > r_outer * r_outer)
-            continue;
-
-        if (d2 < r_inner * r_inner)
-            continue;
-
-        float a = atan2f((float)dy, (float)dx);
-
-        while (a < 120.0f * PI / 180.0f)
-            a += PI2;
-
-        if (a <= limit_rad)
-            u8g2.drawPixel(pie_cx + dx, pie_cy + dy);
-    }
-}
-
-u8g2.drawCircle(pie_cx, pie_cy, r_outer);
-u8g2.drawCircle(pie_cx, pie_cy, r_inner);
-u8g2.drawCircle(pie_cx, pie_cy, r_outer);
-u8g2.drawCircle(pie_cx, pie_cy, r_inner);
-
-// Effacer le secteur vide
-u8g2.setDrawColor(0);
-
-for (float a = 60.0f; a <= 120.0f; a += 1.0f)
-{
-    float r = a * PI / 180.0f;
-
-    int x1 = pie_cx + roundf(cosf(r) * (r_inner - 1));
-    int y1 = pie_cy + roundf(sinf(r) * (r_inner - 1));
-
-    int x2 = pie_cx + roundf(cosf(r) * (r_outer + 1));
-    int y2 = pie_cy + roundf(sinf(r) * (r_outer + 1));
-
-    u8g2.drawLine(x1, y1, x2, y2);
-}
-
-u8g2.setDrawColor(1);
-
-// Fermer à 5h
-{
-    float r = 60.0f * PI / 180.0f;
-
-    u8g2.drawLine(
-        pie_cx + roundf(cosf(r) * r_inner),
-        pie_cy + roundf(sinf(r) * r_inner),
-        pie_cx + roundf(cosf(r) * r_outer),
-        pie_cy + roundf(sinf(r) * r_outer));
-}
-
-// Fermer à 7h
-{
-    float r = 120.0f * PI / 180.0f;
-
-    u8g2.drawLine(
-        pie_cx + roundf(cosf(r) * r_inner),
-        pie_cy + roundf(sinf(r) * r_inner),
-        pie_cx + roundf(cosf(r) * r_outer),
-        pie_cy + roundf(sinf(r) * r_outer));
-}
+        // Needle from center outward at value angle
+        int needle_inner = 3;
+        int needle_outer = arc_r - 1;
+        for(int r = needle_inner; r <= needle_outer; r++) {
+            u8g2.drawPixel(pie_cx + (int)roundf(cosf(val_rad) * r),
+                           pie_cy + (int)roundf(sinf(val_rad) * r));
+        }
         // --- Right: param value, left-justified, 2 lines max ---
         u8g2.setFont(u8g2_font_6x10_tf);
         int valMaxChars = (col_val_w - TPAD * 2) / charW;
@@ -276,7 +223,45 @@ u8g2.setDrawColor(1);
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
-// Nouvelle méthode à ajouter dans la classe
+void FaderWidget::drawFaderStacked() {
+    int area_x = x_offset;
+    int area_y = y_offset + ((boutonNumber > 3) ? 0 : 8);
+    int area_w = 128;
+    int area_h = 24;
+
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(area_x, area_y, area_w, area_h);
+
+    if(strcmp(paramName, "******") != 0){
+        u8g2.setDrawColor(1);
+        int PAD = 4;
+
+        // --- Row 1: param name centered (10px) ---
+        u8g2.setFont(u8g2_font_helvB08_te);
+        int name_w = u8g2.getStrWidth(paramName);
+        int name_x = area_x + (area_w - name_w) / 2;
+        if(name_x < area_x + PAD) name_x = area_x + PAD;
+        u8g2.drawStr(name_x, area_y + 9, paramName);
+
+        // --- Row 2: horizontal slider ---
+        int bar_w = area_w * 80 / 100;
+        int bar_x = area_x + (area_w - bar_w) / 2;
+        int bar_h = 4;
+        int bar_y = area_y + 12;
+        u8g2.drawFrame(bar_x, bar_y, bar_w, bar_h);
+        int fillW = map(value, 0, 127, 0, bar_w - 2);
+        if(fillW > 0)
+            u8g2.drawBox(bar_x + 1, bar_y + 1, fillW, bar_h - 2);
+
+        // --- Row 3: param value centered (8px) ---
+        u8g2.setFont(u8g2_font_5x7_tr);
+        int val_w = u8g2.getStrWidth(title);
+        int val_x = area_x + (area_w - val_w) / 2;
+        u8g2.drawStr(val_x, area_y + 23, title);
+    }
+    u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
+}
+
 void FaderWidget::drawButtonName(const char* txt, bool state) {
     int area_x = x_offset;
     int area_y = y_offset + ((boutonNumber > 3) ? 24 : 0); // sous le fader plus haut

@@ -10,6 +10,7 @@ void onButtonShortPress(uint8_t idx);
 void onRelativeEncoderChange(uint8_t idx, int value);
 void onAbsoluteEncoderChange(uint8_t idx, int newPos);
 void updateFaderTitles();
+void updateFaderValues();
 void sendPresetSysEx(uint8_t preset);
 void onShiftPress();
 void onShiftRelease();
