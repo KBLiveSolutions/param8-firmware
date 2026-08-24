@@ -3,6 +3,12 @@
 
 FaderLayout faderLayout = LAYOUT_COMPACT;
 
+void FaderWidget::drawSeparators() {
+    u8g2.setDrawColor(1);
+    u8g2.drawVLine(128, y_offset, 32);
+    // u8g2.drawHLine(x_offset, 32, 128);
+}
+
 FaderWidget::FaderWidget(U8G2 &u8g2, const char* initialTitle, int x, int y, int boutonNumber)
     : u8g2(u8g2), value(0), x_offset(x), y_offset(y), boutonNumber(boutonNumber)
 {
@@ -19,9 +25,7 @@ void FaderWidget::setTitle(const char* txt) {
 void FaderWidget::setParamName(const char* txt) {
     strncpy(paramName, txt, sizeof(paramName));
     paramName[sizeof(paramName)-1] = '\0';
-    if(faderLayout == LAYOUT_COMPACT || faderLayout == LAYOUT_STACKED) {
-        title[0] = '\0';
-    } else {
+    if(faderLayout == LAYOUT_DYNAMIC) {
         strncpy(title, txt, sizeof(title));
         title[sizeof(title)-1] = '\0';
     }
@@ -64,6 +68,7 @@ void FaderWidget::drawTitle() {
         u8g2.setCursor(param_x, param_y);
         u8g2.print(title);
     }
+    drawSeparators();
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
@@ -111,6 +116,7 @@ void FaderWidget::drawFaderDynamic() {
         u8g2.setFontMode(0);
         u8g2.setDrawColor(1);
     }
+    drawSeparators();
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
@@ -122,6 +128,8 @@ void FaderWidget::drawFaderCompact() {
 
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
+
+    bool inactive = (strcmp(title, "---") == 0);
 
     if(strcmp(paramName, "******") != 0){
         u8g2.setDrawColor(1);
@@ -137,7 +145,7 @@ void FaderWidget::drawFaderCompact() {
         int col_val_x  = col_pie_x + col_pie_w + GAP;
 
         // --- Left: param name, right-justified, 2 lines max ---
-        u8g2.setFont(u8g2_font_helvB08_te); // u8g2_font_luBS08_te
+        u8g2.setFont(u8g2_font_helvB08_te);
         int charW = 5;
         int textW = col_name_w - TPAD * 2;
         int maxChars = textW / charW;
@@ -174,23 +182,32 @@ void FaderWidget::drawFaderCompact() {
         int pie_cy = area_y + area_h / 2;
         int arc_r = 9;
 
-        float start_rad = 2.3562f;   // 135° = 8h
+        float start_rad = 2.3562f;   // 135°
         float sweep = 4.7124f;       // 270°
         float val_rad = start_rad + (value / 127.0f) * sweep;
 
-        // Full track arc (8h to 4h)
+        // Arc: draw full circle then erase the 90° gap at bottom-right
         u8g2.setDrawColor(1);
-        for(float a = start_rad; a <= start_rad + sweep; a += 0.05f) {
-            u8g2.drawPixel(pie_cx + (int)roundf(cosf(a) * arc_r),
-                           pie_cy + (int)roundf(sinf(a) * arc_r));
+        u8g2.drawCircle(pie_cx, pie_cy, arc_r);
+        u8g2.setDrawColor(0);
+        {
+            float gap_start = 0.7854f;  // 45°
+            float gap_end = start_rad;   // 135°
+            for(float a = gap_start; a <= gap_end; a += 0.02f) {
+                int px = pie_cx + (int)roundf(cosf(a) * arc_r);
+                int py = pie_cy + (int)roundf(sinf(a) * arc_r);
+                u8g2.drawPixel(px, py);
+            }
         }
+        u8g2.setDrawColor(1);
 
-        // Needle from center outward at value angle
-        int needle_inner = 3;
-        int needle_outer = arc_r - 1;
-        for(int r = needle_inner; r <= needle_outer; r++) {
-            u8g2.drawPixel(pie_cx + (int)roundf(cosf(val_rad) * r),
-                           pie_cy + (int)roundf(sinf(val_rad) * r));
+        if(!inactive) {
+            // Needle: quantized to 48 positions
+            int needle_step = (int)roundf(value * 48.0f / 127.0f);
+            float q_rad = start_rad + (needle_step / 48.0f) * sweep;
+            int nx2 = pie_cx + (int)roundf(cosf(q_rad) * (arc_r - 2));
+            int ny2 = pie_cy + (int)roundf(sinf(q_rad) * (arc_r - 2));
+            u8g2.drawLine(pie_cx, pie_cy, nx2, ny2);
         }
         // --- Right: param value, left-justified, 2 lines max ---
         u8g2.setFont(u8g2_font_6x10_tf);
@@ -220,6 +237,7 @@ void FaderWidget::drawFaderCompact() {
             u8g2.drawStr(col_val_x + TPAD, area_y + 18, vl2);
         }
     }
+    drawSeparators();
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
@@ -259,6 +277,7 @@ void FaderWidget::drawFaderStacked() {
         int val_x = area_x + (area_w - val_w) / 2;
         u8g2.drawStr(val_x, area_y + 23, title);
     }
+    drawSeparators();
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
@@ -293,6 +312,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
     // u8g2.setDrawColor(1); // 2 = gris moyen sur certains écrans
     u8g2.setCursor(box_x + 4, area_y + 7);
     u8g2.print(txt);
+    drawSeparators();
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
@@ -333,7 +353,7 @@ void FaderWidget::draw() {
     // drawTitle(); // puis le titre par-dessus
     updateButtonName(false);
 
-    // Mise à jour de toute la zone
+    drawSeparators();
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 

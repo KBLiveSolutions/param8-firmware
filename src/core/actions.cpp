@@ -21,6 +21,7 @@ bool latchAbsoluteChanged[8] = {false};
 void onShiftPress()
 {
     shiftPressed = true;
+    setLed(1, true);
     sendMidiMessage(0, 110, 127, 7);
 
     if (revertMode)
@@ -50,6 +51,7 @@ void onShiftPress()
 void onShiftRelease()
 {
     shiftPressed = false;
+    setLed(1, false);
     sendMidiMessage(0, 110, 0, 7);    
     for (int i = 0; i < 8; ++i)
     {
@@ -64,6 +66,7 @@ void onLatchPress()
         latchEncoderEventCount[i] = 0;
     }
     latchPressed = true;
+    setLed(0, true);
     sendMidiMessage(0, 111, 127, 7);
 
     if (revertMode && !shiftPressed)
@@ -104,6 +107,7 @@ void onLatchPress()
 void onLatchRelease()
 {
     latchPressed = false;
+    setLed(0, false);
     releaseLatchAndSend();
     sendMidiMessage(0, 111, 0, 7);
 }
@@ -138,6 +142,11 @@ void onButtonPressed(uint8_t idx)
         updateFaderTitles();
         updateFaderValues();
         sendPresetSysEx(idx);
+        if ((idx == 7 || idx == 6) && !liveConnected) {
+            updateDisplayBox("right", "Open Live");
+            updateDisplayBox("left", "or Shift+Button");
+            staticOverlay = true;
+        }
         return;
     }
     else
@@ -252,29 +261,40 @@ void updateFaderTitles()
     for (int i = 0; i < 8; ++i)
     {
         char buf[24];
-        int number = controls.getEncoder(i).number;
-        int channel = controls.getEncoder(i).channel;
-        snprintf(buf, sizeof(buf), "CC%d/%d", number, channel + 1);
-        faders[i]->setParamName(buf);
+        MidiControl& enc = controls.getEncoder(i);
+        if (enc.controlName[0] != '\0') {
+            faders[i]->setParamName(enc.controlName);
+        } else if (controls.getPreset() >= 6) {
+            faders[i]->setParamName("");
+        } else {
+            snprintf(buf, sizeof(buf), "CC%d/%d", enc.number, enc.channel + 1);
+            faders[i]->setParamName(buf);
+        }
         if(controls.getPreset() == 7){
-                    static const char* buttonNames[] = {
-            "Track -", "Track +", "Hotswap", "A/B",
-            "Device -", "Device +", "Bank -", "Bank +"
-        };
-        snprintf(buf, sizeof(buf), buttonNames[i]);
-        }        
+            static const char* buttonNames[] = {
+                "Track -", "Track +", "Hotswap", "A/B",
+                "Device -", "Device +", "Bank -", "Bank +"
+            };
+            snprintf(buf, sizeof(buf), buttonNames[i]);
+        }
         else if(controls.getPreset() == 6){
-                    static const char* buttonNames[] = {
-            "Metronome", "Arr. Rec", "Play/Stop", "Capture",
-            "Mute", "Solo", "Arr. Loop", "-> Default"
-        };
-        snprintf(buf, sizeof(buf), buttonNames[i]);
+            static const char* buttonNames[] = {
+                "Metronome", "Arr. Rec", "Play/Stop", "Capture",
+                "Mute", "Solo", "Arr. Loop", "-> Default"
+            };
+            snprintf(buf, sizeof(buf), buttonNames[i]);
         }
         else{
-        ControlMidiType type = controls.getButtonShort(i).type;
-        number = controls.getButtonShort(i).number;
-        channel = controls.getButtonShort(i).channel;
-        snprintf(buf, sizeof(buf), (type==MIDI_CC) ? "CC%d/%d" : "Note%d/%d", number, channel + 1);
+        MidiControl& btn = controls.getButtonShort(i);
+        if (btn.controlName[0] != '\0') {
+            snprintf(buf, sizeof(buf), "%s", btn.controlName);
+        } else if (btn.type == MIDI_CC) {
+            snprintf(buf, sizeof(buf), "CC%d/%d", btn.number, btn.channel + 1);
+        } else {
+            static const char* noteNames[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+            int octave = (btn.number / 12) - 2;
+            snprintf(buf, sizeof(buf), "%s%d/%d", noteNames[btn.number % 12], octave, btn.channel + 1);
+        }
         }
         faders[i]->setButtonName(buf);
     }
@@ -373,6 +393,6 @@ void setRevertModeLed(bool on)
 {
     if (!on)
     {
-        showLed(8, 0, 0, 0);
+        setLed(1, false);
     }
 }

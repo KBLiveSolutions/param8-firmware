@@ -5,6 +5,7 @@
 #include "../view/display.h"
 #include "../core/jsonManager.h"
 
+bool liveConnected = false;
 bool isSysExContinued = false;
 size_t sysExBufferSize = 0;
 uint8_t sysExBuffer[MIDI_MAX_PACKET_SIZE * 10];
@@ -112,14 +113,23 @@ void handleMIDIDAWMessage(uint8_t *packet)
   switch (packet[1] & 0xF0)
   {
   case 0x80: // Note off
+  {
+    uint8_t note = packet[2];
+    onMidiValueChange(channel, note, 0);
     break;
+  }
   case 0x90: // Note on
+  {
+    uint8_t note = packet[2];
+    uint8_t velocity = packet[3];
+    onMidiValueChange(channel, note, velocity);
     break;
+  }
   case 0xB0: // Control change
   {
     uint8_t control = packet[2];
     uint8_t value = packet[3];
-    onControlChange(channel, control, value);
+    onMidiValueChange(channel, control, value);
     break;
   }
   case 0xC0: // Program change
@@ -177,9 +187,9 @@ void handleSysExContinuation(uint8_t *packet)
   handleSysExMessage(packet);
 }
 
-void onControlChange(uint8_t channel, uint8_t control, uint8_t value)
+void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 {
-  controls.onControlChange(channel, control, value);
+  controls.onMidiValueChange(channel, control, value);
 };
 
 void onSysEx(const uint8_t *sysex, size_t len)
@@ -191,6 +201,9 @@ void onSysEx(const uint8_t *sysex, size_t len)
   uint8_t status_byte = sysex[2];
   uint8_t param_number = sysex[3];
   uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
+
+  if (display_active)
+    display_start_time = millis();
 
   // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
   const uint8_t *char_data = sysex + 5;
@@ -246,9 +259,13 @@ void onSysEx(const uint8_t *sysex, size_t len)
 
   case 5:
   {
-    // requete de numero de preset
+    bool wasConnected = liveConnected;
+    liveConnected = true;
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
+    if (!wasConnected && (preset == 7 || preset == 6)) {
+      updateFaderTitles();
+    }
     break;
   }
   case 7:
@@ -282,6 +299,11 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t channel = sysex[7];
     bool toggleMode = sysex[8] != 0;
     controls.setButtonShort(preset, param_number, _type, control, channel, toggleMode);
+    JsonArray arr = json.getDoc()[String(preset)]["buttons_short"][String(param_number)].to<JsonArray>();
+    arr[0] = static_cast<int>(_type);
+    arr[1] = static_cast<int>(control);
+    arr[2] = static_cast<int>(channel);
+    json.setButtonToggleMode(preset, param_number, toggleMode ? 1 : 0);
     if (preset == controls.getPreset())
       updateFaderTitles();
     json.save();
@@ -294,12 +316,52 @@ void onSysEx(const uint8_t *sysex, size_t len)
       faderLayout = static_cast<FaderLayout>(layout);
       json.setLayout(layout);
       json.save();
-      for (int i = 0; i < 8; i++) {
-        if (faderLayout == LAYOUT_DYNAMIC)
-          faders[i]->showParamName();
-        else
-          faders[i]->draw();
+      if (faderLayout == LAYOUT_DYNAMIC) {
+        updateFaderTitles();
+      } else {
+        updateFaderValues();
       }
+    }
+    break;
+  }
+  case 15:
+  {
+    // Control name: F0 6F 0F <preset> <param> <isButton> <ascii chars...> F7
+    uint8_t preset = sysex[3];
+    uint8_t idx = sysex[4];
+    uint8_t isButton = sysex[5];
+    if (preset >= 6 || idx >= 8) break;
+
+    char name[12] = {0};
+    size_t nameLen = 0;
+    for (size_t j = 6; j < len - 1 && nameLen < 11; j++) {
+      name[nameLen++] = (char)sysex[j];
+    }
+    name[nameLen] = '\0';
+
+    MidiControl& ctrl = isButton
+      ? controls.getButtonShortAt(preset, idx)
+      : controls.getEncoderAt(preset, idx);
+    strncpy(ctrl.controlName, name, sizeof(ctrl.controlName) - 1);
+
+    const char* section = isButton ? "button_names" : "encoder_names";
+    json.getDoc()[String(preset)][section][String(idx)] = name;
+    json.save();
+
+    if (preset == controls.getPreset())
+      updateFaderTitles();
+    break;
+  }
+  case 16:
+  {
+    // Screensaver timeout: F0 6F 10 <high7> <low7> F7
+    uint16_t seconds = ((uint16_t)(sysex[3] & 0x7F) << 7) | (sysex[4] & 0x7F);
+    screenSaverDelay = (unsigned long)seconds * 1000UL;
+    json.getDoc()["screensaver"] = seconds;
+    json.save();
+    if (screenSaverDelay == 0 && screenSaverActive) {
+      screenSaverActive = false;
+      showDisplay();
     }
     break;
   }

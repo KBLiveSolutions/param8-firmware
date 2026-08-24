@@ -10,6 +10,7 @@ extern Adafruit_USBD_MIDI usb_midi;
 #define SYSEX_START_BYTE 0xF0
 #define SYSEX_END_BYTE 0xF7
 
+extern bool liveConnected;
 extern bool isSysExContinued;
 extern size_t sysExBufferSize;
 extern uint8_t sysExBuffer[MIDI_MAX_PACKET_SIZE * 10];
@@ -22,6 +23,6 @@ void clearSysExBuffer();
 void handleSysExMessage(uint8_t *packet);
 void handleSysExStart(uint8_t *packet) ;
 void handleSysExContinuation(uint8_t *packet);
-void onControlChange(uint8_t channel, uint8_t control, uint8_t value);
+void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value);
 void onSysEx(const uint8_t* sysex, size_t len);
 void decode_ascii_sysex(const uint8_t* data, size_t len, char* out, size_t out_len);

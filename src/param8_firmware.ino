@@ -26,7 +26,7 @@ U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2_2(U8G2_R0, /* cs=*/13, /* dc=*/12, /* r
 #include "view/display.h"
 #include "core/actions.h"
 
-#define SCREEN_SAVER_DELAY 60000 // 1 minute d'inactivité
+unsigned long screenSaverDelay = 300000; // 5 minutes par défaut
 
 void setup() {
   Serial.begin(115200);
@@ -42,9 +42,15 @@ void setup() {
   int savedLayout = json.getLayout();
   if (savedLayout >= 0 && savedLayout <= 2)
     faderLayout = static_cast<FaderLayout>(savedLayout);
+  int savedSS = json.getDoc()["screensaver"] | 300;
+  screenSaverDelay = (unsigned long)savedSS * 1000UL;
   updateFaderTitles();
   updateFaderValues();
   sendPresetSysEx(controls.getPreset());
+  if (controls.getPreset() == 7) {
+    updateDisplayBox("right", "Open Live", true);
+    updateDisplayBox("left", "or Shift+Button", true);
+  }
   encoders.setup();
   setupButtons();
   setupLeds();
@@ -71,10 +77,10 @@ void loop() {
     }
 
     // Screen saver
-    if (!screenSaverActive && currentTime - lastInputTime > SCREEN_SAVER_DELAY) {
+    if (screenSaverDelay > 0 && !screenSaverActive && currentTime - lastInputTime > screenSaverDelay) {
         screenSaverActive = true;
     }
     if (screenSaverActive) {
-        // runScreenSaver();
+        runScreenSaver();
     }
 }

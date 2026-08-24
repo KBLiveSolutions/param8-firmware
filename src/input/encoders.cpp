@@ -36,9 +36,8 @@ void  Encoders::read(){
       float t = float(dt_clamped - dt_min) / float(dt_max - dt_min);
       // int gain = gain_max - (gain_max - gain_min) * t;
 
-      const float a = 5; // à ajuster
+      const float a = 5;
       int gain = int(gain_min + (gain_max - gain_min) * exp(-a * t));
-      // positions[i] += delta * gain;
 
       // // Clamp entre 0 et 127
       // if (positions[i] < 0) positions[i] = 0;

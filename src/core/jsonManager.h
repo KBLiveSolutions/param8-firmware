@@ -21,6 +21,7 @@ public:
     int getLayout();
     void setLayout(int layout);
 
+    JsonDocument& getDoc() { return _doc; }
     JsonObject getPreset(uint8_t idx);
 
     JsonArray getButtonShort(uint8_t preset, uint8_t btn);

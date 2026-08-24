@@ -12,9 +12,10 @@ struct MidiControl {
     ControlMidiType type;
     uint8_t number;
     uint8_t channel;
-    uint8_t value = 0; // Valeur réelle synchronisée avec Live
-    bool toggleMode = false; // Pour les boutons : mode toggle ou momentané
-    unsigned long lastActivity = 0; // Timestamp de la dernière activité
+    uint8_t value = 0;
+    bool toggleMode = false;
+    unsigned long lastActivity = 0;
+    char controlName[12] = {0};
 };
 
 struct PresetControls {
@@ -33,13 +34,15 @@ public:
 
     MidiControl& getEncoder(uint8_t idx);
     MidiControl& getButtonShort(uint8_t idx);
+    MidiControl& getEncoderAt(uint8_t preset, uint8_t idx);
+    MidiControl& getButtonShortAt(uint8_t preset, uint8_t idx);
    
     void setEncoder(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel);
     void setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, bool toggleMode);
 
     void setDefaults();
     void getPresetControls(uint8_t);
-    void onControlChange(uint8_t channel, uint8_t control, uint8_t value);
+    void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value);
     void checkInactiveEncoders(); // Nouvelle fonction pour vérifier les encodeurs inactifs
 
 private:

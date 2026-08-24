@@ -1,12 +1,10 @@
-#include <Adafruit_NeoPixel.h>
+#pragma once
 #include <Arduino.h>
 
-#define PIN        0 
-#define NUMPIXELS 9
+#define LED_PIN_1  0
+#define LED_PIN_2  29
 
-// extern Adafruit_NeoPixel pixels;
 extern int ledBrightness;
 void setupLeds();
-void showLed(int led, uint8_t r, uint8_t g, uint8_t b);
-void blinkLedBlue(int led, int times);
-void pulseLedWhite(int led);
+void setLed(int led, bool on);
+void setLedBrightness(int led, uint8_t value);

@@ -3,7 +3,7 @@
 #include <U8g2lib.h>
 #include "faderWidget.h"
 
-#define OVERLAY_TIME 500 // Temps d'affichage de la boîte de dialogue en millisecondes
+#define OVERLAY_TIME 200 // Temps d'affichage de la boîte de dialogue en millisecondes
 extern U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2;
 extern U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2_2;
 extern FaderWidget* faders[8];
@@ -15,6 +15,7 @@ extern bool display_active;
 extern bool display_needs_update;
 extern bool staticOverlay;
 extern bool screenSaverActive;
+extern unsigned long screenSaverDelay;
 
 void setupDisplay() ;
 
