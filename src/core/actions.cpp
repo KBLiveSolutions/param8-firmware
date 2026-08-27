@@ -13,6 +13,11 @@ bool revertMode = false;
 uint8_t revertEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t revertEncoderEventCount[8] = {0};
 unsigned long lastInputTime = 0;
+uint8_t lastControlIdx = 0;
+bool lastControlIsButton = false;
+unsigned long lastLatchPressTime = 0;
+bool latchPendingActivation = false;
+bool latchHeld = false;
 
 // Pour le mode absolu : on stocke juste la dernière valeur et si elle a changé
 uint8_t latchAbsoluteValue[8] = {0};
@@ -59,15 +64,45 @@ void onShiftRelease()
     }
 }
 
+void sendNameRequest(uint8_t idx, uint8_t isButton)
+{
+    MidiControl& ctrl = isButton
+        ? controls.getButtonShort(idx)
+        : controls.getEncoder(idx);
+    uint8_t packet[9] = {240, 111, 17, idx, isButton, (uint8_t)ctrl.type, ctrl.number, ctrl.channel, 247};
+    usb_midi.writePacket(packet);
+    usb_midi.write(packet, 9);
+}
+
+void checkLatchPending()
+{
+    if (!latchPendingActivation)
+        return;
+    if (millis() - lastLatchPressTime < 300)
+        return;
+    latchPendingActivation = false;
+    if (latchHeld)
+    {
+        for (int i = 0; i < 8; ++i)
+            latchEncoderEventCount[i] = 0;
+        latchPressed = true;
+        setLed(0, true);
+    }
+}
+
 void onLatchPress()
 {
-    for (int i = 0; i < 8; ++i)
+    unsigned long now = millis();
+    latchHeld = true;
+    if (latchPendingActivation && now - lastLatchPressTime < 300)
     {
-        latchEncoderEventCount[i] = 0;
+        latchPendingActivation = false;
+        sendNameRequest(lastControlIdx, lastControlIsButton ? 1 : 0);
+        lastLatchPressTime = 0;
+        return;
     }
-    latchPressed = true;
-    setLed(0, true);
-    sendMidiMessage(0, 111, 127, 7);
+    lastLatchPressTime = now;
+    latchPendingActivation = true;
 
     if (revertMode && !shiftPressed)
     {
@@ -106,10 +141,14 @@ void onLatchPress()
 
 void onLatchRelease()
 {
+    latchHeld = false;
+    if (latchPendingActivation)
+        return;
+    if (!latchPressed)
+        return;
     latchPressed = false;
     setLed(0, false);
     releaseLatchAndSend();
-    sendMidiMessage(0, 111, 0, 7);
 }
 
 void onButtonShortPress(uint8_t idx)
@@ -118,6 +157,8 @@ void onButtonShortPress(uint8_t idx)
 
 void onButtonPressed(uint8_t idx)
 {
+    lastControlIdx = idx;
+    lastControlIsButton = true;
     lastInputTime = millis();
     if (screenSaverActive)
     {
@@ -126,8 +167,6 @@ void onButtonPressed(uint8_t idx)
     }
     if (shiftPressed)
     {
-        // blinkLedBlue(idx, 2);
-
         char buf[24];
         static const char* buttonNames[] = {
             "Preset 1", "Preset 2", "Preset 3", "Preset 4",
@@ -142,11 +181,6 @@ void onButtonPressed(uint8_t idx)
         updateFaderTitles();
         updateFaderValues();
         sendPresetSysEx(idx);
-        if ((idx == 7 || idx == 6) && !liveConnected) {
-            updateDisplayBox("right", "Open Live");
-            updateDisplayBox("left", "or Shift+Button");
-            staticOverlay = true;
-        }
         return;
     }
     else
@@ -174,64 +208,80 @@ void onButtonReleased(uint8_t idx)
     controls.getButtonShort(idx).value = 0;
 }
 
+void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel)
+{
+    const int MAX_STEP = 10;
+    int remaining = delta;
+    while (remaining != 0) {
+        int step = constrain(remaining, -MAX_STEP, MAX_STEP);
+        uint8_t relValue = (uint8_t)(step & 0x7F);
+        sendMidiMessage(type, number, relValue, channel);
+        remaining -= step;
+    }
+}
+
 void onRelativeEncoderChange(uint8_t idx, int delta)
 {
+    lastControlIdx = idx;
+    lastControlIsButton = false;
 
     uint8_t channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
     uint8_t number = controls.getEncoder(idx).number;
 
     controls.getEncoder(idx).lastActivity = millis();
+    faders[idx]->showingValue = true;
 
-    uint8_t relValue = (uint8_t)(delta & 0x7F);
-    // Pour Relative Binary Offset (Ableton)
-    // uint8_t relValue = 0x40 + constrain(delta, -63, 63);
-    // Calculer et mettre à jour la valeur cumulative
     int estimated_display = controls.getEncoder(idx).value + delta;
     if (estimated_display < 0)
         estimated_display = 0;
     if (estimated_display > 127)
         estimated_display = 127;
 
-    // Mettre à jour la valeur stockée dans le contrôle
     controls.getEncoder(idx).value = estimated_display;
 
     if (revertMode)
     {
+        uint8_t relValue = (uint8_t)(delta & 0x7F);
         if (revertEncoderEventCount[idx] < MAX_LATCH_EVENTS)
         {
             revertEncoderEvents[idx][revertEncoderEventCount[idx]++] = relValue;
         }
-        sendMidiMessage(type, number, relValue, channel);
+        sendRelativeCC(type, number, delta, channel);
     }
     else if (!latchPressed)
     {
-        sendMidiMessage(type, number, relValue, channel);
+        sendRelativeCC(type, number, delta, channel);
     }
     else
     {
+        uint8_t relValue = (uint8_t)(delta & 0x7F);
         if (latchEncoderEventCount[idx] < MAX_LATCH_EVENTS)
         {
             latchEncoderEvents[idx][latchEncoderEventCount[idx]++] = relValue;
         }
     }
 
-    // Mettre à jour le fader avec la valeur cumulative
     if (latchPressed || controls.getPreset() < 6)
     {
         updateFader(idx, (uint8_t)estimated_display);
         char buffer[16];
-        sprintf(buffer, "%d", estimated_display); // pour un int
-        faders[idx]->updateTitle(buffer);
+        sprintf(buffer, "%d", estimated_display);
+        if (!controls.getEncoder(idx).hasWatcher)
+            faders[idx]->updateTitle(buffer);
     }
 }
 
 void onAbsoluteEncoderChange(uint8_t idx, int delta)
 {
+    lastControlIdx = idx;
+    lastControlIsButton = false;
+
     uint8_t channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
     uint8_t number = controls.getEncoder(idx).number;
     controls.getEncoder(idx).lastActivity = millis();
+    faders[idx]->showingValue = true;
     int newValue = controls.getEncoder(idx).value + delta;
     if (newValue < 0)
         newValue = 0;
@@ -245,15 +295,14 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     }
     else
     {
-        // En mode latch, on stocke juste la dernière valeur
         latchAbsoluteValue[idx] = (uint8_t)newValue;
         latchAbsoluteChanged[idx] = true;
     }
-    
     updateFader(idx, (uint8_t)newValue);
     char buffer[16];
     sprintf(buffer, "%d", newValue);
-    faders[idx]->updateTitle(buffer);
+    if (!controls.getEncoder(idx).hasWatcher)
+        faders[idx]->updateTitle(buffer);
 }
 
 void updateFaderTitles()
@@ -305,9 +354,11 @@ void updateFaderValues()
     for(int i = 0; i < 8; i++) {
         uint8_t val = controls.getEncoder(i).value;
         faders[i]->setValue(val);
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%d", val);
-        faders[i]->updateTitle(buf);
+        if (faderLayout != LAYOUT_DYNAMIC && !controls.getEncoder(i).hasWatcher) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d", val);
+            faders[i]->updateTitle(buf);
+        }
     }
 }
 

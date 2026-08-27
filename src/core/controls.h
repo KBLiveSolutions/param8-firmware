@@ -16,6 +16,7 @@ struct MidiControl {
     bool toggleMode = false;
     unsigned long lastActivity = 0;
     char controlName[12] = {0};
+    bool hasWatcher = false;
 };
 
 struct PresetControls {

@@ -203,7 +203,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
 
   if (display_active)
-    display_start_time = millis();
+      display_start_time = millis();
 
   // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
   const uint8_t *char_data = sysex + 5;
@@ -350,6 +350,19 @@ void onSysEx(const uint8_t *sysex, size_t len)
 
     if (preset == controls.getPreset())
       updateFaderTitles();
+    break;
+  }
+  case 18:
+  {
+    // Set watcher flag: F0 6F 12 <preset> <idx> <on/off> F7
+    uint8_t preset = sysex[3];
+    uint8_t idx = sysex[4];
+    uint8_t on = sysex[5];
+    Serial.printf("SysEx18 watcher: preset=%d idx=%d on=%d\n", preset, idx, on);
+    if (preset < 6 && idx < 8) {
+      controls.getEncoderAt(preset, idx).hasWatcher = on != 0;
+      Serial.printf("  -> hasWatcher[%d][%d] = %d\n", preset, idx, controls.getEncoderAt(preset, idx).hasWatcher);
+    }
     break;
   }
   case 16:

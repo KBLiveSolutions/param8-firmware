@@ -9,6 +9,7 @@
 // U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2_2(U8G2_R0, /* cs=*/ 13, /* dc=*/ 12, /* reset=*/ 11);
 
 #include "midi/midi.h"
+#include "usb/serial_editor.h"
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 USING_NAMESPACE_MIDI
@@ -66,8 +67,10 @@ const unsigned long inactivityCheckInterval = 250;  // Vérifier toutes les 250m
 
 void loop() {
     midiRead();
+    serialEditorRead();
     encoders.read();
     readButtons();
+    checkLatchPending();
     updateDisplay();
 
     unsigned long currentTime = millis();

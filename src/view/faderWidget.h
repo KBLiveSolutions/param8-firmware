@@ -21,6 +21,7 @@ public:
     char buttonText[20];
     int value;
     int oldValue;
+    bool showingValue = false;
     int x_offset, y_offset;
     int boutonNumber;
 

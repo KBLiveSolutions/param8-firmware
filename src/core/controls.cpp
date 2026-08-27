@@ -4,6 +4,7 @@
 #include "../view/leds.h"
 #include "../input/encoders.h"
 #include "../midi/midi.h"
+#include "../usb/serial_editor.h"
 
 ControlsManager controls;
 
@@ -117,11 +118,14 @@ void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_
     
     for (int i = 0; i < 8; ++i) {
         if (getEncoder(i).channel == channel && getEncoder(i).number == control) {
-            // if(getEncoder(i).value == value) faders[i]->showParamName();
-            faders[i]->setValue(value);
             getEncoder(i).value = value;
-            getEncoder(i).lastActivity = millis(); // Mettre à jour le timestamp d'activité
-            encoders.positions[i] = value; 
+            faders[i]->setValue(value);
+            encoders.positions[i] = value;
+            if (!getEncoder(i).hasWatcher && _currentPreset < 6) {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", value);
+                faders[i]->updateTitle(buf);
+            }
         }
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {
             getButtonShort(i).value = value;
@@ -166,6 +170,7 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                                   247 };
             usb_midi.writePacket(packet);
             usb_midi.write(packet, 9);
+            serialEditorSend(packet, 9);
             delay(2);
 
             uint8_t buttonShortPacket[10] = { 240, 111, 13, preset, (uint8_t)i,
@@ -176,6 +181,7 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                                   247 };
             usb_midi.writePacket(buttonShortPacket);
             usb_midi.write(buttonShortPacket, 10);
+            serialEditorSend(buttonShortPacket, 10);
             delay(2);
 
             // Send encoder name (status 0x0F, isButton=0)
@@ -188,6 +194,7 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                 namePacket[j++] = 247;
                 usb_midi.writePacket(namePacket);
                 usb_midi.write(namePacket, j);
+                serialEditorSend(namePacket, j);
                 delay(2);
             }
 
@@ -202,16 +209,19 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                 namePacket[j++] = 247;
                 usb_midi.writePacket(namePacket);
                 usb_midi.write(namePacket, j);
+                serialEditorSend(namePacket, j);
                 delay(2);
             }
         }
         uint8_t layoutPacket[5] = { 240, 111, 14, (uint8_t)faderLayout, 247 };
         usb_midi.writePacket(layoutPacket);
         usb_midi.write(layoutPacket, 5);
+        serialEditorSend(layoutPacket, 5);
 
         uint16_t ssSec = (uint16_t)(screenSaverDelay / 1000UL);
         uint8_t ssPacket[6] = { 240, 111, 16, (uint8_t)((ssSec >> 7) & 0x7F), (uint8_t)(ssSec & 0x7F), 247 };
         usb_midi.writePacket(ssPacket);
         usb_midi.write(ssPacket, 6);
+        serialEditorSend(ssPacket, 6);
     }
 }

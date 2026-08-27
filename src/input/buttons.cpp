@@ -56,11 +56,11 @@ void readButtons() {
       }
     } 
     else if (p == 1) { // Latch
-      if (!reading ) { // appuyé (active bas)
-       if(!latchPressed) onLatchPress();
-      } 
+      if (!reading) { // appuyé (active bas)
+       if(!latchPressed && !latchHeld) onLatchPress();
+      }
       else {
-        if (latchPressed) onLatchRelease();
+        if (latchPressed || latchHeld) onLatchRelease();
       }
     }
 

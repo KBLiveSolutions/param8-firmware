@@ -25,6 +25,7 @@ void FaderWidget::setTitle(const char* txt) {
 void FaderWidget::setParamName(const char* txt) {
     strncpy(paramName, txt, sizeof(paramName));
     paramName[sizeof(paramName)-1] = '\0';
+    showingValue = false;
     if(faderLayout == LAYOUT_DYNAMIC) {
         strncpy(title, txt, sizeof(title));
         title[sizeof(title)-1] = '\0';
@@ -44,6 +45,7 @@ void FaderWidget::updateButtonName(bool state) {
 }
 
 void FaderWidget::showParamName() {
+    showingValue = false;
     if(faderLayout == LAYOUT_DYNAMIC)
         setTitle(paramName);
     else
@@ -96,7 +98,9 @@ void FaderWidget::drawFaderDynamic() {
     int BAR_Y = area_y + 1;
     int FADER_H = 5;
 
-    if(strcmp(title, "******") != 0){
+    const char* displayText = showingValue ? title : paramName;
+
+    if(strcmp(paramName, "******") != 0){
         u8g2.setFontMode(1);
         u8g2.setDrawColor(1);
 
@@ -106,12 +110,12 @@ void FaderWidget::drawFaderDynamic() {
         u8g2.drawBox(BAR_X + 1, fader_y, fillWidth, FADER_H);
 
         u8g2.setFont(u8g2_font_8x13B_tr);
-        int text_width = u8g2.getStrWidth(title);
+        int text_width = u8g2.getStrWidth(displayText);
         int text_x = BAR_X + (BAR_W - text_width) / 2;
         int text_y = BAR_Y + 12;
 
         u8g2.setDrawColor(1);
-        u8g2.drawStr(text_x, text_y, title);
+        u8g2.drawStr(text_x, text_y, displayText);
 
         u8g2.setFontMode(0);
         u8g2.setDrawColor(1);
@@ -319,20 +323,14 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
 void FaderWidget::updateTitle(const char* txt) {
     strncpy(title, txt, sizeof(title));
     title[sizeof(title)-1] = '\0';
-    Serial.print("Texte: ");
-    Serial.println(title);
     if(!display_active){
-    // drawTitle();
     drawFader();
     }
 }
 
 void FaderWidget::setValue(int val) {
     value = constrain(val, 0, 127);
-    if(!display_active)drawFader();
-    static char title[20];
-    snprintf(title, sizeof(title), "%d", value);
-    // updateTitle(title);
+    if(!display_active) drawFader();
 }
 
 void FaderWidget::setEmpty() {

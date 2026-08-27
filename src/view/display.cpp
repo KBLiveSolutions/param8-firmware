@@ -63,32 +63,26 @@ void updateDisplay() {
 
         // Afficher la boîte droite si elle a du contenu
         if (right_box_text[0] != '\0') {
-            u8g2.setDrawColor(0);
-            u8g2.drawBox(0, area_y, 256, area_h);
+            u8g2.clearBuffer();
             u8g2.setDrawColor(1);
-            u8g2.drawHLine(0, area_y, 256);
-            u8g2.drawHLine(0, area_y + area_h - 1, 256);
             u8g2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2.getStrWidth(right_box_text);
             int text_x = (256 - text_width) / 2;
             u8g2.setCursor(text_x, text_y);
             u8g2.print(right_box_text);
-            u8g2.updateDisplayArea(0, area_y / 8, 256 / 8, area_h / 8);
+            u8g2.sendBuffer();
         }
 
         // Afficher la boîte gauche si elle a du contenu
         if (left_box_text[0] != '\0') {
-            u8g2_2.setDrawColor(0);
-            u8g2_2.drawBox(0, area_y, 256, area_h);
+            u8g2_2.clearBuffer();
             u8g2_2.setDrawColor(1);
-            u8g2_2.drawHLine(0, area_y, 256);
-            u8g2_2.drawHLine(0, area_y + area_h - 1, 256);
             u8g2_2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2_2.getStrWidth(left_box_text);
             int text_x = (256 - text_width) / 2;
             u8g2_2.setCursor(text_x, text_y);
             u8g2_2.print(left_box_text);
-            u8g2_2.updateDisplayArea(0, area_y / 8, 256 / 8, area_h / 8);
+            u8g2_2.sendBuffer();
         }
 
         display_needs_update = false;
@@ -128,8 +122,6 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
         if (strcmp(side, "right") == 0) {
             u8g2.clearBuffer();
             u8g2.setDrawColor(1);
-            u8g2.drawHLine(0, area_y, 256);
-            u8g2.drawHLine(0, area_y + area_h - 1, 256);
             u8g2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2.getStrWidth(text);
             int text_x = (256 - text_width) / 2;
@@ -141,8 +133,6 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
         if (strcmp(side, "left") == 0) {
             u8g2_2.clearBuffer();
             u8g2_2.setDrawColor(1);
-            u8g2_2.drawHLine(0, area_y, 256);
-            u8g2_2.drawHLine(0, area_y + area_h - 1, 256);
             u8g2_2.setFont(u8g2_font_7x14B_tr);
             int text_width = u8g2_2.getStrWidth(text);
             int text_x = (256 - text_width) / 2;
