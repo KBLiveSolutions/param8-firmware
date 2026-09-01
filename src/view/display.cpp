@@ -9,6 +9,10 @@ FaderWidget* faders[8];
 
 char left_box_text[20] = {"param8"};
 char right_box_text[20] = {"KBD"};
+char deviceLabel[20] = {0};
+char bankLabel[20] = {0};
+bool deviceLabelDirty = false;
+bool bankLabelDirty = false;
 unsigned long display_start_time = 0;
 bool display_active = false;
 bool display_needs_update = false;
@@ -46,6 +50,8 @@ void showDisplay() {
     for (int i : {2, 3, 6, 7}) {
         faders[i]->draw();
     }
+    if (deviceLabel[0] != '\0') deviceLabelDirty = true;
+    if (bankLabel[0] != '\0') bankLabelDirty = true;
 }
 
 void updateFader(int idx, int value) {
@@ -53,6 +59,7 @@ void updateFader(int idx, int value) {
 }
 
 void updateDisplay() {
+    if (screenSaverActive) return;
     // Afficher si au moins une boîte a du contenu ET que l'affichage doit être mis à jour
     if ((left_box_text[0] != '\0' || right_box_text[0] != '\0') && display_needs_update) {    
         int area_x = 64;
@@ -96,6 +103,7 @@ void updateDisplay() {
         display_active = false;
         showDisplay();
     }
+    drawDeviceBankLabels();
 }
 
 void updateDisplayBox(const char* side, const char* text, bool isStatic) {
@@ -152,6 +160,51 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
     display_active = true;
     display_start_time = millis();
     staticOverlay = isStatic;
+}
+
+static void drawLabelOverButton(U8G2 &disp, const char* txt, int y) {
+    int label_w = 64;
+    int label_x = (256 - label_w) / 2;
+    int inner_w = label_w - 4;
+    int area_h = 8;
+    disp.setDrawColor(0);
+    disp.drawBox(label_x, y, label_w, area_h);
+    disp.setDrawColor(1);
+    disp.drawBox(label_x + 2, y, inner_w, area_h);
+    disp.setFont(u8g2_font_5x8_tr);
+    int tw = disp.getStrWidth(txt);
+    disp.setDrawColor(0);
+    if (tw <= inner_w) {
+        int text_x = label_x + (label_w - tw) / 2;
+        disp.setCursor(text_x, y + 7);
+        disp.print(txt);
+    } else {
+        disp.setCursor(label_x + 4, y + 7);
+        char truncated[20];
+        strncpy(truncated, txt, sizeof(truncated));
+        truncated[sizeof(truncated)-1] = '\0';
+        while (strlen(truncated) > 1 && disp.getStrWidth(truncated) > inner_w - 4) {
+            truncated[strlen(truncated)-1] = '\0';
+        }
+        disp.print(truncated);
+    }
+    disp.setDrawColor(1);
+    disp.updateDisplayArea(label_x / 8, y / 8, label_w / 8, 1);
+}
+
+void drawDeviceBankLabels() {
+    if (screenSaverActive) return;
+    if (!deviceLabelDirty && !bankLabelDirty) return;
+    if (deviceLabelDirty) {
+        deviceLabelDirty = false;
+        if (deviceLabel[0] != '\0')
+            drawLabelOverButton(u8g2, deviceLabel, 56);
+    }
+    if (bankLabelDirty) {
+        bankLabelDirty = false;
+        if (bankLabel[0] != '\0')
+            drawLabelOverButton(u8g2_2, bankLabel, 56);
+    }
 }
 
 void runScreenSaver() {

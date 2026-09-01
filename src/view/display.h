@@ -16,6 +16,10 @@ extern bool display_needs_update;
 extern bool staticOverlay;
 extern bool screenSaverActive;
 extern unsigned long screenSaverDelay;
+extern char deviceLabel[20];
+extern char bankLabel[20];
+extern bool deviceLabelDirty;
+extern bool bankLabelDirty;
 
 void setupDisplay() ;
 
@@ -23,4 +27,5 @@ void showDisplay();
 void updateFader(int idx, int value);
 void updateDisplay();
 void updateDisplayBox(const char* side, const char* text, bool isStatic = false);
+void drawDeviceBankLabels();
 void runScreenSaver();

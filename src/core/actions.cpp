@@ -70,7 +70,6 @@ void sendNameRequest(uint8_t idx, uint8_t isButton)
         ? controls.getButtonShort(idx)
         : controls.getEncoder(idx);
     uint8_t packet[9] = {240, 111, 17, idx, isButton, (uint8_t)ctrl.type, ctrl.number, ctrl.channel, 247};
-    usb_midi.writePacket(packet);
     usb_midi.write(packet, 9);
 }
 
@@ -210,7 +209,7 @@ void onButtonReleased(uint8_t idx)
 
 void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel)
 {
-    const int MAX_STEP = 10;
+    const int MAX_STEP = 63;
     int remaining = delta;
     while (remaining != 0) {
         int step = constrain(remaining, -MAX_STEP, MAX_STEP);
@@ -307,14 +306,26 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
 
 void updateFaderTitles()
 {
+    uint8_t preset = controls.getPreset();
     for (int i = 0; i < 8; ++i)
     {
         char buf[24];
         MidiControl& enc = controls.getEncoder(i);
+        faders[i]->valueOnly = (preset == 6 && (i == 2 || i == 3 || i == 6));
+        if (faders[i]->valueOnly) {
+            faders[i]->showingValue = true;
+            faders[i]->updateTitle("---");
+        }
         if (enc.controlName[0] != '\0') {
             faders[i]->setParamName(enc.controlName);
-        } else if (controls.getPreset() >= 6) {
-            faders[i]->setParamName("");
+        } else if (preset == 6) {
+            static const char* mixerParamNames[] = {
+                "Master Vol.", "Cue Vol.", "Tempo", "Scene",
+                "Volume", "Pan", "Position", "Sel. Param."
+            };
+            faders[i]->setParamName(mixerParamNames[i]);
+        } else if (preset == 7) {
+            faders[i]->setParamName("---");
         } else {
             snprintf(buf, sizeof(buf), "CC%d/%d", enc.number, enc.channel + 1);
             faders[i]->setParamName(buf);
@@ -328,7 +339,7 @@ void updateFaderTitles()
         }
         else if(controls.getPreset() == 6){
             static const char* buttonNames[] = {
-                "Metronome", "Arr. Rec", "Play/Stop", "Capture",
+                "Metronome", "Arr. Rec", "Play/Stop", "Launch",
                 "Mute", "Solo", "Arr. Loop", "-> Default"
             };
             snprintf(buf, sizeof(buf), buttonNames[i]);
@@ -347,6 +358,25 @@ void updateFaderTitles()
         }
         faders[i]->setButtonName(buf);
     }
+    if (preset == 7) {
+        deviceLabel[0] = '\0';
+        bankLabel[0] = '\0';
+    } else if (preset == 6) {
+        strncpy(deviceLabel, "Track", sizeof(deviceLabel));
+        strncpy(bankLabel, "Global", sizeof(bankLabel));
+        deviceLabelDirty = true;
+        bankLabelDirty = true;
+    } else {
+        const char* pName = controls.getPresetName(preset);
+        if (pName[0] != '\0') {
+            strncpy(bankLabel, pName, sizeof(bankLabel));
+        } else {
+            snprintf(bankLabel, sizeof(bankLabel), "Preset %d", preset + 1);
+        }
+        snprintf(deviceLabel, sizeof(deviceLabel), "Preset %d", preset + 1);
+        deviceLabelDirty = true;
+        bankLabelDirty = true;
+    }
 }
 
 void updateFaderValues()
@@ -355,17 +385,19 @@ void updateFaderValues()
         uint8_t val = controls.getEncoder(i).value;
         faders[i]->setValue(val);
         if (faderLayout != LAYOUT_DYNAMIC && !controls.getEncoder(i).hasWatcher) {
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%d", val);
-            faders[i]->updateTitle(buf);
+            if (controls.getPreset() < 6) {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", val);
+                faders[i]->updateTitle(buf);
+            }
         }
     }
 }
 
 void sendPresetSysEx(uint8_t preset)
 {
+    liveConnectedTime = millis();
     uint8_t packet[5] = {240, 111, 4, preset, 247};
-    usb_midi.writePacket(packet);
     usb_midi.write(packet, 5);
 }
 

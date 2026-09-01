@@ -22,6 +22,7 @@ public:
     int value;
     int oldValue;
     bool showingValue = false;
+    bool valueOnly = false;
     int x_offset, y_offset;
     int boutonNumber;
 

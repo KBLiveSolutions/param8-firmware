@@ -6,14 +6,15 @@ extern Adafruit_USBD_MIDI usb_midi;
 // extern MIDI_NAMESPACE::MidiInterface<Adafruit_USBD_MIDI> USBMIDI;
 
 #define MIDI_MAX_PACKET_SIZE 4
-#define MIDI_MAX_PACKET_SIZE 4
+#define SYSEX_BUFFER_SIZE 128
 #define SYSEX_START_BYTE 0xF0
 #define SYSEX_END_BYTE 0xF7
 
 extern bool liveConnected;
+extern unsigned long liveConnectedTime;
 extern bool isSysExContinued;
 extern size_t sysExBufferSize;
-extern uint8_t sysExBuffer[MIDI_MAX_PACKET_SIZE * 10];
+extern uint8_t sysExBuffer[SYSEX_BUFFER_SIZE];
 
 void setupMIDI();
 void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel);

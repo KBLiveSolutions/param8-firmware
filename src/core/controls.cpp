@@ -65,6 +65,18 @@ void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiTyp
     }
 }
 
+const char* ControlsManager::getPresetName(uint8_t preset) {
+    if (preset < 8) return _presets[preset].presetName;
+    return "";
+}
+
+void ControlsManager::setPresetName(uint8_t preset, const char* name) {
+    if (preset < 8) {
+        strncpy(_presets[preset].presetName, name, sizeof(_presets[preset].presetName) - 1);
+        _presets[preset].presetName[sizeof(_presets[preset].presetName) - 1] = '\0';
+    }
+}
+
 void ControlsManager::setDefaults() {
     _currentPreset = json.getMode();
     Serial.print("Preset actuel chargé: ");
@@ -100,8 +112,10 @@ void ControlsManager::setDefaults() {
 
             _presets[_preset].buttons_short[i].value = 0;
         }
+        const char* pName = json.getDoc()[String(_preset)]["preset_name"] | "";
+        strncpy(_presets[_preset].presetName, pName, sizeof(_presets[_preset].presetName) - 1);
     }
-    
+
     // Synchroniser les positions des encodeurs avec le preset actuel
     for (int i = 0; i < 8; i++) {
         encoders.positions[i] = _presets[_currentPreset].encoder[i].value;
@@ -168,7 +182,6 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                                   encoder.number,
                                   encoder.channel,
                                   247 };
-            usb_midi.writePacket(packet);
             usb_midi.write(packet, 9);
             serialEditorSend(packet, 9);
             delay(2);
@@ -179,12 +192,10 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                                   _presets[preset].buttons_short[i].channel,
                                   _presets[preset].buttons_short[i].toggleMode ? 1 : 0,
                                   247 };
-            usb_midi.writePacket(buttonShortPacket);
             usb_midi.write(buttonShortPacket, 10);
             serialEditorSend(buttonShortPacket, 10);
             delay(2);
 
-            // Send encoder name (status 0x0F, isButton=0)
             if (encoder.controlName[0] != '\0') {
                 uint8_t namePacket[20] = { 240, 111, 15, preset, (uint8_t)i, 0 };
                 size_t j = 6;
@@ -192,13 +203,11 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                     namePacket[j++] = (uint8_t)encoder.controlName[c];
                 }
                 namePacket[j++] = 247;
-                usb_midi.writePacket(namePacket);
                 usb_midi.write(namePacket, j);
                 serialEditorSend(namePacket, j);
                 delay(2);
             }
 
-            // Send button name (status 0x0F, isButton=1)
             MidiControl& btn = _presets[preset].buttons_short[i];
             if (btn.controlName[0] != '\0') {
                 uint8_t namePacket[20] = { 240, 111, 15, preset, (uint8_t)i, 1 };
@@ -207,20 +216,29 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                     namePacket[j++] = (uint8_t)btn.controlName[c];
                 }
                 namePacket[j++] = 247;
-                usb_midi.writePacket(namePacket);
                 usb_midi.write(namePacket, j);
                 serialEditorSend(namePacket, j);
                 delay(2);
             }
         }
+        if (_presets[preset].presetName[0] != '\0') {
+            uint8_t namePacket[28] = { 240, 111, 0x11, preset };
+            size_t j = 4;
+            for (size_t c = 0; c < 19 && _presets[preset].presetName[c] != '\0'; c++) {
+                namePacket[j++] = (uint8_t)_presets[preset].presetName[c];
+            }
+            namePacket[j++] = 247;
+            usb_midi.write(namePacket, j);
+            serialEditorSend(namePacket, j);
+            delay(2);
+        }
+
         uint8_t layoutPacket[5] = { 240, 111, 14, (uint8_t)faderLayout, 247 };
-        usb_midi.writePacket(layoutPacket);
         usb_midi.write(layoutPacket, 5);
         serialEditorSend(layoutPacket, 5);
 
         uint16_t ssSec = (uint16_t)(screenSaverDelay / 1000UL);
         uint8_t ssPacket[6] = { 240, 111, 16, (uint8_t)((ssSec >> 7) & 0x7F), (uint8_t)(ssSec & 0x7F), 247 };
-        usb_midi.writePacket(ssPacket);
         usb_midi.write(ssPacket, 6);
         serialEditorSend(ssPacket, 6);
     }

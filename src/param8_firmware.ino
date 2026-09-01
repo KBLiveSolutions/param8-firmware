@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <SPI.h>
+#include <hardware/watchdog.h>
 // #define PIN_SPI0_MOSI  (7u)
 // #define PIN_SPI0_SCK   (6u)
 //  U8G2_SSD1322_NHD_256X64_1_4W_SW_SPI u8g2(U8G2_MIRROR_VERTICAL, /* clock=*/ 6, /* data=*/ 7, /* cs=*/ 10, /* dc=*/ 9, /* reset=*/ 8);
@@ -47,26 +48,33 @@ void setup() {
   screenSaverDelay = (unsigned long)savedSS * 1000UL;
   updateFaderTitles();
   updateFaderValues();
-  sendPresetSysEx(controls.getPreset());
-  if (controls.getPreset() == 7) {
-    updateDisplayBox("right", "Open Live", true);
-    updateDisplayBox("left", "or Shift+Button", true);
-  }
+  // if (controls.getPreset() == 7) {
+  //   updateDisplayBox("right", "Open Live", true);
+  //   updateDisplayBox("left", "or Shift+Button", true);
+  // }
   encoders.setup();
   setupButtons();
   setupLeds();
+  watchdog_enable(8000, true);
   Serial.println("=== STARTUP COMPLETE ===");
-  delay(100);     // Stabilisation finale
+  delay(100);
 
 }
 
 unsigned long lastDisplay = 0;
 const unsigned long displayInterval = 100;  // 20 FPS
 unsigned long lastInactivityCheck = 0;
-const unsigned long inactivityCheckInterval = 250;  // Vérifier toutes les 250ms
+const unsigned long inactivityCheckInterval = 250;
+bool bootPresetSent = false;
 
 void loop() {
+    watchdog_update();
     midiRead();
+
+    if (!bootPresetSent && millis() > 2000) {
+        bootPresetSent = true;
+        sendPresetSysEx(controls.getPreset());
+    }
     serialEditorRead();
     encoders.read();
     readButtons();

@@ -7,8 +7,9 @@
 
 bool liveConnected = false;
 bool isSysExContinued = false;
+unsigned long liveConnectedTime = 0;
 size_t sysExBufferSize = 0;
-uint8_t sysExBuffer[MIDI_MAX_PACKET_SIZE * 10];
+uint8_t sysExBuffer[SYSEX_BUFFER_SIZE];
 
 void setupMIDI()
 {
@@ -84,25 +85,34 @@ void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channe
 
 void midiRead()
 {
-  if (usb_midi.available())
+  int maxReads = 64;
+  while (usb_midi.available() && --maxReads > 0)
   {
     uint8_t packet[MIDI_MAX_PACKET_SIZE];
     usb_midi.readPacket(packet);
-    uint8_t cable = (packet[0] >> 4) + 1;
-    if (isSysExContinued)
-      handleSysExContinuation(packet);
+    uint8_t cin = packet[0] & 0x0F;
+    bool isSysExPacket = (cin >= 0x04 && cin <= 0x07);
+
+    if (isSysExPacket)
+    {
+      if (cin == 0x04 && packet[1] == SYSEX_START_BYTE)
+        handleSysExStart(packet);
+      else if (isSysExContinued)
+        handleSysExContinuation(packet);
+      else
+        clearSysExBuffer();
+    }
     else
     {
-      if (packet[1] == SYSEX_START_BYTE)
-        handleSysExStart(packet);
-      else
-        handleMIDIDAWMessage(packet);
-    };
+      if (isSysExContinued)
+        clearSysExBuffer();
+      handleMIDIDAWMessage(packet);
+    }
     lastInputTime = millis();
     if (screenSaverActive)
     {
       screenSaverActive = false;
-      showDisplay(); // réaffiche l'UI normale
+      showDisplay();
     }
   }
 }
@@ -162,10 +172,13 @@ void clearSysExBuffer()
 
 void handleSysExMessage(uint8_t *packet)
 {
-  memcpy(sysExBuffer + sysExBufferSize, packet + 1, MIDI_MAX_PACKET_SIZE - 1);
   for (size_t i = 1; i < MIDI_MAX_PACKET_SIZE; i++)
   {
-    sysExBufferSize++;
+    if (sysExBufferSize >= SYSEX_BUFFER_SIZE) {
+      clearSysExBuffer();
+      return;
+    }
+    sysExBuffer[sysExBufferSize++] = packet[i];
     if (packet[i] == SYSEX_END_BYTE)
     {
       onSysEx(sysExBuffer, sysExBufferSize);
@@ -179,7 +192,8 @@ void handleSysExStart(uint8_t *packet)
 {
   clearSysExBuffer();
   handleSysExMessage(packet);
-  isSysExContinued = true;
+  if (sysExBufferSize > 0)
+    isSysExContinued = true;
 }
 
 void handleSysExContinuation(uint8_t *packet)
@@ -189,8 +203,10 @@ void handleSysExContinuation(uint8_t *packet)
 
 void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 {
+  if (value == 0 && liveConnectedTime > 0 && millis() - liveConnectedTime < 500)
+    return;
   controls.onMidiValueChange(channel, control, value);
-};
+}
 
 void onSysEx(const uint8_t *sysex, size_t len)
 {
@@ -224,7 +240,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
         }
         else
         {
-          // String vide, passe une string vide
           faders[param_number]->setParamName("");
         }
       }
@@ -248,23 +263,31 @@ void onSysEx(const uint8_t *sysex, size_t len)
     break;
 
   case 2:
-    // Stocke la ligne reçue dans la boîte de gauche
-    updateDisplayBox("left", ascii_string, staticOverlay == 1);
+    strncpy(bankLabel, ascii_string, sizeof(bankLabel));
+    bankLabel[sizeof(bankLabel)-1] = '\0';
+    bankLabelDirty = true;
     break;
 
   case 3:
-    // Stocke la ligne reçue dans la boîte de droite
-    updateDisplayBox("right", ascii_string, staticOverlay == 1);
+    strncpy(deviceLabel, ascii_string, sizeof(deviceLabel));
+    deviceLabel[sizeof(deviceLabel)-1] = '\0';
+    deviceLabelDirty = true;
     break;
 
   case 5:
   {
     bool wasConnected = liveConnected;
     liveConnected = true;
+    liveConnectedTime = millis();
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
-    if (!wasConnected && (preset == 7 || preset == 6)) {
-      updateFaderTitles();
+    if (!wasConnected) {
+      staticOverlay = false;
+      display_active = false;
+      showDisplay();
+      if (preset == 7 || preset == 6) {
+        updateFaderTitles();
+      }
     }
     break;
   }
@@ -316,11 +339,19 @@ void onSysEx(const uint8_t *sysex, size_t len)
       faderLayout = static_cast<FaderLayout>(layout);
       json.setLayout(layout);
       json.save();
-      if (faderLayout == LAYOUT_DYNAMIC) {
-        updateFaderTitles();
-      } else {
-        updateFaderValues();
+      char savedDevice[20], savedBank[20];
+      strncpy(savedDevice, deviceLabel, sizeof(savedDevice));
+      strncpy(savedBank, bankLabel, sizeof(savedBank));
+      updateFaderTitles();
+      updateFaderValues();
+      if (controls.getPreset() == 7) {
+        strncpy(deviceLabel, savedDevice, sizeof(deviceLabel));
+        strncpy(bankLabel, savedBank, sizeof(bankLabel));
       }
+      showDisplay();
+      deviceLabelDirty = true;
+      bankLabelDirty = true;
+      drawDeviceBankLabels();
     }
     break;
   }
@@ -348,6 +379,24 @@ void onSysEx(const uint8_t *sysex, size_t len)
     json.getDoc()[String(preset)][section][String(idx)] = name;
     json.save();
 
+    if (preset == controls.getPreset())
+      updateFaderTitles();
+    break;
+  }
+  case 0x11:
+  {
+    uint8_t preset = sysex[3];
+    if (preset >= 6) break;
+    char name[20] = {0};
+    size_t nameLen = 0;
+    for (size_t j = 4; j < len - 1 && nameLen < 19; j++) {
+      name[nameLen++] = (char)sysex[j];
+    }
+    name[nameLen] = '\0';
+    Serial.printf("Preset name received: preset=%d name='%s'\n", preset, name);
+    controls.setPresetName(preset, name);
+    json.getDoc()[String(preset)]["preset_name"] = name;
+    json.save();
     if (preset == controls.getPreset())
       updateFaderTitles();
     break;

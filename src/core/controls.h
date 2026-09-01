@@ -23,7 +23,7 @@ struct PresetControls {
     MidiControl encoder[8];
     MidiControl buttons_short[8];
     MidiControl buttons_toggle[8];
-    // MidiControl buttons_long[8];
+    char presetName[20] = {0};
 };
 
 class ControlsManager {
@@ -41,6 +41,8 @@ public:
     void setEncoder(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel);
     void setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, bool toggleMode);
 
+    const char* getPresetName(uint8_t preset);
+    void setPresetName(uint8_t preset, const char* name);
     void setDefaults();
     void getPresetControls(uint8_t);
     void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value);
