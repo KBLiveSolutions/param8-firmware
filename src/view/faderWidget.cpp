@@ -4,9 +4,6 @@
 FaderLayout faderLayout = LAYOUT_COMPACT;
 
 void FaderWidget::drawSeparators() {
-    u8g2.setDrawColor(1);
-    u8g2.drawVLine(128, y_offset, 32);
-    // u8g2.drawHLine(x_offset, 32, 128);
 }
 
 FaderWidget::FaderWidget(U8G2 &u8g2, const char* initialTitle, int x, int y, int boutonNumber)
@@ -26,16 +23,17 @@ void FaderWidget::setTitle(const char* txt) {
 }
 
 void FaderWidget::setParamName(const char* txt) {
-    strncpy(paramName, txt, sizeof(paramName));
+    dimmed = (txt[0] == '~');
+    const char* name = dimmed ? txt + 1 : txt;
+    strncpy(paramName, name, sizeof(paramName));
     paramName[sizeof(paramName)-1] = '\0';
-    if (!valueOnly) {
-        showingValue = false;
+    disabled = (strcmp(name, "---") == 0);
+    if (!valueOnly && !showingValue) {
         if(faderLayout == LAYOUT_DYNAMIC) {
-            strncpy(title, txt, sizeof(title));
+            strncpy(title, name, sizeof(title));
             title[sizeof(title)-1] = '\0';
         }
     }
-    if(!display_active) drawFader();
 }
 
 void FaderWidget::setButtonName(const char* txt) {
@@ -46,6 +44,7 @@ void FaderWidget::setButtonName(const char* txt) {
 }
 
 void FaderWidget::updateButtonName(bool state) {
+    buttonState = state;
     drawButtonName(buttonText, state);
 }
 
@@ -97,10 +96,15 @@ void FaderWidget::drawFaderDynamic() {
 
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
+    if (strcmp(paramName, "---") == 0) {
+        u8g2.setDrawColor(1);
+        u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
+        return;
+    }
 
-    int BAR_W = 120;
+    int BAR_W = 100;
     int BAR_H = 5;
-    int BAR_X = area_x + 4;
+    int BAR_X = area_x + (area_w - BAR_W) / 2;
     int BAR_Y = area_y + 1;
     int FADER_H = 5;
 
@@ -110,28 +114,32 @@ void FaderWidget::drawFaderDynamic() {
         u8g2.setFontMode(1);
         u8g2.setDrawColor(1);
 
-        int fillWidth = map(value, 0, 127, 0, BAR_W - 2);
-        int fader_y = BAR_Y + BAR_H - FADER_H - 1 + 17;
-        u8g2.drawFrame(BAR_X, fader_y, BAR_W, BAR_H);
-        u8g2.drawBox(BAR_X + 1, fader_y, fillWidth, FADER_H);
+        {
+            int fillWidth = map(value, 0, 127, 0, BAR_W - 2);
+            int fader_y = BAR_Y + BAR_H - FADER_H - 1 + 17;
+            u8g2.drawFrame(BAR_X, fader_y, BAR_W, BAR_H);
+            if (!dimmed)
+                u8g2.drawBox(BAR_X + 1, fader_y, fillWidth, FADER_H);
+        }
 
         u8g2.setFont(u8g2_font_8x13B_tr);
         int text_width = u8g2.getStrWidth(displayText);
         int text_y = BAR_Y + 12;
+        int TEXT_MAX = area_w - 8;
 
-        if (text_width <= BAR_W) {
-            int text_x = BAR_X + (BAR_W - text_width) / 2;
+        if (text_width <= TEXT_MAX) {
+            int text_x = area_x + (area_w - text_width) / 2;
             u8g2.setDrawColor(1);
             u8g2.drawStr(text_x, text_y, displayText);
         } else {
             char truncated[20];
             strncpy(truncated, displayText, sizeof(truncated));
             truncated[sizeof(truncated)-1] = '\0';
-            while (strlen(truncated) > 1 && u8g2.getStrWidth(truncated) > BAR_W) {
+            while (strlen(truncated) > 1 && u8g2.getStrWidth(truncated) > TEXT_MAX) {
                 truncated[strlen(truncated)-1] = '\0';
             }
             u8g2.setDrawColor(1);
-            u8g2.drawStr(BAR_X, text_y, truncated);
+            u8g2.drawStr(area_x + 4, text_y, truncated);
         }
 
         u8g2.setFontMode(0);
@@ -149,13 +157,18 @@ void FaderWidget::drawFaderCompact() {
 
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
+    if (strcmp(paramName, "---") == 0) {
+        u8g2.setDrawColor(1);
+        u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
+        return;
+    }
 
-    bool inactive = (strcmp(title, "---") == 0);
+    bool inactive = disabled || dimmed;
 
     if(strcmp(paramName, "******") != 0){
         u8g2.setDrawColor(1);
 
-        int MARGIN = 4;
+        int MARGIN = 6;
         int GAP = 2;
         int TPAD = 2;
         int col_name_w = 48;
@@ -232,25 +245,26 @@ void FaderWidget::drawFaderCompact() {
         }
         // --- Right: param value, left-justified, 2 lines max ---
         u8g2.setFont(u8g2_font_6x10_tf);
+        const char* valText = disabled ? "---" : title;
         int valMaxChars = (col_val_w - TPAD * 2) / charW;
-        int vlen = strlen(title);
+        int vlen = strlen(valText);
 
         if(vlen <= valMaxChars) {
-            u8g2.drawStr(col_val_x + TPAD, area_y + 14, title);
+            u8g2.drawStr(col_val_x + TPAD, area_y + 14, valText);
         } else {
             char vl1[21], vl2[21];
             int vbrk = -1;
             for(int i = 0; i < vlen && i < valMaxChars; i++)
-                if(title[i] == ' ') vbrk = i;
+                if(valText[i] == ' ') vbrk = i;
             if(vbrk > 0) {
-                strncpy(vl1, title, vbrk);
+                strncpy(vl1, valText, vbrk);
                 vl1[vbrk] = '\0';
-                strncpy(vl2, title + vbrk + 1, sizeof(vl2) - 1);
+                strncpy(vl2, valText + vbrk + 1, sizeof(vl2) - 1);
                 vl2[sizeof(vl2)-1] = '\0';
             } else {
-                strncpy(vl1, title, valMaxChars);
+                strncpy(vl1, valText, valMaxChars);
                 vl1[valMaxChars] = '\0';
-                strncpy(vl2, title + valMaxChars, sizeof(vl2) - 1);
+                strncpy(vl2, valText + valMaxChars, sizeof(vl2) - 1);
                 vl2[sizeof(vl2)-1] = '\0';
             }
             if((int)strlen(vl2) > valMaxChars) vl2[valMaxChars] = '\0';
@@ -270,6 +284,11 @@ void FaderWidget::drawFaderStacked() {
 
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
+    if (strcmp(paramName, "---") == 0) {
+        u8g2.setDrawColor(1);
+        u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
+        return;
+    }
 
     if(strcmp(paramName, "******") != 0){
         u8g2.setDrawColor(1);
@@ -282,27 +301,39 @@ void FaderWidget::drawFaderStacked() {
         if(name_x < area_x + PAD) name_x = area_x + PAD;
         u8g2.drawStr(name_x, area_y + 9, paramName);
 
-        // --- Row 2: horizontal slider ---
-        int bar_w = area_w * 80 / 100;
-        int bar_x = area_x + (area_w - bar_w) / 2;
-        int bar_h = 4;
-        int bar_y = area_y + 12;
-        u8g2.drawFrame(bar_x, bar_y, bar_w, bar_h);
-        int fillW = map(value, 0, 127, 0, bar_w - 2);
-        if(fillW > 0)
-            u8g2.drawBox(bar_x + 1, bar_y + 1, fillW, bar_h - 2);
+        if(!disabled) {
+            // --- Row 2: horizontal slider ---
+            int bar_w = area_w * 80 / 100;
+            int bar_x = area_x + (area_w - bar_w) / 2;
+            int bar_h = 4;
+            int bar_y = area_y + 12;
+            u8g2.drawFrame(bar_x, bar_y, bar_w, bar_h);
+            if(!dimmed) {
+                int fillW = map(value, 0, 127, 0, bar_w - 2);
+                if(fillW > 0)
+                    u8g2.drawBox(bar_x + 1, bar_y + 1, fillW, bar_h - 2);
+            }
+        }
 
         // --- Row 3: param value centered (8px) ---
         u8g2.setFont(u8g2_font_5x7_tr);
-        int val_w = u8g2.getStrWidth(title);
+        const char* valText = disabled ? "---" : title;
+        int val_w = u8g2.getStrWidth(valText);
         int val_x = area_x + (area_w - val_w) / 2;
-        u8g2.drawStr(val_x, area_y + 23, title);
+        u8g2.drawStr(val_x, area_y + 23, valText);
     }
     drawSeparators();
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 
 void FaderWidget::drawButtonName(const char* txt, bool state) {
+    char upper[20];
+    for (size_t i = 0; txt[i] && i < sizeof(upper) - 1; i++) {
+        upper[i] = toupper(txt[i]);
+        upper[i + 1] = '\0';
+    }
+    txt = upper;
+
     int area_y = y_offset + ((boutonNumber > 3) ? 24 : 0);
     int area_h = 8;
     int btn_x = x_offset + 32;
@@ -347,11 +378,14 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
     }
 
     u8g2.setDrawColor(1);
+    u8g2.drawFrame(btn_x, area_y, btn_w, area_h);
     drawSeparators();
     u8g2.updateDisplayArea(clear_x / 8, area_y / 8, clear_w / 8, 1);
 }
 
 void FaderWidget::updateTitle(const char* txt) {
+    if (strcmp(txt, "Disabled") == 0 || strcmp(txt, "---") == 0)
+        disabled = true;
     strncpy(title, txt, sizeof(title));
     title[sizeof(title)-1] = '\0';
     if (valueOnly)
@@ -372,7 +406,6 @@ void FaderWidget::setEmpty() {
 }
 
 void FaderWidget::draw() {
-    // Efface toute la zone du widget (titre + fader + bouton)
     int area_x = x_offset;
     int area_y = y_offset;
     int area_w = 128;
@@ -380,11 +413,10 @@ void FaderWidget::draw() {
     u8g2.setDrawColor(0);
     u8g2.drawBox(area_x, area_y, area_w, area_h);
 
-    drawFader(); // d'abord le fader
-    // drawTitle(); // puis le titre par-dessus
+    drawFader();
     updateButtonName(false);
-
     drawSeparators();
+
     u8g2.updateDisplayArea(area_x / 8, area_y / 8, area_w / 8, area_h / 8);
 }
 

@@ -1,4 +1,5 @@
 #include "controls.h"
+#include "actions.h"
 #include "jsonManager.h"
 #include "../view/display.h"
 #include "../view/leds.h"
@@ -85,35 +86,44 @@ void ControlsManager::setDefaults() {
     for(int _preset = 0; _preset < 8; ++_preset){
         Serial.print("Chargement preset ");
         Serial.println(_preset);
-        
+
         for(int i = 0; i < 8; ++i) {
-            ControlData data = json.getControlData("encoders", _preset, i);
-            ControlMidiType type = static_cast<ControlMidiType>(data.value0);
-            uint8_t number = static_cast<uint8_t>(data.value1);
-            uint8_t channel = static_cast<uint8_t>(data.value2);
-            
-            setEncoder(_preset, i, type, number, channel);
+            if (_preset == 6) {
+                // Mixer/Global: encoders CC 40-47, buttons CC 50-57, all on channel 7
+                setEncoder(_preset, i, MIDI_CC, 40 + i, 7);
+                setButtonShort(_preset, i, MIDI_CC, 50 + i, 7, false);
+            } else if (_preset == 7) {
+                // Device: encoders CC 10-17, buttons CC 20-27, all on channel 7
+                setEncoder(_preset, i, MIDI_CC, 10 + i, 7);
+                setButtonShort(_preset, i, MIDI_CC, 20 + i, 7, false);
+            } else {
+                ControlData data = json.getControlData("encoders", _preset, i);
+                ControlMidiType type = static_cast<ControlMidiType>(data.value0);
+                uint8_t number = static_cast<uint8_t>(data.value1);
+                uint8_t channel = static_cast<uint8_t>(data.value2);
+                setEncoder(_preset, i, type, number, channel);
+
+                data = json.getControlData("buttons_short", _preset, i);
+                type = static_cast<ControlMidiType>(data.value0);
+                number = static_cast<uint8_t>(data.value1);
+                channel = static_cast<uint8_t>(data.value2);
+                bool toggleMode = json.getButtonToggleMode(_preset, i) > 0;
+                setButtonShort(_preset, i, type, number, channel, toggleMode);
+
+                const char* encName = json.getDoc()[String(_preset)]["encoder_names"][String(i)] | "";
+                strncpy(_presets[_preset].encoder[i].controlName, encName, 11);
+                const char* btnName = json.getDoc()[String(_preset)]["button_names"][String(i)] | "";
+                strncpy(_presets[_preset].buttons_short[i].controlName, btnName, 11);
+            }
+
             _presets[_preset].encoder[i].value = 64;
             _presets[_preset].encoder[i].lastActivity = 0;
-
-            // Charger la configuration des boutons courts
-            data = json.getControlData("buttons_short", _preset, i);
-            type = static_cast<ControlMidiType>(data.value0);
-            number = static_cast<uint8_t>(data.value1);
-            channel = static_cast<uint8_t>(data.value2);
-            bool toggleMode = json.getButtonToggleMode(_preset, i) > 0;
-            setButtonShort(_preset, i, type, number, channel, toggleMode);
-
-            // Load control names
-            const char* encName = json.getDoc()[String(_preset)]["encoder_names"][String(i)] | "";
-            strncpy(_presets[_preset].encoder[i].controlName, encName, 11);
-            const char* btnName = json.getDoc()[String(_preset)]["button_names"][String(i)] | "";
-            strncpy(_presets[_preset].buttons_short[i].controlName, btnName, 11);
-
             _presets[_preset].buttons_short[i].value = 0;
         }
-        const char* pName = json.getDoc()[String(_preset)]["preset_name"] | "";
-        strncpy(_presets[_preset].presetName, pName, sizeof(_presets[_preset].presetName) - 1);
+        if (_preset < 6) {
+            const char* pName = json.getDoc()[String(_preset)]["preset_name"] | "";
+            strncpy(_presets[_preset].presetName, pName, sizeof(_presets[_preset].presetName) - 1);
+        }
     }
 
     // Synchroniser les positions des encodeurs avec le preset actuel
@@ -143,10 +153,8 @@ void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_
         }
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {
             getButtonShort(i).value = value;
-            if (_currentPreset < 6) {
-                bool on = (getButtonShort(i).type == MIDI_NOTE) ? (value == 127) : (value > 63);
-                faders[i]->updateButtonName(on);
-            }
+            bool on = (getButtonShort(i).type == MIDI_NOTE) ? (value == 127) : (value > 63);
+            faders[i]->updateButtonName(on);
         }
     }
 }
@@ -241,5 +249,10 @@ void ControlsManager::getPresetControls(uint8_t preset) {
         uint8_t ssPacket[6] = { 240, 111, 16, (uint8_t)((ssSec >> 7) & 0x7F), (uint8_t)(ssSec & 0x7F), 247 };
         usb_midi.write(ssPacket, 6);
         serialEditorSend(ssPacket, 6);
+
+        int bright = json.getDoc()["brightness"] | 1;
+        uint8_t brPacket[5] = { 240, 111, 0x1B, (uint8_t)(bright & 0x7F), 247 };
+        usb_midi.write(brPacket, 5);
+        serialEditorSend(brPacket, 5);
     }
 }

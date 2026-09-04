@@ -23,6 +23,13 @@ void setupDisplay() {
     u8g2.begin();
     u8g2_2.begin();
 
+    u8g2.sendF("ca", 0xB1, 0x22);
+    u8g2.sendF("ca", 0xBB, 0x17);
+    u8g2.sendF("ca", 0xBE, 0x04);
+    u8g2_2.sendF("ca", 0xB1, 0x22);
+    u8g2_2.sendF("ca", 0xBB, 0x17);
+    u8g2_2.sendF("ca", 0xBE, 0x04);
+
     // u8g2 : 1 2 / 5 6
     faders[0] = new FaderWidget(u8g2,  "Fader 1",   0,   0, 0);    // Bloc 1
     faders[1] = new FaderWidget(u8g2,  "Fader 2", 128,   0, 1);    // Bloc 2
@@ -229,4 +236,14 @@ void runScreenSaver() {
         u8g2.sendBuffer();
         u8g2_2.sendBuffer();
     }
+}
+
+void setBrightness(uint8_t level) {
+    static const uint8_t contrasts[] = { 0x40, 0x80, 0xD0 };
+    static const uint8_t currents[] = { 0x06, 0x0A, 0x0F };
+    if (level > 2) level = 2;
+    u8g2.sendF("ca", 0xC1, contrasts[level]);
+    u8g2.sendF("ca", 0xC7, currents[level]);
+    u8g2_2.sendF("ca", 0xC1, contrasts[level]);
+    u8g2_2.sendF("ca", 0xC7, currents[level]);
 }

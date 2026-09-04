@@ -29,3 +29,4 @@ void updateDisplay();
 void updateDisplayBox(const char* side, const char* text, bool isStatic = false);
 void drawDeviceBankLabels();
 void runScreenSaver();
+void setBrightness(uint8_t value);

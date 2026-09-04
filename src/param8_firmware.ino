@@ -46,6 +46,8 @@ void setup() {
     faderLayout = static_cast<FaderLayout>(savedLayout);
   int savedSS = json.getDoc()["screensaver"] | 300;
   screenSaverDelay = (unsigned long)savedSS * 1000UL;
+  int savedBrightness = json.getDoc()["brightness"] | 1;
+  setBrightness(savedBrightness);
   updateFaderTitles();
   updateFaderValues();
   // if (controls.getPreset() == 7) {
@@ -79,6 +81,8 @@ void loop() {
     encoders.read();
     readButtons();
     checkLatchPending();
+    checkNamingPending();
+    updateLeds();
     updateDisplay();
 
     unsigned long currentTime = millis();

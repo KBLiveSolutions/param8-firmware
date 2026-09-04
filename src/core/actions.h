@@ -6,6 +6,7 @@ extern bool latchPressed;
 extern bool latchHeld;
 extern bool revertMode;
 extern unsigned long lastInputTime;
+extern unsigned long lastButtonReleaseTime[8];
 
 void onButtonShortPress(uint8_t idx);
 void onRelativeEncoderChange(uint8_t idx, int value);
@@ -14,6 +15,8 @@ void updateFaderTitles();
 void updateFaderValues();
 void sendPresetSysEx(uint8_t preset);
 void sendNameRequest(uint8_t idx, uint8_t isButton);
+void sendClearNaming(uint8_t idx, uint8_t isButton);
+void checkNamingPending();
 void checkLatchPending();
 void onShiftPress();
 void onShiftRelease();

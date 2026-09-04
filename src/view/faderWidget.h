@@ -23,6 +23,9 @@ public:
     int oldValue;
     bool showingValue = false;
     bool valueOnly = false;
+    bool disabled = false;
+    bool dimmed = false;
+    bool buttonState = false;
     int x_offset, y_offset;
     int boutonNumber;
 

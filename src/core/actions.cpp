@@ -1,6 +1,7 @@
 #include "../midi/midi.h"
 #include "actions.h"
 #include "controls.h"
+#include "jsonManager.h"
 #include "../view/display.h"
 #include "../view/leds.h"
 
@@ -10,18 +11,23 @@ bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t latchEncoderEventCount[8] = {0};
 bool revertMode = false;
-uint8_t revertEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
-uint8_t revertEncoderEventCount[8] = {0};
 unsigned long lastInputTime = 0;
+unsigned long lastButtonReleaseTime[8] = {0};
 uint8_t lastControlIdx = 0;
 bool lastControlIsButton = false;
 unsigned long lastLatchPressTime = 0;
 bool latchPendingActivation = false;
 bool latchHeld = false;
+bool namingPendingConfirm = false;
+unsigned long namingConfirmTime = 0;
 
 // Pour le mode absolu : on stocke juste la dernière valeur et si elle a changé
 uint8_t latchAbsoluteValue[8] = {0};
 bool latchAbsoluteChanged[8] = {false};
+
+// Pour le revert en mode absolu : valeur d'origine au moment de l'entrée en revert
+uint8_t revertAbsoluteOriginal[8] = {0};
+bool revertAbsoluteChanged[8] = {false};
 
 void onShiftPress()
 {
@@ -31,12 +37,15 @@ void onShiftPress()
 
     if (revertMode)
     {
+        if (controls.getPreset() > 5)
+        {
+            uint8_t pkt[5] = {240, 111, 0x1A, 2, 247};
+            usb_midi.write(pkt, 5);
+        }
         revertMode = false;
         setRevertModeLed(false);
         for (int i = 0; i < 8; ++i)
-        {
-            revertEncoderEventCount[i] = 0;
-        }
+            revertAbsoluteChanged[i] = false;
     }
     for (int i = 0; i < 8; ++i)
     {
@@ -73,6 +82,39 @@ void sendNameRequest(uint8_t idx, uint8_t isButton)
     usb_midi.write(packet, 9);
 }
 
+void sendClearNaming(uint8_t idx, uint8_t isButton)
+{
+    uint8_t preset = controls.getPreset();
+    if (preset >= 6) return;
+
+    MidiControl& ctrl = isButton
+        ? controls.getButtonShort(idx)
+        : controls.getEncoder(idx);
+    ctrl.controlName[0] = '\0';
+    if (!isButton)
+        ctrl.hasWatcher = false;
+
+    const char* section = isButton ? "button_names" : "encoder_names";
+    json.getDoc()[String(preset)][section].remove(String(idx));
+    json.save();
+
+    updateFaderTitles();
+
+    uint8_t packet[7] = {240, 111, 0x19, preset, idx, isButton, 247};
+    usb_midi.write(packet, 7);
+}
+
+void checkNamingPending()
+{
+    if (!namingPendingConfirm)
+        return;
+    if (millis() - namingConfirmTime >= 1000)
+    {
+        namingPendingConfirm = false;
+        sendClearNaming(lastControlIdx, lastControlIsButton ? 1 : 0);
+    }
+}
+
 void checkLatchPending()
 {
     if (!latchPendingActivation)
@@ -96,7 +138,8 @@ void onLatchPress()
     if (latchPendingActivation && now - lastLatchPressTime < 300)
     {
         latchPendingActivation = false;
-        sendNameRequest(lastControlIdx, lastControlIsButton ? 1 : 0);
+        namingPendingConfirm = true;
+        namingConfirmTime = now;
         lastLatchPressTime = 0;
         return;
     }
@@ -105,12 +148,16 @@ void onLatchPress()
 
     if (revertMode && !shiftPressed)
     {
+        latchPendingActivation = false;
+        if (controls.getPreset() > 5)
+        {
+            uint8_t pkt[5] = {240, 111, 0x1A, 0, 247};
+            usb_midi.write(pkt, 5);
+        }
+        else
+            sendRevertEvents();
         revertMode = false;
         setRevertModeLed(false);
-        for (int i = 0; i < 8; ++i)
-        {
-            revertEncoderEventCount[i] = 0;
-        }
         return;
     }
 
@@ -121,19 +168,15 @@ void onLatchPress()
             revertMode = true;
             for (int i = 0; i < 8; ++i)
             {
-                revertEncoderEventCount[i] = 0;
+                revertAbsoluteOriginal[i] = controls.getEncoder(i).value;
+                revertAbsoluteChanged[i] = false;
+            }
+            if (controls.getPreset() > 5)
+            {
+                uint8_t pkt[5] = {240, 111, 0x1A, 1, 247};
+                usb_midi.write(pkt, 5);
             }
             setRevertModeLed(true);
-        }
-        else
-        {
-            sendRevertEvents();
-            revertMode = false;
-            setRevertModeLed(false);
-            for (int i = 0; i < 8; ++i)
-            {
-                revertEncoderEventCount[i] = 0;
-            }
         }
     }
 }
@@ -141,6 +184,12 @@ void onLatchPress()
 void onLatchRelease()
 {
     latchHeld = false;
+    if (namingPendingConfirm)
+    {
+        namingPendingConfirm = false;
+        sendNameRequest(lastControlIdx, lastControlIsButton ? 1 : 0);
+        return;
+    }
     if (latchPendingActivation)
         return;
     if (!latchPressed)
@@ -184,27 +233,43 @@ void onButtonPressed(uint8_t idx)
     }
     else
     {
-    Serial.println(controls.getButtonShort(idx).toggleMode);
         uint8_t _value = 127;
-        if (controls.getButtonShort(idx).toggleMode) _value = (controls.getButtonShort(idx).value == 0) ? 127 : 0;
         controls.getButtonShort(idx).value = _value;
         uint8_t channel = controls.getButtonShort(idx).channel;
         ControlMidiType type = controls.getButtonShort(idx).type;
         uint8_t number = controls.getButtonShort(idx).number;
-        // uint8_t value = controls.getButtonShort(idx).value;
         sendMidiMessage(type, number, _value, channel);
+        if (controls.getPreset() == 6) {
+            if (idx == 3 || idx == 7) {
+                faders[idx]->updateButtonName(true);
+            } else {
+                bool on = !faders[idx]->buttonState;
+                faders[idx]->buttonState = on;
+                faders[idx]->updateButtonName(on);
+            }
+        }
+        if (controls.getPreset() == 7) {
+            if (idx != 2 && idx != 3) {
+                faders[idx]->updateButtonName(true);
+            }
+        }
     }
 }
 
 void onButtonReleased(uint8_t idx)
 {
-    if (controls.getButtonShort(idx).toggleMode)
-    return;
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
     sendMidiMessage(type, number, 0, channel);
     controls.getButtonShort(idx).value = 0;
+    lastButtonReleaseTime[idx] = millis();
+    if (controls.getPreset() == 6 && (idx == 3 || idx == 7)) {
+        faders[idx]->updateButtonName(false);
+    }
+    if (controls.getPreset() == 7 && idx != 2 && idx != 3) {
+        faders[idx]->updateButtonName(false);
+    }
 }
 
 void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel)
@@ -241,11 +306,7 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
 
     if (revertMode)
     {
-        uint8_t relValue = (uint8_t)(delta & 0x7F);
-        if (revertEncoderEventCount[idx] < MAX_LATCH_EVENTS)
-        {
-            revertEncoderEvents[idx][revertEncoderEventCount[idx]++] = relValue;
-        }
+        revertAbsoluteChanged[idx] = true;
         sendRelativeCC(type, number, delta, channel);
     }
     else if (!latchPressed)
@@ -288,7 +349,12 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
         newValue = 127;
     controls.getEncoder(idx).value = newValue;
     
-    if (!latchPressed)
+    if (revertMode)
+    {
+        revertAbsoluteChanged[idx] = true;
+        sendMidiMessage(type, number, (uint8_t)newValue, channel);
+    }
+    else if (!latchPressed)
     {
         sendMidiMessage(type, number, (uint8_t)newValue, channel);
     }
@@ -311,6 +377,7 @@ void updateFaderTitles()
     {
         char buf[24];
         MidiControl& enc = controls.getEncoder(i);
+        faders[i]->buttonState = false;
         faders[i]->valueOnly = (preset == 6 && (i == 2 || i == 3 || i == 6));
         if (faders[i]->valueOnly) {
             faders[i]->showingValue = true;
@@ -332,14 +399,14 @@ void updateFaderTitles()
         }
         if(controls.getPreset() == 7){
             static const char* buttonNames[] = {
-                "Track -", "Track +", "Hotswap", "A/B",
+                "Track -", "Track +", "Device On", "A/B",
                 "Device -", "Device +", "Bank -", "Bank +"
             };
             snprintf(buf, sizeof(buf), buttonNames[i]);
         }
         else if(controls.getPreset() == 6){
             static const char* buttonNames[] = {
-                "Metronome", "Arr. Rec", "Play/Stop", "Launch",
+                "Metronome", "Arm", "Play/Stop", "Launch",
                 "Mute", "Solo", "Arr. Loop", "-> Default"
             };
             snprintf(buf, sizeof(buf), buttonNames[i]);
@@ -452,30 +519,33 @@ void releaseLatchAndSend()
 
 void sendRevertEvents()
 {
+    bool isRelative = controls.getPreset() > 5;
     for (int i = 0; i < 8; ++i)
     {
+        if (!revertAbsoluteChanged[i])
+            continue;
         uint8_t channel = controls.getEncoder(i).channel;
         ControlMidiType type = controls.getEncoder(i).type;
         uint8_t number = controls.getEncoder(i).number;
-        for (uint8_t j = 0; j < revertEncoderEventCount[i]; ++j)
+
+        if (isRelative)
         {
-            uint8_t val = revertEncoderEvents[i][j];
-            uint8_t inv = 0;
-            if (val == 0)
-                inv = 0;
-            else if (val <= 0x3F)
-                inv = (0x80 - val) & 0x7F;
-            else
-                inv = (0x80 - val) & 0x7F;
-            sendMidiMessage(type, number, inv, channel);
+            int delta = (int)revertAbsoluteOriginal[i] - (int)controls.getEncoder(i).value;
+            if (delta != 0)
+                sendRelativeCC(type, number, delta, channel);
         }
+        else
+        {
+            sendMidiMessage(type, number, revertAbsoluteOriginal[i], channel);
+        }
+
+        controls.getEncoder(i).value = revertAbsoluteOriginal[i];
+        updateFader(i, revertAbsoluteOriginal[i]);
+        revertAbsoluteChanged[i] = false;
     }
 }
 
 void setRevertModeLed(bool on)
 {
-    if (!on)
-    {
-        setLed(1, false);
-    }
+    setLedBlink(0, on);
 }

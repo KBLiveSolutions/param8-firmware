@@ -427,6 +427,14 @@ void onSysEx(const uint8_t *sysex, size_t len)
     }
     break;
   }
+  case 0x1B:
+  {
+    uint8_t val = sysex[3] & 0x7F;
+    setBrightness(val);
+    json.getDoc()["brightness"] = val;
+    json.save();
+    break;
+  }
   default:
     break;
   }
