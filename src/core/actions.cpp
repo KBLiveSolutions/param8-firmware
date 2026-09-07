@@ -382,6 +382,8 @@ void updateFaderTitles()
         if (faders[i]->valueOnly) {
             faders[i]->showingValue = true;
             faders[i]->updateTitle("---");
+        } else {
+            faders[i]->showingValue = false;
         }
         if (enc.controlName[0] != '\0') {
             faders[i]->setParamName(enc.controlName);

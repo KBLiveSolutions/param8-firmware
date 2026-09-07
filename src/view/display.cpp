@@ -2,6 +2,7 @@
 #include "display.h"
 #include "../core/actions.h"
 #include "../core/controls.h"
+#include "fonts/ArialBold11pt.h"  // ~16px, replaces u8g2_font_7x14B_tr
 
 
 FaderWidget* faders[8];
@@ -23,11 +24,29 @@ void setupDisplay() {
     display1.begin();
     display2.begin();
 
-    // TODO: SSD1322 display timing registers (phase/pre-charge/VCOMH) have no
-    // direct PicoGFX_SSD1322 API. Previously set via U8g2 sendF:
-    //   sendF("ca", 0xB1, 0x22);  // phase length
-    //   sendF("ca", 0xBB, 0x17);  // pre-charge voltage
-    //   sendF("ca", 0xBE, 0x04);  // VCOMH
+    // Fix remap for ZJY panels: enable nibble remap to un-mirror
+    // Bits: A[0]=col remap, A[1]=nibble remap, A[2]=addr inc, A[4]=COM remap
+    // Default lib value is 0x14. ZJY panels need nibble remap (bit 1).
+    // Try 0x16 first; if still mirrored, try 0x17 (add col remap too).
+    display1.oled_command(SSD1322_SEGREMAP);
+    display1.oled_data(0x16);   // nibble remap=1, COM remap=1
+    display1.oled_data(0x11);   // dual COM mode
+    display2.oled_command(SSD1322_SEGREMAP);
+    display2.oled_data(0x16);
+    display2.oled_data(0x11);
+
+    // Adjust column offset if display is shifted (16px = 4 columns)
+    // Standard is 28; try 24 if shifted right, 32 if shifted left
+    display1.col_offset = 24;
+    display2.col_offset = 24;
+
+    // Display timing (carried over from U8g2 setup)
+    display1.oled_command(SSD1322_PHASELEN);   display1.oled_data(0x22);
+    display1.oled_command(SSD1322_PRECHARGE);   display1.oled_data(0x17);
+    display1.oled_command(SSD1322_SETVCOM);     display1.oled_data(0x04);
+    display2.oled_command(SSD1322_PHASELEN);   display2.oled_data(0x22);
+    display2.oled_command(SSD1322_PRECHARGE);   display2.oled_data(0x17);
+    display2.oled_command(SSD1322_SETVCOM);     display2.oled_data(0x04);
 
     // display1: faders 1,2,5,6
     faders[0] = new FaderWidget(display1, "Fader 1",   0,   0, 0);
@@ -79,23 +98,25 @@ void updateDisplay() {
 
         if (right_box_text[0] != '\0') {
             display1.fillScreen(0);
-            display1.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            display1.setFont(&Arial_Bold11pt7b);
             int text_width = getStrWidth(display1, right_box_text);
             int text_x = (256 - text_width) / 2;
             display1.setCursor(text_x, text_y);
             display1.setTextColor(15);
             display1.print(right_box_text);
+            display1.setFont(NULL);
             display1.displayBlocking();
         }
 
         if (left_box_text[0] != '\0') {
             display2.fillScreen(0);
-            display2.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            display2.setFont(&Arial_Bold11pt7b);
             int text_width = getStrWidth(display2, left_box_text);
             int text_x = (256 - text_width) / 2;
             display2.setCursor(text_x, text_y);
             display2.setTextColor(15);
             display2.print(left_box_text);
+            display2.setFont(NULL);
             display2.displayBlocking();
         }
 
@@ -132,23 +153,25 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
 
         if (strcmp(side, "right") == 0) {
             display1.fillScreen(0);
-            display1.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            display1.setFont(&Arial_Bold11pt7b);
             int text_width = getStrWidth(display1, text);
             int text_x = (256 - text_width) / 2;
             display1.setCursor(text_x, text_y);
             display1.setTextColor(15);
             display1.print(text);
+            display1.setFont(NULL);
             display1.displayBlocking();
         }
 
         if (strcmp(side, "left") == 0) {
             display2.fillScreen(0);
-            display2.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            display2.setFont(&Arial_Bold11pt7b);
             int text_width = getStrWidth(display2, text);
             int text_x = (256 - text_width) / 2;
             display2.setCursor(text_x, text_y);
             display2.setTextColor(15);
             display2.print(text);
+            display2.setFont(NULL);
             display2.displayBlocking();
         }
 
@@ -167,20 +190,20 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
 
 static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     int label_w = 64;
-    int label_x = (256 - label_w) / 2;
+    int label_x = (256 - label_w) / 2 + 1;
     int inner_w = label_w - 4;
-    int area_h = 8;
+    int area_h = 10;
 
     disp.fillRect(label_x, y, label_w, area_h, 0);
     disp.fillRect(label_x + 2, y, inner_w, area_h, 15);
 
-    disp.setFont(NULL); // TODO: was u8g2_font_5x8_tr
+    disp.setFont(NULL);
     int tw = getStrWidth(disp, txt);
 
     if (tw <= inner_w) {
         int text_x = label_x + (label_w - tw) / 2;
-        disp.setCursor(text_x, y + 1);
-        disp.setTextColor(0); // black on white background
+        disp.setCursor(text_x, y + 2);
+        disp.setTextColor(0);
         disp.print(txt);
     } else {
         char truncated[20];
@@ -189,7 +212,7 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
         while (strlen(truncated) > 1 && getStrWidth(disp, truncated) > inner_w - 4) {
             truncated[strlen(truncated)-1] = '\0';
         }
-        disp.setCursor(label_x + 4, y + 1);
+        disp.setCursor(label_x + 4, y + 2);
         disp.setTextColor(0);
         disp.print(truncated);
     }
@@ -202,12 +225,12 @@ void drawDeviceBankLabels() {
     if (deviceLabelDirty) {
         deviceLabelDirty = false;
         if (deviceLabel[0] != '\0')
-            drawLabelOverButton(display1, deviceLabel, 56);
+            drawLabelOverButton(display1, deviceLabel, 54);
     }
     if (bankLabelDirty) {
         bankLabelDirty = false;
         if (bankLabel[0] != '\0')
-            drawLabelOverButton(display2, bankLabel, 56);
+            drawLabelOverButton(display2, bankLabel, 54);
     }
 }
 

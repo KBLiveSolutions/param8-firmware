@@ -144,10 +144,17 @@ void handleMIDIDAWMessage(uint8_t *packet)
   }
   case 0xC0: // Program change
   {
-    uint8_t program = packet[2] & 0x0F;
-
-    // Serial.print("Program Change - Program: ");
-    // Serial.print(program);
+    uint8_t program = packet[2] & 0x7F;
+    if (program < 8) {
+      controls.setPreset(program);
+      updateFaderTitles();
+      updateFaderValues();
+      sendPresetSysEx(program);
+      showDisplay();
+      deviceLabelDirty = true;
+      bankLabelDirty = true;
+      drawDeviceBankLabels();
+    }
     break;
   }
   case 0xE0: // Pitch Bend
@@ -339,15 +346,11 @@ void onSysEx(const uint8_t *sysex, size_t len)
       faderLayout = static_cast<FaderLayout>(layout);
       json.setLayout(layout);
       json.save();
-      char savedDevice[20], savedBank[20];
-      strncpy(savedDevice, deviceLabel, sizeof(savedDevice));
-      strncpy(savedBank, bankLabel, sizeof(savedBank));
-      updateFaderTitles();
-      updateFaderValues();
-      if (controls.getPreset() == 7) {
-        strncpy(deviceLabel, savedDevice, sizeof(deviceLabel));
-        strncpy(bankLabel, savedBank, sizeof(bankLabel));
+      uint8_t preset = controls.getPreset();
+      if (preset < 6) {
+        updateFaderTitles();
       }
+      updateFaderValues();
       showDisplay();
       deviceLabelDirty = true;
       bankLabelDirty = true;
