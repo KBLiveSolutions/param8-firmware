@@ -16,44 +16,50 @@ bool bankLabelDirty = false;
 unsigned long display_start_time = 0;
 bool display_active = false;
 bool display_needs_update = false;
-bool staticOverlay = false; // Flag pour l'affichage statique
+bool staticOverlay = false;
 bool screenSaverActive = false;
 
 void setupDisplay() {
-    u8g2.begin();
-    u8g2_2.begin();
+    display1.begin();
+    display2.begin();
 
-    u8g2.sendF("ca", 0xB1, 0x22);
-    u8g2.sendF("ca", 0xBB, 0x17);
-    u8g2.sendF("ca", 0xBE, 0x04);
-    u8g2_2.sendF("ca", 0xB1, 0x22);
-    u8g2_2.sendF("ca", 0xBB, 0x17);
-    u8g2_2.sendF("ca", 0xBE, 0x04);
+    // TODO: SSD1322 display timing registers (phase/pre-charge/VCOMH) have no
+    // direct PicoGFX_SSD1322 API. Previously set via U8g2 sendF:
+    //   sendF("ca", 0xB1, 0x22);  // phase length
+    //   sendF("ca", 0xBB, 0x17);  // pre-charge voltage
+    //   sendF("ca", 0xBE, 0x04);  // VCOMH
 
-    // u8g2 : 1 2 / 5 6
-    faders[0] = new FaderWidget(u8g2,  "Fader 1",   0,   0, 0);    // Bloc 1
-    faders[1] = new FaderWidget(u8g2,  "Fader 2", 128,   0, 1);    // Bloc 2
-    faders[4] = new FaderWidget(u8g2,  "Fader 5",   0,  32, 4);    // Bloc 5
-    faders[5] = new FaderWidget(u8g2,  "Fader 6", 128,  32, 5);    // Bloc 6
+    // display1: faders 1,2,5,6
+    faders[0] = new FaderWidget(display1, "Fader 1",   0,   0, 0);
+    faders[1] = new FaderWidget(display1, "Fader 2", 128,   0, 1);
+    faders[4] = new FaderWidget(display1, "Fader 5",   0,  32, 4);
+    faders[5] = new FaderWidget(display1, "Fader 6", 128,  32, 5);
 
-    // u8g2_2 : 3 4 / 7 8
-    faders[2] = new FaderWidget(u8g2_2, "Fader 3",   0,   0, 2);   // Bloc 3
-    faders[3] = new FaderWidget(u8g2_2, "Fader 4", 128,   0, 3);   // Bloc 4
-    faders[6] = new FaderWidget(u8g2_2, "Fader 7",   0,  32, 6);   // Bloc 7
-    faders[7] = new FaderWidget(u8g2_2, "Fader 8", 128,  32, 7);   // Bloc 8
-    u8g2.clearBuffer();
-    u8g2_2.clearBuffer();
+    // display2: faders 3,4,7,8
+    faders[2] = new FaderWidget(display2, "Fader 3",   0,   0, 2);
+    faders[3] = new FaderWidget(display2, "Fader 4", 128,   0, 3);
+    faders[6] = new FaderWidget(display2, "Fader 7",   0,  32, 6);
+    faders[7] = new FaderWidget(display2, "Fader 8", 128,  32, 7);
+
+    display1.fillScreen(0);
+    display1.displayBlocking();
+    display2.fillScreen(0);
+    display2.displayBlocking();
+
     updateDisplayBox("left", "KBD");
     updateDisplayBox("right", "param8");
 }
 
 void showDisplay() {
-    u8g2.clearBuffer();
-    u8g2_2.clearBuffer();
+    display1.fillScreen(0);
+    display2.fillScreen(0);
 
+    // Each draw() pushes its display immediately via displayBlocking().
+    // display1 faders are drawn first, then display2.
     for (int i : {0, 1, 4, 5}) {
         faders[i]->draw();
     }
+    // display1 DMA is complete after all displayBlocking() calls above.
     for (int i : {2, 3, 6, 7}) {
         faders[i]->draw();
     }
@@ -67,42 +73,35 @@ void updateFader(int idx, int value) {
 
 void updateDisplay() {
     if (screenSaverActive) return;
-    // Afficher si au moins une boîte a du contenu ET que l'affichage doit être mis à jour
-    if ((left_box_text[0] != '\0' || right_box_text[0] != '\0') && display_needs_update) {    
-        int area_x = 64;
-        int area_y = 16; 
-        int area_w = 128;
-        int area_h = 32;
+
+    if ((left_box_text[0] != '\0' || right_box_text[0] != '\0') && display_needs_update) {
         int text_y = 36;
 
-        // Afficher la boîte droite si elle a du contenu
         if (right_box_text[0] != '\0') {
-            u8g2.clearBuffer();
-            u8g2.setDrawColor(1);
-            u8g2.setFont(u8g2_font_7x14B_tr);
-            int text_width = u8g2.getStrWidth(right_box_text);
+            display1.fillScreen(0);
+            display1.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            int text_width = getStrWidth(display1, right_box_text);
             int text_x = (256 - text_width) / 2;
-            u8g2.setCursor(text_x, text_y);
-            u8g2.print(right_box_text);
-            u8g2.sendBuffer();
+            display1.setCursor(text_x, text_y);
+            display1.setTextColor(15);
+            display1.print(right_box_text);
+            display1.displayBlocking();
         }
 
-        // Afficher la boîte gauche si elle a du contenu
         if (left_box_text[0] != '\0') {
-            u8g2_2.clearBuffer();
-            u8g2_2.setDrawColor(1);
-            u8g2_2.setFont(u8g2_font_7x14B_tr);
-            int text_width = u8g2_2.getStrWidth(left_box_text);
+            display2.fillScreen(0);
+            display2.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            int text_width = getStrWidth(display2, left_box_text);
             int text_x = (256 - text_width) / 2;
-            u8g2_2.setCursor(text_x, text_y);
-            u8g2_2.print(left_box_text);
-            u8g2_2.sendBuffer();
+            display2.setCursor(text_x, text_y);
+            display2.setTextColor(15);
+            display2.print(left_box_text);
+            display2.displayBlocking();
         }
 
         display_needs_update = false;
     }
-    
-    // Ne pas effacer les overlays si staticOverlay est true
+
     if (display_active && !staticOverlay && millis() - display_start_time > OVERLAY_TIME) {
         left_box_text[0] = '\0';
         right_box_text[0] = '\0';
@@ -115,45 +114,42 @@ void updateDisplay() {
 
 void updateDisplayBox(const char* side, const char* text, bool isStatic) {
     char* target_box;
-    
+
     if (strcmp(side, "left") == 0) {
         target_box = left_box_text;
     } else if (strcmp(side, "right") == 0) {
         target_box = right_box_text;
     } else {
-        return; // Invalid side parameter
+        return;
     }
-    
+
     target_box[0] = '\0';
     strncpy(target_box, text, 20);
-    target_box[19] = '\0'; // Ensure null termination
-    
-    // Si c'est un overlay statique, effacer et dessiner immédiatement
+    target_box[19] = '\0';
+
     if (isStatic) {
-        int area_y = 16;
-        int area_h = 32;
         int text_y = 36;
 
         if (strcmp(side, "right") == 0) {
-            u8g2.clearBuffer();
-            u8g2.setDrawColor(1);
-            u8g2.setFont(u8g2_font_7x14B_tr);
-            int text_width = u8g2.getStrWidth(text);
+            display1.fillScreen(0);
+            display1.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            int text_width = getStrWidth(display1, text);
             int text_x = (256 - text_width) / 2;
-            u8g2.setCursor(text_x, text_y);
-            u8g2.print(text);
-            u8g2.sendBuffer();
+            display1.setCursor(text_x, text_y);
+            display1.setTextColor(15);
+            display1.print(text);
+            display1.displayBlocking();
         }
 
         if (strcmp(side, "left") == 0) {
-            u8g2_2.clearBuffer();
-            u8g2_2.setDrawColor(1);
-            u8g2_2.setFont(u8g2_font_7x14B_tr);
-            int text_width = u8g2_2.getStrWidth(text);
+            display2.fillScreen(0);
+            display2.setFont(NULL); // TODO: was u8g2_font_7x14B_tr
+            int text_width = getStrWidth(display2, text);
             int text_x = (256 - text_width) / 2;
-            u8g2_2.setCursor(text_x, text_y);
-            u8g2_2.print(text);
-            u8g2_2.sendBuffer();
+            display2.setCursor(text_x, text_y);
+            display2.setTextColor(15);
+            display2.print(text);
+            display2.displayBlocking();
         }
 
         display_needs_update = false;
@@ -169,34 +165,35 @@ void updateDisplayBox(const char* side, const char* text, bool isStatic) {
     staticOverlay = isStatic;
 }
 
-static void drawLabelOverButton(U8G2 &disp, const char* txt, int y) {
+static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     int label_w = 64;
     int label_x = (256 - label_w) / 2;
     int inner_w = label_w - 4;
     int area_h = 8;
-    disp.setDrawColor(0);
-    disp.drawBox(label_x, y, label_w, area_h);
-    disp.setDrawColor(1);
-    disp.drawBox(label_x + 2, y, inner_w, area_h);
-    disp.setFont(u8g2_font_5x8_tr);
-    int tw = disp.getStrWidth(txt);
-    disp.setDrawColor(0);
+
+    disp.fillRect(label_x, y, label_w, area_h, 0);
+    disp.fillRect(label_x + 2, y, inner_w, area_h, 15);
+
+    disp.setFont(NULL); // TODO: was u8g2_font_5x8_tr
+    int tw = getStrWidth(disp, txt);
+
     if (tw <= inner_w) {
         int text_x = label_x + (label_w - tw) / 2;
-        disp.setCursor(text_x, y + 7);
+        disp.setCursor(text_x, y + 1);
+        disp.setTextColor(0); // black on white background
         disp.print(txt);
     } else {
-        disp.setCursor(label_x + 4, y + 7);
         char truncated[20];
         strncpy(truncated, txt, sizeof(truncated));
         truncated[sizeof(truncated)-1] = '\0';
-        while (strlen(truncated) > 1 && disp.getStrWidth(truncated) > inner_w - 4) {
+        while (strlen(truncated) > 1 && getStrWidth(disp, truncated) > inner_w - 4) {
             truncated[strlen(truncated)-1] = '\0';
         }
+        disp.setCursor(label_x + 4, y + 1);
+        disp.setTextColor(0);
         disp.print(truncated);
     }
-    disp.setDrawColor(1);
-    disp.updateDisplayArea(label_x / 8, y / 8, label_w / 8, 1);
+    disp.displayBlocking();
 }
 
 void drawDeviceBankLabels() {
@@ -205,45 +202,45 @@ void drawDeviceBankLabels() {
     if (deviceLabelDirty) {
         deviceLabelDirty = false;
         if (deviceLabel[0] != '\0')
-            drawLabelOverButton(u8g2, deviceLabel, 56);
+            drawLabelOverButton(display1, deviceLabel, 56);
     }
     if (bankLabelDirty) {
         bankLabelDirty = false;
         if (bankLabel[0] != '\0')
-            drawLabelOverButton(u8g2_2, bankLabel, 56);
+            drawLabelOverButton(display2, bankLabel, 56);
     }
 }
 
 void runScreenSaver() {
     static unsigned long lastUpdate = 0;
     static int pixelCount = 0;
-    const int pixelsPerFrame = 20; // Moins de pixels par frame
-    const unsigned long frameInterval = 50; // ms entre chaque frame
+    const int pixelsPerFrame = 20;
+    const unsigned long frameInterval = 50;
 
     unsigned long now = millis();
     if (now - lastUpdate >= frameInterval) {
         lastUpdate = now;
         pixelCount = 0;
-        u8g2.clearBuffer();
-        u8g2_2.clearBuffer();
+        display1.fillScreen(0);
+        display2.fillScreen(0);
         while (pixelCount < pixelsPerFrame) {
             int x = random(0, 256);
             int y = random(0, 64);
-            u8g2.drawPixel(x, y);
-            u8g2_2.drawPixel(x, y);
+            display1.drawPixel(x, y, 15);
+            display2.drawPixel(x, y, 15);
             pixelCount++;
         }
-        u8g2.sendBuffer();
-        u8g2_2.sendBuffer();
+        display1.displayBlocking();
+        // display1 DMA complete; SPI is free for display2
+        display2.displayBlocking();
     }
 }
 
 void setBrightness(uint8_t level) {
     static const uint8_t contrasts[] = { 0x40, 0x80, 0xD0 };
-    static const uint8_t currents[] = { 0x06, 0x0A, 0x0F };
     if (level > 2) level = 2;
-    u8g2.sendF("ca", 0xC1, contrasts[level]);
-    u8g2.sendF("ca", 0xC7, currents[level]);
-    u8g2_2.sendF("ca", 0xC1, contrasts[level]);
-    u8g2_2.sendF("ca", 0xC7, currents[level]);
+    display1.setContrast(contrasts[level]);
+    display2.setContrast(contrasts[level]);
+    // TODO: SSD1322 master current (cmd 0xC7) has no direct PicoGFX_SSD1322 API.
+    // Previously: sendF("ca", 0xC7, currents[level]) where currents = { 0x06, 0x0A, 0x0F }.
 }

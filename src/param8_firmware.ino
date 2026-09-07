@@ -1,13 +1,7 @@
 #include <Arduino.h>
-#include <U8g2lib.h>
+#include <PicoGFX_SSD1322.h>
 #include <SPI.h>
 #include <hardware/watchdog.h>
-// #define PIN_SPI0_MOSI  (7u)
-// #define PIN_SPI0_SCK   (6u)
-//  U8G2_SSD1322_NHD_256X64_1_4W_SW_SPI u8g2(U8G2_MIRROR_VERTICAL, /* clock=*/ 6, /* data=*/ 7, /* cs=*/ 10, /* dc=*/ 9, /* reset=*/ 8);
-//  U8G2_SSD1322_NHD_256X64_1_4W_SW_SPI u8g2_2(U8G2_MIRROR_VERTICAL, /* clock=*/ 6, /* data=*/ 7, /* cs=*/ 13, /* dc=*/ 12, /* reset=*/ 11);
-// U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 10, /* dc=*/ 9, /* reset=*/ 8);
-// U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2_2(U8G2_R0, /* cs=*/ 13, /* dc=*/ 12, /* reset=*/ 11);
 
 #include "midi/midi.h"
 #include "usb/serial_editor.h"
@@ -17,9 +11,9 @@ USING_NAMESPACE_MIDI
 Adafruit_USBD_MIDI usb_midi;
 MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
 
-
-U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/10, /* dc=*/9, /* reset=*/8);
-U8G2_SSD1322_ZJY_256X64_F_4W_HW_SPI u8g2_2(U8G2_R0, /* cs=*/13, /* dc=*/12, /* reset=*/11);
+// SPI: SCK=GPIO6, MOSI=GPIO7 (set in setup())
+PicoGFX_SSD1322 display1(256, 64, &SPI, 9, 8, 10);   // DC=9, RST=8, CS=10
+PicoGFX_SSD1322 display2(256, 64, &SPI, 12, 11, 13); // DC=12, RST=11, CS=13
 #include "core/jsonManager.h"
 #include "core/controls.h"
 #include "input/encoders.h"

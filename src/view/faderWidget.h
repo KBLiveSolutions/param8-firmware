@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <U8g2lib.h>
+#include <PicoGFX_SSD1322.h>
 
 enum FaderLayout {
     LAYOUT_DYNAMIC,
@@ -14,7 +14,7 @@ public:
     static const int BAR_W = 118;
     static const int BAR_H = 8;
 
-    U8G2 &u8g2;
+    PicoGFX_SSD1322 &display;
     char title[20];
     char paramName[20];
     char buttonName[20];
@@ -29,7 +29,7 @@ public:
     int x_offset, y_offset;
     int boutonNumber;
 
-    FaderWidget(U8G2 &u8g2, const char* title, int x, int y, int boutonNumber);
+    FaderWidget(PicoGFX_SSD1322 &display, const char* title, int x, int y, int boutonNumber);
 
     void setTitle(const char* txt);
     void setValue(int val);
