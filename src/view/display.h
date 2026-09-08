@@ -3,17 +3,10 @@
 #include <PicoGFX_SSD1322.h>
 #include "faderWidget.h"
 
-#define OVERLAY_TIME 200 // Temps d'affichage de la boîte de dialogue en millisecondes
 extern PicoGFX_SSD1322 display1;
 extern PicoGFX_SSD1322 display2;
 extern FaderWidget* faders[8];
 
-extern char left_box_text[20];
-extern char right_box_text[20];
-extern unsigned long display_start_time;
-extern bool display_active;
-extern bool display_needs_update;
-extern bool staticOverlay;
 extern bool screenSaverActive;
 extern unsigned long screenSaverDelay;
 extern char deviceLabel[20];
@@ -33,9 +26,9 @@ inline int getStrWidth(PicoGFX_SSD1322 &disp, const char* str) {
 void setupDisplay();
 
 void showDisplay();
+void flushDisplays();
 void updateFader(int idx, int value);
 void updateDisplay();
-void updateDisplayBox(const char* side, const char* text, bool isStatic = false);
 void drawDeviceBankLabels();
 void runScreenSaver();
 void setBrightness(uint8_t value);

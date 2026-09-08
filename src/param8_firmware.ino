@@ -44,10 +44,6 @@ void setup() {
   setBrightness(savedBrightness);
   updateFaderTitles();
   updateFaderValues();
-  // if (controls.getPreset() == 7) {
-  //   updateDisplayBox("right", "Open Live", true);
-  //   updateDisplayBox("left", "or Shift+Button", true);
-  // }
   encoders.setup();
   setupButtons();
   setupLeds();

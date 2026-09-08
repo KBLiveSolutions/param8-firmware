@@ -58,8 +58,6 @@ void onShiftPress()
         snprintf(buf, sizeof(buf), buttonNames[i]);
         faders[i]->drawButtonName(buf, i==controls.getPreset());
     }
-    //updateDisplayBox("left", "LEFT", staticOverlay == 1);
-    //updateDisplayBox("right", "RIGHT", staticOverlay == 1);
 }
 
 void onShiftRelease()
@@ -221,13 +219,12 @@ void onButtonPressed(uint8_t idx)
             "Preset 5", "Preset 6", "Global", "Device"
         };
         snprintf(buf, sizeof(buf), buttonNames[idx]);
-        faders[idx]->drawButtonName(buf,true);
-        updateDisplayBox("left", buf);
-        updateDisplayBox("right", buf);
-
+        faders[idx]->drawButtonName(buf, true);
+        flushDisplays();
         controls.setPreset(idx);
         updateFaderTitles();
         updateFaderValues();
+        showDisplay();
         sendPresetSysEx(idx);
         return;
     }

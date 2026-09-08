@@ -2,22 +2,15 @@
 #include "display.h"
 #include "../core/actions.h"
 #include "../core/controls.h"
-#include "fonts/ArialBold11pt.h"  // ~16px, replaces u8g2_font_7x14B_tr
 
 
 FaderWidget* faders[8];
 
 
-char left_box_text[20] = {"param8"};
-char right_box_text[20] = {"KBD"};
 char deviceLabel[20] = {0};
 char bankLabel[20] = {0};
 bool deviceLabelDirty = false;
 bool bankLabelDirty = false;
-unsigned long display_start_time = 0;
-bool display_active = false;
-bool display_needs_update = false;
-bool staticOverlay = false;
 bool screenSaverActive = false;
 
 void setupDisplay() {
@@ -65,132 +58,12 @@ void setupDisplay() {
     display2.fillScreen(0);
     display2.displayBlocking();
 
-    updateDisplayBox("left", "KBD");
-    updateDisplayBox("right", "param8");
-}
-
-void showDisplay() {
-    display1.fillScreen(0);
-    display2.fillScreen(0);
-
-    // Each draw() pushes its display immediately via displayBlocking().
-    // display1 faders are drawn first, then display2.
-    for (int i : {0, 1, 4, 5}) {
-        faders[i]->draw();
-    }
-    // display1 DMA is complete after all displayBlocking() calls above.
-    for (int i : {2, 3, 6, 7}) {
-        faders[i]->draw();
-    }
-    if (deviceLabel[0] != '\0') deviceLabelDirty = true;
-    if (bankLabel[0] != '\0') bankLabelDirty = true;
-}
-
-void updateFader(int idx, int value) {
-    faders[idx]->setValue(value);
-}
-
-void updateDisplay() {
-    if (screenSaverActive) return;
-
-    if ((left_box_text[0] != '\0' || right_box_text[0] != '\0') && display_needs_update) {
-        int text_y = 36;
-
-        if (right_box_text[0] != '\0') {
-            display1.fillScreen(0);
-            display1.setFont(&Arial_Bold11pt7b);
-            int text_width = getStrWidth(display1, right_box_text);
-            int text_x = (256 - text_width) / 2;
-            display1.setCursor(text_x, text_y);
-            display1.setTextColor(15);
-            display1.print(right_box_text);
-            display1.setFont(NULL);
-            display1.displayBlocking();
-        }
-
-        if (left_box_text[0] != '\0') {
-            display2.fillScreen(0);
-            display2.setFont(&Arial_Bold11pt7b);
-            int text_width = getStrWidth(display2, left_box_text);
-            int text_x = (256 - text_width) / 2;
-            display2.setCursor(text_x, text_y);
-            display2.setTextColor(15);
-            display2.print(left_box_text);
-            display2.setFont(NULL);
-            display2.displayBlocking();
-        }
-
-        display_needs_update = false;
-    }
-
-    if (display_active && !staticOverlay && millis() - display_start_time > OVERLAY_TIME) {
-        left_box_text[0] = '\0';
-        right_box_text[0] = '\0';
-        display_needs_update = false;
-        display_active = false;
-        showDisplay();
-    }
-    drawDeviceBankLabels();
-}
-
-void updateDisplayBox(const char* side, const char* text, bool isStatic) {
-    char* target_box;
-
-    if (strcmp(side, "left") == 0) {
-        target_box = left_box_text;
-    } else if (strcmp(side, "right") == 0) {
-        target_box = right_box_text;
-    } else {
-        return;
-    }
-
-    target_box[0] = '\0';
-    strncpy(target_box, text, 20);
-    target_box[19] = '\0';
-
-    if (isStatic) {
-        int text_y = 36;
-
-        if (strcmp(side, "right") == 0) {
-            display1.fillScreen(0);
-            display1.setFont(&Arial_Bold11pt7b);
-            int text_width = getStrWidth(display1, text);
-            int text_x = (256 - text_width) / 2;
-            display1.setCursor(text_x, text_y);
-            display1.setTextColor(15);
-            display1.print(text);
-            display1.setFont(NULL);
-            display1.displayBlocking();
-        }
-
-        if (strcmp(side, "left") == 0) {
-            display2.fillScreen(0);
-            display2.setFont(&Arial_Bold11pt7b);
-            int text_width = getStrWidth(display2, text);
-            int text_x = (256 - text_width) / 2;
-            display2.setCursor(text_x, text_y);
-            display2.setTextColor(15);
-            display2.print(text);
-            display2.setFont(NULL);
-            display2.displayBlocking();
-        }
-
-        display_needs_update = false;
-    } else {
-        if (staticOverlay) {
-            showDisplay();
-        }
-        display_needs_update = true;
-    }
-
-    display_active = true;
-    display_start_time = millis();
-    staticOverlay = isStatic;
+    showDisplay();
 }
 
 static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     int label_w = 64;
-    int label_x = (256 - label_w) / 2 + 1;
+    int label_x = (256 - label_w) / 2;
     int inner_w = label_w - 4;
     int area_h = 10;
 
@@ -212,11 +85,52 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
         while (strlen(truncated) > 1 && getStrWidth(disp, truncated) > inner_w - 4) {
             truncated[strlen(truncated)-1] = '\0';
         }
-        disp.setCursor(label_x + 4, y + 2);
+        disp.setCursor(label_x + 5, y + 2);
         disp.setTextColor(0);
         disp.print(truncated);
     }
-    disp.displayBlocking();
+}
+
+void flushDisplays() {
+    if (display1.isDirty()) {
+        display1.displayBlocking();
+    }
+    if (display2.isDirty()) {
+        display2.displayBlocking();
+    }
+}
+
+void drawAllWidgets() {
+    display1.fillScreen(0);
+    display2.fillScreen(0);
+
+    for (int i : {0, 1, 4, 5}) {
+        faders[i]->draw();
+    }
+    for (int i : {2, 3, 6, 7}) {
+        faders[i]->draw();
+    }
+    if (deviceLabel[0] != '\0')
+        drawLabelOverButton(display1, deviceLabel, 54);
+    if (bankLabel[0] != '\0')
+        drawLabelOverButton(display2, bankLabel, 54);
+    deviceLabelDirty = false;
+    bankLabelDirty = false;
+}
+
+void showDisplay() {
+    drawAllWidgets();
+    flushDisplays();
+}
+
+void updateFader(int idx, int value) {
+    faders[idx]->setValue(value);
+}
+
+void updateDisplay() {
+    if (screenSaverActive) return;
+    drawDeviceBankLabels();
+    flushDisplays();
 }
 
 void drawDeviceBankLabels() {

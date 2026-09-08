@@ -22,7 +22,7 @@ FaderWidget::FaderWidget(PicoGFX_SSD1322 &display, const char* initialTitle, int
 void FaderWidget::setTitle(const char* txt) {
     strncpy(title, txt, sizeof(title));
     title[sizeof(title)-1] = '\0';
-    if(!display_active) drawFader();
+    drawFader();
 }
 
 void FaderWidget::setParamName(const char* txt) {
@@ -43,7 +43,7 @@ void FaderWidget::setButtonName(const char* txt) {
     strncpy(buttonName, txt, sizeof(buttonName));
     buttonName[sizeof(buttonName)-1] = '\0';
     strncpy(buttonText, txt, sizeof(buttonText));
-    if(!display_active) drawButtonName(txt, false);
+    drawButtonName(txt, false);
 }
 
 void FaderWidget::updateButtonName(bool state) {
@@ -57,7 +57,7 @@ void FaderWidget::showParamName() {
     if(faderLayout == LAYOUT_DYNAMIC)
         setTitle(paramName);
     else
-        if(!display_active) drawFader();
+        drawFader();
 }
 
 void FaderWidget::drawTitle() {
@@ -74,12 +74,11 @@ void FaderWidget::drawTitle() {
         int param_x = x_offset + (128 - param_width) / 2;
         int param_y = y_offset + ((boutonNumber > 3) ? 11 : 21);
         display.setCursor(param_x, param_y);
-        display.setTextColor(dimmed ? 5 : 15);
+        display.setTextColor(dimmed ? 6 : 15);
         display.print(title);
     }
     display.setFont(NULL);
     drawSeparators();
-    display.displayBlocking();
 }
 
 void FaderWidget::drawFader() {
@@ -97,8 +96,7 @@ void FaderWidget::drawFaderDynamic() {
 
     display.fillRect(area_x, area_y, area_w, area_h, 0);
     if (strcmp(paramName, "---") == 0) {
-        display.displayBlocking();
-        return;
+            return;
     }
 
     int BAR_W = 100;
@@ -108,7 +106,7 @@ void FaderWidget::drawFaderDynamic() {
     int FADER_H = 5;
 
     const char* displayText = showingValue ? title : paramName;
-    int color = dimmed ? 5 : 15;
+    int color = dimmed ? 6 : 15;
 
     if(strcmp(paramName, "******") != 0){
         {
@@ -143,7 +141,6 @@ void FaderWidget::drawFaderDynamic() {
         display.setFont(NULL);
     }
     drawSeparators();
-    display.displayBlocking();
 }
 
 void FaderWidget::drawFaderCompact() {
@@ -154,12 +151,11 @@ void FaderWidget::drawFaderCompact() {
 
     display.fillRect(area_x, area_y, area_w, area_h, 0);
     if (strcmp(paramName, "---") == 0) {
-        display.displayBlocking();
-        return;
+            return;
     }
 
     bool inactive = disabled || dimmed;
-    int color = inactive ? 5 : 15;
+    int color = inactive ? 6 : 15;
 
     if(strcmp(paramName, "******") != 0){
         int MARGIN = 4;
@@ -275,7 +271,6 @@ void FaderWidget::drawFaderCompact() {
         display.setFont(NULL);
     }
     drawSeparators();
-    display.displayBlocking();
 }
 
 void FaderWidget::drawButtonName(const char* txt, bool state) {
@@ -331,7 +326,6 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
 
     display.drawRect(btn_x, area_y, btn_w, area_h, 15);
     drawSeparators();
-    display.displayBlocking();
 }
 
 void FaderWidget::updateTitle(const char* txt) {
@@ -341,14 +335,12 @@ void FaderWidget::updateTitle(const char* txt) {
     title[sizeof(title)-1] = '\0';
     if (valueOnly)
         showingValue = true;
-    if(!display_active){
-        drawFader();
-    }
+    drawFader();
 }
 
 void FaderWidget::setValue(int val) {
     value = constrain(val, 0, 127);
-    if(!display_active) drawFader();
+    drawFader();
 }
 
 void FaderWidget::setEmpty() {
@@ -367,5 +359,4 @@ void FaderWidget::draw() {
     updateButtonName(false);
     drawSeparators();
 
-    display.displayBlocking();
 }

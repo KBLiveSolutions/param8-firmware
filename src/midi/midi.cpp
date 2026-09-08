@@ -223,10 +223,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   uint8_t constructor_byte = sysex[1];
   uint8_t status_byte = sysex[2];
   uint8_t param_number = sysex[3];
-  uint8_t staticOverlay = sysex[4]; // Nouveau paramètre pour l'affichage statique
-
-  if (display_active)
-      display_start_time = millis();
+  uint8_t staticOverlay = sysex[4];
 
   // Les caractères commencent maintenant à sysex[5], chaque caractère = 2 octets
   const uint8_t *char_data = sysex + 5;
@@ -289,8 +286,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
     if (!wasConnected) {
-      staticOverlay = false;
-      display_active = false;
       showDisplay();
       if (preset == 7 || preset == 6) {
         updateFaderTitles();
