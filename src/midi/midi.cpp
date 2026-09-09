@@ -286,10 +286,10 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
     if (!wasConnected) {
-      showDisplay();
       if (preset == 7 || preset == 6) {
         updateFaderTitles();
       }
+      showDisplay();
     }
     break;
   }
@@ -308,8 +308,10 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t number = sysex[6];
     uint8_t channel = sysex[7];
     controls.setEncoder(preset, param_number, MIDI_CC, number, channel);
-    if (preset == controls.getPreset())
+    if (preset == controls.getPreset()) {
       updateFaderTitles();
+      showDisplay();
+    }
     json.save();
     break;
   }
@@ -329,8 +331,10 @@ void onSysEx(const uint8_t *sysex, size_t len)
     arr[1] = static_cast<int>(control);
     arr[2] = static_cast<int>(channel);
     json.setButtonToggleMode(preset, param_number, toggleMode ? 1 : 0);
-    if (preset == controls.getPreset())
+    if (preset == controls.getPreset()) {
       updateFaderTitles();
+      showDisplay();
+    }
     json.save();
     break;
   }
@@ -377,8 +381,12 @@ void onSysEx(const uint8_t *sysex, size_t len)
     json.getDoc()[String(preset)][section][String(idx)] = name;
     json.save();
 
-    if (preset == controls.getPreset())
+    if (preset == controls.getPreset()) {
       updateFaderTitles();
+      // setParamName() only updates the string; the fader area needs an
+      // explicit redraw for the new name to show up right away.
+      showDisplay();
+    }
     break;
   }
   case 0x11:
@@ -395,8 +403,10 @@ void onSysEx(const uint8_t *sysex, size_t len)
     controls.setPresetName(preset, name);
     json.getDoc()[String(preset)]["preset_name"] = name;
     json.save();
-    if (preset == controls.getPreset())
+    if (preset == controls.getPreset()) {
       updateFaderTitles();
+      showDisplay();
+    }
     break;
   }
   case 18:

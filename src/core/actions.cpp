@@ -97,6 +97,7 @@ void sendClearNaming(uint8_t idx, uint8_t isButton)
     json.save();
 
     updateFaderTitles();
+    showDisplay();
 
     uint8_t packet[7] = {240, 111, 0x19, preset, idx, isButton, 247};
     usb_midi.write(packet, 7);
