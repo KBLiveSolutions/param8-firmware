@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "file": "releases/param8-midi-controller-v1.0.0.uf2",
-  "notes": "Premiere version numerotee du firmware.",
+  "version": "1.0.1",
+  "file": "releases/param8-midi-controller-v1.0.1.uf2",
+  "notes": "Test du flux de mise a jour depuis l'editeur.",
   "date": "2026-09-17"
 }
