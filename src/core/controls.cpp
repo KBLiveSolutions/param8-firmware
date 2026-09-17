@@ -1,6 +1,7 @@
 #include "controls.h"
 #include "actions.h"
 #include "jsonManager.h"
+#include "version.h"
 #include "../view/display.h"
 #include "../view/leds.h"
 #include "../input/encoders.h"
@@ -254,5 +255,11 @@ void ControlsManager::getPresetControls(uint8_t preset) {
         uint8_t brPacket[5] = { 240, 111, 0x1B, (uint8_t)(bright & 0x7F), 247 };
         usb_midi.write(brPacket, 5);
         serialEditorSend(brPacket, 5);
+
+        // Version firmware : envoyée avec le reste du handshake de connexion,
+        // pas besoin d'une requête séparée côté éditeur.
+        uint8_t versionPacket[7] = { 240, 111, 0x14, FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH, 247 };
+        usb_midi.write(versionPacket, 7);
+        serialEditorSend(versionPacket, 7);
     }
 }
