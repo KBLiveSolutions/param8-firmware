@@ -2,8 +2,10 @@
 #include "midi.h"
 #include "../core/controls.h"
 #include "../core/actions.h"
+#include "../core/version.h"
 #include "../view/display.h"
 #include "../core/jsonManager.h"
+#include "../usb/serial_editor.h"
 
 bool liveConnected = false;
 bool isSysExContinued = false;
@@ -441,6 +443,14 @@ void onSysEx(const uint8_t *sysex, size_t len)
     setBrightness(val);
     json.getDoc()["brightness"] = val;
     json.save();
+    break;
+  }
+  case 0x13:
+  {
+    // Requête de version firmware depuis l'éditeur : F0 6F 13 .. F7
+    uint8_t reply[7] = { 240, 111, 0x14, FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH, 247 };
+    usb_midi.write(reply, 7);
+    serialEditorSend(reply, 7);
     break;
   }
   default:

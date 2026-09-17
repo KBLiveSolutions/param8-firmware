@@ -38,5 +38,4 @@ Thumbs.db
 # Compiled binaries
 *.bin
 *.elf
-*.uf2
 *.hex
