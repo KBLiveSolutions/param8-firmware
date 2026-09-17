@@ -37,6 +37,7 @@ void FaderWidget::setParamName(const char* txt) {
             title[sizeof(title)-1] = '\0';
         }
     }
+    drawTitle();
 }
 
 void FaderWidget::setButtonName(const char* txt) {
