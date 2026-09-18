@@ -1,6 +1,11 @@
 # Param8 - 8-Parameter MIDI Controller
 
-A versatile MIDI controller with 8 rotary encoders and dual OLED screens for controlling DAW parameters, with bidirectional MIDI feedback and a companion desktop editor ([param8-editor](https://github.com/KBLiveSolutions/param8-editor)).
+A versatile MIDI controller with 8 rotary encoders and dual OLED screens for controlling DAW parameters, with bidirectional MIDI feedback.
+
+This repository holds the device firmware. Param8 also has two companion repositories:
+
+- **[param8-editor](https://github.com/KBLiveSolutions/param8-editor)** - Desktop app to rename parameters/banks, remap controls, and install firmware updates (1-click updater)
+- **[param8_remote_script](https://github.com/KBLiveSolutions/param8_remote_script)** - Ableton Live Control Surface script for native integration with Live's device/mixer parameters
 
 ## Features
 
@@ -138,6 +143,7 @@ See `src/midi/midi.cpp` (`onSysEx`) for the exact byte layout of each message.
 3. Map the 8 encoders to the desired DAW parameters (per one of 6 presets/banks)
 4. The screens automatically display parameter names and live values
 5. Use the [param8-editor](https://github.com/KBLiveSolutions/param8-editor) desktop app (USB serial or SysEx) to rename parameters/banks, remap controls, and update the firmware
+6. Ableton Live users can install [param8_remote_script](https://github.com/KBLiveSolutions/param8_remote_script) for native Control Surface integration (device/mixer parameter mapping without manual MIDI learn)
 
 ## Development
 
