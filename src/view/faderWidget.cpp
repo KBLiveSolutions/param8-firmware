@@ -37,7 +37,10 @@ void FaderWidget::setParamName(const char* txt) {
             title[sizeof(title)-1] = '\0';
         }
     }
-    drawTitle();
+    if (faderLayout == LAYOUT_DYNAMIC)
+        drawTitle();
+    else
+        drawFader();
 }
 
 void FaderWidget::setButtonName(const char* txt) {
