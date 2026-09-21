@@ -28,6 +28,14 @@ void FaderWidget::setTitle(const char* txt) {
 void FaderWidget::setParamName(const char* txt) {
     dimmed = (txt[0] == '~');
     const char* name = dimmed ? txt + 1 : txt;
+
+    char defaultBuf[24];
+    if (strcmp(name, "---") == 0 && controls.getPreset() < 6) {
+        MidiControl& enc = controls.getEncoder(boutonNumber);
+        snprintf(defaultBuf, sizeof(defaultBuf), "CC%d/%d", enc.number, enc.channel + 1);
+        name = defaultBuf;
+    }
+
     strncpy(paramName, name, sizeof(paramName));
     paramName[sizeof(paramName)-1] = '\0';
     disabled = (strcmp(name, "---") == 0);
@@ -44,6 +52,12 @@ void FaderWidget::setParamName(const char* txt) {
 }
 
 void FaderWidget::setButtonName(const char* txt) {
+    char defaultBuf[24];
+    if (strcmp(txt, "---") == 0 && controls.getPreset() < 6) {
+        MidiControl& btn = controls.getButtonShort(boutonNumber);
+        snprintf(defaultBuf, sizeof(defaultBuf), "CC%d/%d", btn.number, btn.channel + 1);
+        txt = defaultBuf;
+    }
     strncpy(buttonName, txt, sizeof(buttonName));
     buttonName[sizeof(buttonName)-1] = '\0';
     strncpy(buttonText, txt, sizeof(buttonText));
