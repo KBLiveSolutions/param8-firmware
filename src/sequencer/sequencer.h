@@ -19,6 +19,8 @@ struct StepSequence {
     uint8_t steps[SEQ_STEPS] = {0};
     SeqRate rate = SEQ_RATE_1_16;
     bool armed = false;
+    uint8_t ccNumber = 1;
+    uint8_t channel = 0; // 0-indexed (displayed as channel+1)
 };
 
 // Drives up to 8 independent 16-step sequences (one per encoder/fader),
@@ -41,6 +43,7 @@ public:
     void setRate(uint8_t track, SeqRate rate);
     SeqRate getRate(uint8_t track) const;
     uint8_t getCurrentStep(uint8_t track) const;
+    void setOutput(uint8_t track, uint8_t ccNumber, uint8_t channel);
 
     static uint8_t ticksPerStep(SeqRate rate);
     static const char* rateLabel(SeqRate rate);

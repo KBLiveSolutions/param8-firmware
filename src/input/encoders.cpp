@@ -55,6 +55,15 @@ void  Encoders::read(){
   }
   };
 
+int Encoders::readDelta(uint8_t idx) {
+  static int lastPos[8] = {0};
+  if (idx >= 8) return 0;
+  int newPos = encoder[idx]->getPosition();
+  int delta = newPos - lastPos[idx];
+  lastPos[idx] = newPos;
+  return delta;
+}
+
 void Encoders::setup(){
   for (int i = 0; i < 8; i++) {
     encoder[i] = new RotaryEncoder(PIN_IN1[i], PIN_IN2[i], RotaryEncoder::LatchMode::TWO03);

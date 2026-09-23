@@ -10,6 +10,11 @@ class Encoders{
         void  read();
         void  setup();
 
+        // Raw position delta since the last call for this index, no gain
+        // curve and no coupling to controls/presets. Used by standalone
+        // experiments (e.g. the step sequencer test boot).
+        int   readDelta(uint8_t idx);
+
 };
 
 extern Encoders encoders;

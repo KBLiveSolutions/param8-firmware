@@ -22,8 +22,41 @@ PicoGFX_SSD1322 display2(256, 64, &SPI, 12, 11, 13); // DC=12, RST=11, CS=13
 #include "view/display.h"
 #include "core/actions.h"
 #include "sequencer/sequencer.h"
+#include "sequencer/sequencerView.h"
+
+// Temporary: boots straight into the standalone step-sequencer test
+// instead of the normal preset system, to iterate on the sequencer UI
+// in isolation. Flip to 0 to get the normal firmware back.
+#define SEQUENCER_TEST_BOOT 1
 
 unsigned long screenSaverDelay = 300000; // 5 minutes par défaut
+
+#if SEQUENCER_TEST_BOOT
+
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+  setupMIDI();
+  SPI.setSCK(6);
+  SPI.setTX(7);
+  SPI.begin();
+  delay(100);
+  setupDisplay();
+  encoders.setup();
+  sequencer.setup();
+  setupSequencerView();
+  watchdog_enable(8000, true);
+  Serial.println("=== SEQUENCER TEST BOOT ===");
+}
+
+void loop() {
+  watchdog_update();
+  midiRead();
+  readSequencerEncoders();
+  drawSequencerView();
+}
+
+#else
 
 void setup() {
   Serial.begin(115200);
@@ -91,3 +124,5 @@ void loop() {
         runScreenSaver();
     }
 }
+
+#endif

@@ -1,7 +1,6 @@
 #include "sequencer.h"
-#include "../core/controls.h"
+#include "../core/controls.h" // for the ControlMidiType/MIDI_CC enum only
 #include "../midi/midi.h"
-#include "../view/display.h"
 
 Sequencer sequencer;
 
@@ -71,11 +70,7 @@ void Sequencer::advanceStep(uint8_t track)
 {
     _stepIndex[track] = (_stepIndex[track] + 1) % SEQ_STEPS;
     uint8_t value = _sequences[track].steps[_stepIndex[track]];
-
-    MidiControl& enc = controls.getEncoder(track);
-    sendMidiMessage(enc.type, enc.number, value, enc.channel);
-    enc.value = value;
-    updateFader(track, value);
+    sendMidiMessage(MIDI_CC, _sequences[track].ccNumber, value, _sequences[track].channel);
 }
 
 void Sequencer::arm(uint8_t track, bool on)
@@ -116,4 +111,11 @@ SeqRate Sequencer::getRate(uint8_t track) const
 uint8_t Sequencer::getCurrentStep(uint8_t track) const
 {
     return track < SEQ_TRACKS ? _stepIndex[track] : 0;
+}
+
+void Sequencer::setOutput(uint8_t track, uint8_t ccNumber, uint8_t channel)
+{
+    if (track >= SEQ_TRACKS) return;
+    _sequences[track].ccNumber = ccNumber;
+    _sequences[track].channel = channel;
 }
