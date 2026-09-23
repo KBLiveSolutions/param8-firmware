@@ -64,6 +64,29 @@ int Encoders::readDelta(uint8_t idx) {
   return delta;
 }
 
+int Encoders::readDeltaVarispeed(uint8_t idx, int gainMax) {
+  static int lastPos[8] = {0};
+  static unsigned long lastTime[8] = {0};
+  if (idx >= 8) return 0;
+
+  int newPos = encoder[idx]->getPosition();
+  int delta = newPos - lastPos[idx];
+  if (delta == 0) return 0;
+
+  unsigned long now = millis();
+  unsigned long dt = now - lastTime[idx];
+  const int gain_min = 1;
+  const unsigned long dt_min = 15;
+  const unsigned long dt_max = 150;
+  unsigned long dt_clamped = min(max(dt, dt_min), dt_max);
+  float t = float(dt_clamped - dt_min) / float(dt_max - dt_min);
+  int gain = int(gain_min + (gainMax - gain_min) * (1.0f - t * t));
+
+  lastPos[idx] = newPos;
+  lastTime[idx] = now;
+  return delta * gain;
+}
+
 void Encoders::setup(){
   for (int i = 0; i < 8; i++) {
     encoder[i] = new RotaryEncoder(PIN_IN1[i], PIN_IN2[i], RotaryEncoder::LatchMode::TWO03);

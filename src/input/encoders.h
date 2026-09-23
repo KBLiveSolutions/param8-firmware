@@ -15,6 +15,10 @@ class Encoders{
         // experiments (e.g. the step sequencer test boot).
         int   readDelta(uint8_t idx);
 
+        // Same, but with the same velocity-based gain curve as read()
+        // (turn fast = bigger steps), independent of controls/presets.
+        int   readDeltaVarispeed(uint8_t idx, int gainMax = 4);
+
 };
 
 extern Encoders encoders;

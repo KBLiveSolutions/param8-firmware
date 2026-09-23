@@ -18,6 +18,7 @@ enum SeqRate : uint8_t {
 struct StepSequence {
     uint8_t steps[SEQ_STEPS] = {0};
     SeqRate rate = SEQ_RATE_1_16;
+    uint8_t length = SEQ_STEPS; // active pattern length, 1-16
     bool armed = false;
     uint8_t ccNumber = 1;
     uint8_t channel = 0; // 0-indexed (displayed as channel+1)
@@ -44,6 +45,8 @@ public:
     SeqRate getRate(uint8_t track) const;
     uint8_t getCurrentStep(uint8_t track) const;
     void setOutput(uint8_t track, uint8_t ccNumber, uint8_t channel);
+    void setLength(uint8_t track, uint8_t length);
+    uint8_t getLength(uint8_t track) const;
 
     static uint8_t ticksPerStep(SeqRate rate);
     static const char* rateLabel(SeqRate rate);

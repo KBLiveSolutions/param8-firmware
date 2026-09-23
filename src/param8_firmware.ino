@@ -43,6 +43,7 @@ void setup() {
   delay(100);
   setupDisplay();
   encoders.setup();
+  setupButtons();
   sequencer.setup();
   setupSequencerView();
   watchdog_enable(8000, true);
@@ -56,6 +57,13 @@ void loop() {
   bool viewChanged = sequencerViewDirty();
   if (encChanged || viewChanged) {
     drawSequencerView();
+  }
+  if (readSequencerExitButton()) {
+    // Placeholder: no other mode to return to in this isolated test boot.
+    // Stops the sequencer for now; real navigation comes with integration.
+    sequencer.arm(SEQ_TEST_TRACK, false);
+    sequencer.onClockStop();
+    Serial.println("EXIT pressed (stub: sequencer stopped)");
   }
 }
 

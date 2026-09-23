@@ -68,7 +68,9 @@ void Sequencer::onClockTick()
 
 void Sequencer::advanceStep(uint8_t track)
 {
-    _stepIndex[track] = (_stepIndex[track] + 1) % SEQ_STEPS;
+    uint8_t len = _sequences[track].length;
+    if (len == 0 || len > SEQ_STEPS) len = SEQ_STEPS;
+    _stepIndex[track] = (_stepIndex[track] + 1) % len;
     uint8_t value = _sequences[track].steps[_stepIndex[track]];
     sendMidiMessage(MIDI_CC, _sequences[track].ccNumber, value, _sequences[track].channel);
 }
@@ -118,4 +120,15 @@ void Sequencer::setOutput(uint8_t track, uint8_t ccNumber, uint8_t channel)
     if (track >= SEQ_TRACKS) return;
     _sequences[track].ccNumber = ccNumber;
     _sequences[track].channel = channel;
+}
+
+void Sequencer::setLength(uint8_t track, uint8_t length)
+{
+    if (track >= SEQ_TRACKS) return;
+    _sequences[track].length = constrain(length, 1, SEQ_STEPS);
+}
+
+uint8_t Sequencer::getLength(uint8_t track) const
+{
+    return track < SEQ_TRACKS ? _sequences[track].length : SEQ_STEPS;
 }
