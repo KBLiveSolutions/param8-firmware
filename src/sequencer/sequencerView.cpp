@@ -73,35 +73,14 @@ bool sequencerViewDirty()
     return dirty;
 }
 
-// --- Step grid (thin tick per step instead of a filled bar) ---
-
-static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
-{
-    const int colW = 32;
-    const int margin = 4;
-    const int x = col * colW + margin;
-    const int tickW = colW - margin * 2;
-    const int areaTop = 9;
-    const int areaBottom = 25;
-    const int areaH = areaBottom - areaTop;
-
-    uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
-    bool active = step < length;
-
-    uint8_t value = sequencer.getStepValue(SEQ_TEST_TRACK, step);
-    int y = areaBottom - map(value, 0, 127, 0, areaH);
-
-    int color = (step == selectedStep) ? 15 : (active ? 11 : 4);
-    disp.fillRect(x, y, tickW, 2, color);
-
-    if (step == selectedStep)
-        disp.fillRect(x, areaBottom + 1, tickW, 1, 15);
-
-    if (sequencer.isRunning() && step == sequencer.getCurrentStep(SEQ_TEST_TRACK))
-        disp.fillRect(x, areaTop - 3, tickW, 1, 15);
-}
-
-// --- Footer: button-function box + encoder-function label, per physical cell ---
+// --- Layout: button box (outer edge) / encoder label (inner) / grid+title (center) ---
+// mirrored top and bottom, per screen:
+//   y=0-9    button box row
+//   y=10-17  encoder label row
+//   y=19-25  title
+//   y=27-45  step grid (ticks + markers)
+//   y=46-53  encoder label row
+//   y=54-63  button box row
 
 static void drawButtonBox(PicoGFX_SSD1322 &disp, int cellX, int y, const char* label)
 {
@@ -122,55 +101,82 @@ static void drawEncoderLabel(PicoGFX_SSD1322 &disp, int cellX, int y, const char
     disp.setFont(NULL);
     int tw = getStrWidth(disp, label);
     disp.setCursor(cellX + (128 - tw) / 2, y);
-    disp.setTextColor(8);
+    disp.setTextColor(10);
     disp.print(label);
 }
 
-static void drawHeader(PicoGFX_SSD1322 &disp, const char* text)
+static void drawTitle(PicoGFX_SSD1322 &disp, int y)
 {
+    const char* text = "STEP SEQUENCER";
     disp.setFont(NULL);
-    disp.setCursor(4, 1);
-    disp.setTextColor(15);
+    int tw = getStrWidth(disp, text);
+    disp.setCursor((256 - tw) / 2, y);
+    disp.setTextColor(6);
     disp.print(text);
+}
+
+static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
+{
+    const int colW = 32;
+    const int margin = 4;
+    const int x = col * colW + margin;
+    const int tickW = colW - margin * 2;
+    const int areaTop = 30;
+    const int areaBottom = 42;
+    const int areaH = areaBottom - areaTop;
+
+    uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
+    bool active = step < length;
+
+    uint8_t value = sequencer.getStepValue(SEQ_TEST_TRACK, step);
+    int y = areaBottom - map(value, 0, 127, 0, areaH);
+
+    int color = (step == selectedStep) ? 15 : (active ? 11 : 4);
+    disp.fillRect(x, y, tickW, 2, color);
+
+    if (step == selectedStep)
+        disp.fillRect(x, areaBottom + 2, tickW, 1, 15);
+
+    if (sequencer.isRunning() && step == sequencer.getCurrentStep(SEQ_TEST_TRACK))
+        disp.fillRect(x, areaTop - 3, tickW, 1, 15);
 }
 
 void drawSequencerView()
 {
-    char buf[32];
+    char labelStep[16], labelValue[16], labelLength[16], labelRate[16];
     uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
+    snprintf(labelStep, sizeof(labelStep), "STEP %d/%d", selectedStep + 1, length);
+    snprintf(labelValue, sizeof(labelValue), "VAL %d", sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep));
+    snprintf(labelLength, sizeof(labelLength), "LEN %d", length);
+    snprintf(labelRate, sizeof(labelRate), "RATE %s", Sequencer::rateLabel(sequencer.getRate(SEQ_TEST_TRACK)));
 
-    // --- Display 1: STEP (idx0) / VALUE (idx1) top row, placeholders bottom row ---
+    // --- Display 1: STEP (idx0) / VALUE (idx1) ---
     display1.fillScreen(0);
-    snprintf(buf, sizeof(buf), "STEP %02d/%02d  RATE %s", selectedStep + 1, length, Sequencer::rateLabel(sequencer.getRate(SEQ_TEST_TRACK)));
-    drawHeader(display1, buf);
+    drawButtonBox(display1, 0, 0, "-");
+    drawButtonBox(display1, 128, 0, "-");
+    drawEncoderLabel(display1, 0, 10, labelStep);
+    drawEncoderLabel(display1, 128, 10, labelValue);
+    drawTitle(display1, 19);
     for (int i = 0; i < 8; i++)
         drawStepTick(display1, i, i);
-    drawButtonBox(display1, 0, 28, "-");
-    drawButtonBox(display1, 128, 28, "-");
-    drawEncoderLabel(display1, 0, 38, "STEP");
-    drawEncoderLabel(display1, 128, 38, "VALUE");
-    drawButtonBox(display1, 0, 46, "-");
-    drawButtonBox(display1, 128, 46, "-");
-    drawEncoderLabel(display1, 0, 56, "-");
-    drawEncoderLabel(display1, 128, 56, "-");
+    drawEncoderLabel(display1, 0, 46, "-");
+    drawEncoderLabel(display1, 128, 46, "-");
+    drawButtonBox(display1, 0, 54, "-");
+    drawButtonBox(display1, 128, 54, "-");
 
-    // --- Display 2: LENGTH (idx2) / RATE (idx3) top row, EXIT (idx7) bottom row ---
+    // --- Display 2: LENGTH (idx2) / RATE (idx3), EXIT on button 8 (idx7) ---
     display2.fillScreen(0);
-    snprintf(buf, sizeof(buf), "VAL %03d   LEN %02d   %s",
-             sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep),
-             length,
-             sequencer.isRunning() ? "RUN" : "STOP");
-    drawHeader(display2, buf);
+    drawButtonBox(display2, 0, 0, "-");
+    drawButtonBox(display2, 128, 0, "-");
+    drawEncoderLabel(display2, 0, 10, labelLength);
+    drawEncoderLabel(display2, 128, 10, labelRate);
+    drawTitle(display2, 19);
     for (int i = 0; i < 8; i++)
         drawStepTick(display2, i, i + 8);
-    drawButtonBox(display2, 0, 28, "-");
-    drawButtonBox(display2, 128, 28, "-");
-    drawEncoderLabel(display2, 0, 38, "LENGTH");
-    drawEncoderLabel(display2, 128, 38, "RATE");
-    drawButtonBox(display2, 0, 46, "-");
-    drawButtonBox(display2, 128, 46, "EXIT");
-    drawEncoderLabel(display2, 0, 56, "-");
-    drawEncoderLabel(display2, 128, 56, "-");
+    drawEncoderLabel(display2, 0, 46, "-");
+    drawEncoderLabel(display2, 128, 46, sequencer.isRunning() ? "RUN" : "STOP");
+    drawButtonBox(display2, 0, 54, "-");
+    drawButtonBox(display2, 128, 54, "EXIT");
 
     display1.displayBlocking();
     display2.displayBlocking();
