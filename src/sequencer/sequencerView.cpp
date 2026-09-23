@@ -77,8 +77,7 @@ bool sequencerViewDirty()
 // mirrored top and bottom, per screen:
 //   y=0-9    button box row
 //   y=10-17  encoder label row
-//   y=19-25  title
-//   y=27-45  step grid (ticks + markers)
+//   y=17-43  step grid (ticks + markers)
 //   y=46-53  encoder label row
 //   y=54-63  button box row
 
@@ -105,24 +104,14 @@ static void drawEncoderLabel(PicoGFX_SSD1322 &disp, int cellX, int y, const char
     disp.print(label);
 }
 
-static void drawTitle(PicoGFX_SSD1322 &disp, int y)
-{
-    const char* text = "STEP SEQUENCER";
-    disp.setFont(NULL);
-    int tw = getStrWidth(disp, text);
-    disp.setCursor((256 - tw) / 2, y);
-    disp.setTextColor(6);
-    disp.print(text);
-}
-
 static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
 {
     const int colW = 32;
     const int margin = 4;
     const int x = col * colW + margin;
     const int tickW = colW - margin * 2;
-    const int areaTop = 30;
-    const int areaBottom = 42;
+    const int areaTop = 20;
+    const int areaBottom = 40;
     const int areaH = areaBottom - areaTop;
 
     uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
@@ -156,7 +145,6 @@ void drawSequencerView()
     drawButtonBox(display1, 128, 0, "-");
     drawEncoderLabel(display1, 0, 10, labelStep);
     drawEncoderLabel(display1, 128, 10, labelValue);
-    drawTitle(display1, 19);
     for (int i = 0; i < 8; i++)
         drawStepTick(display1, i, i);
     drawEncoderLabel(display1, 0, 46, "-");
@@ -170,7 +158,6 @@ void drawSequencerView()
     drawButtonBox(display2, 128, 0, "-");
     drawEncoderLabel(display2, 0, 10, labelLength);
     drawEncoderLabel(display2, 128, 10, labelRate);
-    drawTitle(display2, 19);
     for (int i = 0; i < 8; i++)
         drawStepTick(display2, i, i + 8);
     drawEncoderLabel(display2, 0, 46, "-");
