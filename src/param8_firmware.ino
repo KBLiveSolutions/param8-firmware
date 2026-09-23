@@ -52,8 +52,11 @@ void setup() {
 void loop() {
   watchdog_update();
   midiRead();
-  readSequencerEncoders();
-  drawSequencerView();
+  bool encChanged = readSequencerEncoders();
+  bool viewChanged = sequencerViewDirty();
+  if (encChanged || viewChanged) {
+    drawSequencerView();
+  }
 }
 
 #else

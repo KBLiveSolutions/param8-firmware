@@ -4,6 +4,8 @@
 #include "../view/display.h"
 
 static uint8_t selectedStep = 0;
+static uint8_t lastPlayingStep = 255; // sentinel: forces a first draw
+static bool lastRunning = false;
 
 void setupSequencerView()
 {
@@ -11,13 +13,16 @@ void setupSequencerView()
     sequencer.arm(SEQ_TEST_TRACK, true);
 }
 
-void readSequencerEncoders()
+bool readSequencerEncoders()
 {
+    bool changed = false;
+
     int stepDelta = encoders.readDelta(SEQ_ENC_STEP);
     if (stepDelta != 0) {
         int next = ((int)selectedStep + stepDelta) % SEQ_STEPS;
         if (next < 0) next += SEQ_STEPS;
         selectedStep = (uint8_t)next;
+        changed = true;
     }
 
     int rateDelta = encoders.readDelta(SEQ_ENC_RATE);
@@ -25,6 +30,7 @@ void readSequencerEncoders()
         int rate = (int)sequencer.getRate(SEQ_TEST_TRACK) + (rateDelta > 0 ? 1 : -1);
         rate = constrain(rate, 0, SEQ_RATE_COUNT - 1);
         sequencer.setRate(SEQ_TEST_TRACK, (SeqRate)rate);
+        changed = true;
     }
 
     int editDelta = encoders.readDelta(SEQ_ENC_EDIT);
@@ -32,7 +38,20 @@ void readSequencerEncoders()
         int value = (int)sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep) + editDelta;
         value = constrain(value, 0, 127);
         sequencer.setStepValue(SEQ_TEST_TRACK, selectedStep, (uint8_t)value);
+        changed = true;
     }
+
+    return changed;
+}
+
+bool sequencerViewDirty()
+{
+    uint8_t curStep = sequencer.getCurrentStep(SEQ_TEST_TRACK);
+    bool running = sequencer.isRunning();
+    bool dirty = (curStep != lastPlayingStep) || (running != lastRunning);
+    lastPlayingStep = curStep;
+    lastRunning = running;
+    return dirty;
 }
 
 static void drawStepColumn(PicoGFX_SSD1322 &disp, int col, uint8_t step)
@@ -49,7 +68,6 @@ static void drawStepColumn(PicoGFX_SSD1322 &disp, int col, uint8_t step)
     int barH = map(value, 0, 127, 0, barAreaH);
     int y = barAreaBottom - barH;
 
-    disp.fillRect(x, barAreaTop, barW, barAreaH, 0);
     disp.fillRect(x, y, barW, barH, 10);
 
     if (step == selectedStep)
@@ -61,7 +79,6 @@ static void drawStepColumn(PicoGFX_SSD1322 &disp, int col, uint8_t step)
 
 static void drawHeader(PicoGFX_SSD1322 &disp, const char* text)
 {
-    disp.fillRect(0, 0, 256, 14, 0);
     disp.setFont(NULL);
     disp.setCursor(4, 2);
     disp.setTextColor(15);
@@ -72,11 +89,13 @@ void drawSequencerView()
 {
     char buf[32];
 
+    display1.fillScreen(0);
     snprintf(buf, sizeof(buf), "STEP %02d/16   RATE %s", selectedStep + 1, Sequencer::rateLabel(sequencer.getRate(SEQ_TEST_TRACK)));
     drawHeader(display1, buf);
     for (int i = 0; i < 8; i++)
         drawStepColumn(display1, i, i);
 
+    display2.fillScreen(0);
     snprintf(buf, sizeof(buf), "VAL %03d   %s   CC%d/%d",
              sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep),
              sequencer.isRunning() ? "RUN" : "STOP",

@@ -13,5 +13,13 @@
 #define SEQ_ENC_EDIT 2
 
 void setupSequencerView();
-void readSequencerEncoders();
+
+// Reads the 3 dedicated encoders and applies any change. Returns true if
+// something changed (selection, rate or a step value).
+bool readSequencerEncoders();
+
+// Returns true if the running step or play state changed since the last
+// call (used to redraw on clock-driven playback even without encoder input).
+bool sequencerViewDirty();
+
 void drawSequencerView();
