@@ -68,6 +68,33 @@ Avec les deux, il faut à la fois avoir relâché le push ET tourner franchement
 d'au moins 2-3 crans pour déclencher un record — peu probable en visant
 juste un tap.
 
+## Layout de la page "Encoder Settings"
+
+Une fois entré (Shift + tap sur l'encodeur N, voir plus haut), les 8 encodeurs
+physiques sont repurposés pour éditer les réglages de l'encodeur cible N :
+step sequencer (déjà prototypé) + assignation MIDI + slew.
+
+| Position | Push (bouton) | Turn (rotation) |
+|---|---|---|
+| 1 (haut, col1) | Clear | Step select |
+| 2 (haut, col2) | — | Step value |
+| 3 (haut, col3) | Synced/Free (mode du Rate) | Rate |
+| 4 (haut, col4) | Exit | Length |
+| 5 (bas, col1) | PUSH/TURN editing | Ch |
+| 6 (bas, col2) | Note/CC type | Note/CC # |
+| 7 (bas, col3) | — | — |
+| 8 (bas, col4) | Synced/Free (mode du Slew) | Slew time |
+
+Précisions :
+- **Rate** et **Slew** ont chacun leur propre toggle Synced/Free indépendant
+  (position 3 pour le rate du step sequencer, position 8 pour le slew).
+- **Ch / Note-CC# / Note-CC type** (positions 5-6) éditent soit le mapping
+  MIDI du **push** de l'encodeur cible (`controls.getButtonShort(idx)`),
+  soit celui de sa **rotation** (`controls.getEncoder(idx)`) — deux structures
+  déjà distinctes et indépendantes dans le firmware. Le push de la position 5
+  ("PUSH/TURN editing") bascule lequel des deux est actuellement visé par
+  ces 3 contrôles.
+
 ## Questions ouvertes
 
 1. **Seuil du délai Shift** : 300 ou 500ms avant que les labels de preset
