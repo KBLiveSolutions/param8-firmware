@@ -6,6 +6,7 @@
 #include "../view/display.h"
 #include "../core/jsonManager.h"
 #include "../usb/serial_editor.h"
+#include "../sequencer/sequencer.h"
 
 bool liveConnected = false;
 bool isSysExContinued = false;
@@ -164,6 +165,17 @@ void handleMIDIDAWMessage(uint8_t *packet)
     uint16_t pitchBendValue = (packet[3] << 7) | packet[2];
     // Serial.print("Pitch Bend - Value: ");
     // Serial.print(pitchBendValue);
+    break;
+  }
+  case 0xF0: // System Realtime (Clock/Start/Continue/Stop, 24 ppqn)
+  {
+    switch (packet[1]) {
+      case 0xF8: sequencer.onClockTick(); break;
+      case 0xFA: sequencer.onClockStart(); break;
+      case 0xFB: sequencer.onClockStart(); break; // Continue (position resume not tracked yet)
+      case 0xFC: sequencer.onClockStop(); break;
+      default: break;
+    }
     break;
   }
   default:

@@ -21,6 +21,7 @@ PicoGFX_SSD1322 display2(256, 64, &SPI, 12, 11, 13); // DC=12, RST=11, CS=13
 #include "view/leds.h"
 #include "view/display.h"
 #include "core/actions.h"
+#include "sequencer/sequencer.h"
 
 unsigned long screenSaverDelay = 300000; // 5 minutes par défaut
 
@@ -47,6 +48,7 @@ void setup() {
   encoders.setup();
   setupButtons();
   setupLeds();
+  sequencer.setup();
   watchdog_enable(8000, true);
   Serial.println("=== STARTUP COMPLETE ===");
   delay(100);
