@@ -428,11 +428,16 @@ void updateFaderTitles()
     if (preset == 7) {
         deviceLabel[0] = '\0';
         bankLabel[0] = '\0';
+        // trackLabel is left as-is here: the remote script re-sends it once
+        // it detects the switch to the mixer preset, same as it does for the
+        // rest of the live-follow display state.
     } else if (preset == 6) {
         strncpy(deviceLabel, "Track", sizeof(deviceLabel));
         strncpy(bankLabel, "Global", sizeof(bankLabel));
+        trackLabel[0] = '\0';
         deviceLabelDirty = true;
         bankLabelDirty = true;
+        trackLabelDirty = true;
     } else {
         const char* pName = controls.getPresetName(preset);
         if (pName[0] != '\0') {
@@ -441,8 +446,10 @@ void updateFaderTitles()
             snprintf(bankLabel, sizeof(bankLabel), "Preset %d", preset + 1);
         }
         snprintf(deviceLabel, sizeof(deviceLabel), "Preset %d", preset + 1);
+        trackLabel[0] = '\0';
         deviceLabelDirty = true;
         bankLabelDirty = true;
+        trackLabelDirty = true;
     }
 }
 

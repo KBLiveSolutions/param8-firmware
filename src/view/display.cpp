@@ -9,8 +9,10 @@ FaderWidget* faders[8];
 
 char deviceLabel[20] = {0};
 char bankLabel[20] = {0};
+char trackLabel[20] = {0};
 bool deviceLabelDirty = false;
 bool bankLabelDirty = false;
+bool trackLabelDirty = false;
 bool screenSaverActive = false;
 
 void setupDisplay() {
@@ -114,8 +116,11 @@ void drawAllWidgets() {
         drawLabelOverButton(display1, deviceLabel, 54);
     if (bankLabel[0] != '\0')
         drawLabelOverButton(display2, bankLabel, 54);
+    if (trackLabel[0] != '\0')
+        drawLabelOverButton(display1, trackLabel, 0);
     deviceLabelDirty = false;
     bankLabelDirty = false;
+    trackLabelDirty = false;
 }
 
 void showDisplay() {
@@ -135,7 +140,7 @@ void updateDisplay() {
 
 void drawDeviceBankLabels() {
     if (screenSaverActive) return;
-    if (!deviceLabelDirty && !bankLabelDirty) return;
+    if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty) return;
     if (deviceLabelDirty) {
         deviceLabelDirty = false;
         if (deviceLabel[0] != '\0')
@@ -145,6 +150,11 @@ void drawDeviceBankLabels() {
         bankLabelDirty = false;
         if (bankLabel[0] != '\0')
             drawLabelOverButton(display2, bankLabel, 54);
+    }
+    if (trackLabelDirty) {
+        trackLabelDirty = false;
+        if (trackLabel[0] != '\0')
+            drawLabelOverButton(display1, trackLabel, 0);
     }
 }
 

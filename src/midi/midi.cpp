@@ -280,6 +280,14 @@ void onSysEx(const uint8_t *sysex, size_t len)
     deviceLabelDirty = true;
     break;
 
+  case 4:
+    // Track name (preset 8 / mixer live-follow), shown between the
+    // "Track -" and "Track +" buttons.
+    strncpy(trackLabel, ascii_string, sizeof(trackLabel));
+    trackLabel[sizeof(trackLabel)-1] = '\0';
+    trackLabelDirty = true;
+    break;
+
   case 5:
   {
     bool wasConnected = liveConnected;
