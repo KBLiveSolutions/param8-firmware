@@ -76,7 +76,10 @@ Paramètres du LFO :
 - **Waveform** : forme d'onde (sine, triangle, square, saw up, saw down pour
   l'instant — `Lfo::waveformLabel`)
 - **Rate** : synced au clock MIDI pour l'instant (réutilise le même `SeqRate`
-  que le step sequencer — pas de mode "free" pour le moment)
+  que le step sequencer — pas de mode "free" pour le moment). Échelle
+  complète, du plus lent au plus rapide : `4 BARS, 2 BARS, 1 BAR, 1/2, 1/4,
+  1/8, 1/8T, 1/16, 1/16T, 1/32` (les rates >1/4 s'appliquent aussi bien au
+  step sequencer qu'au LFO, même enum `SeqRate` partagé)
 - **Value** : la valeur centrale, même sens que la valeur CC normale — le LFO
   oscille autour
 - **Amount** : profondeur de la modulation

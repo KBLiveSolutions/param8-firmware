@@ -14,30 +14,38 @@ void Sequencer::setup()
     _running = false;
 }
 
-uint8_t Sequencer::ticksPerStep(SeqRate rate)
+uint16_t Sequencer::ticksPerStep(SeqRate rate)
 {
-    // 24 pulses-per-quarter-note MIDI clock.
+    // 24 pulses-per-quarter-note MIDI clock. Bar-based rates assume 4/4.
     switch (rate) {
-        case SEQ_RATE_1_4:   return 24;
-        case SEQ_RATE_1_8:   return 12;
-        case SEQ_RATE_1_8T:  return 8;
-        case SEQ_RATE_1_16:  return 6;
-        case SEQ_RATE_1_16T: return 4;
-        case SEQ_RATE_1_32:  return 3;
-        default:             return 6;
+        case SEQ_RATE_4_BARS: return 384;
+        case SEQ_RATE_2_BARS: return 192;
+        case SEQ_RATE_1_BAR:  return 96;
+        case SEQ_RATE_1_2:    return 48;
+        case SEQ_RATE_1_4:    return 24;
+        case SEQ_RATE_1_8:    return 12;
+        case SEQ_RATE_1_8T:   return 8;
+        case SEQ_RATE_1_16:   return 6;
+        case SEQ_RATE_1_16T:  return 4;
+        case SEQ_RATE_1_32:   return 3;
+        default:              return 6;
     }
 }
 
 const char* Sequencer::rateLabel(SeqRate rate)
 {
     switch (rate) {
-        case SEQ_RATE_1_4:   return "1/4";
-        case SEQ_RATE_1_8:   return "1/8";
-        case SEQ_RATE_1_8T:  return "1/8T";
-        case SEQ_RATE_1_16:  return "1/16";
-        case SEQ_RATE_1_16T: return "1/16T";
-        case SEQ_RATE_1_32:  return "1/32";
-        default:             return "?";
+        case SEQ_RATE_4_BARS: return "4 BARS";
+        case SEQ_RATE_2_BARS: return "2 BARS";
+        case SEQ_RATE_1_BAR:  return "1 BAR";
+        case SEQ_RATE_1_2:    return "1/2";
+        case SEQ_RATE_1_4:    return "1/4";
+        case SEQ_RATE_1_8:    return "1/8";
+        case SEQ_RATE_1_8T:   return "1/8T";
+        case SEQ_RATE_1_16:   return "1/16";
+        case SEQ_RATE_1_16T:  return "1/16T";
+        case SEQ_RATE_1_32:   return "1/32";
+        default:              return "?";
     }
 }
 
@@ -60,7 +68,7 @@ void Sequencer::onClockTick()
     _tickCount++;
     for (uint8_t i = 0; i < SEQ_TRACKS; i++) {
         if (!_sequences[i].armed) continue;
-        uint8_t tps = ticksPerStep(_sequences[i].rate);
+        uint16_t tps = ticksPerStep(_sequences[i].rate);
         if (_tickCount % tps == 0)
             advanceStep(i);
     }

@@ -6,7 +6,11 @@
 #define SEQ_TRACKS 8
 
 enum SeqRate : uint8_t {
-    SEQ_RATE_1_4 = 0,
+    SEQ_RATE_4_BARS = 0,
+    SEQ_RATE_2_BARS,
+    SEQ_RATE_1_BAR,
+    SEQ_RATE_1_2,
+    SEQ_RATE_1_4,
     SEQ_RATE_1_8,
     SEQ_RATE_1_8T,
     SEQ_RATE_1_16,
@@ -48,7 +52,7 @@ public:
     void setLength(uint8_t track, uint8_t length);
     uint8_t getLength(uint8_t track) const;
 
-    static uint8_t ticksPerStep(SeqRate rate);
+    static uint16_t ticksPerStep(SeqRate rate);
     static const char* rateLabel(SeqRate rate);
 
 private:
