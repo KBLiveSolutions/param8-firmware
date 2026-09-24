@@ -13,6 +13,11 @@ static bool lastRunning = false;
 static uint8_t lastLfoPhaseIndex = 255;
 static bool lastLfoRunning = false;
 
+// Resolution of the LFO waveform preview: number of sample points/line
+// segments spanning one full cycle, drawn on a single screen (display1).
+// Also used as the dirty-check granularity for clock-driven redraws.
+#define LFO_DISPLAY_RES 64
+
 static void setMode(bool toLfo)
 {
     if (toLfo == lfoMode) return;
@@ -125,7 +130,7 @@ bool sequencerViewDirty()
     bool dirty;
     if (lfoMode) {
         float phase = lfo.getPhase(SEQ_TEST_TRACK);
-        uint8_t idx = (uint8_t)constrain((int)(phase * SEQ_STEPS), 0, SEQ_STEPS - 1);
+        uint8_t idx = (uint8_t)constrain((int)(phase * LFO_DISPLAY_RES), 0, LFO_DISPLAY_RES - 1);
         bool running = lfo.isRunning();
         dirty = (idx != lastLfoPhaseIndex) || (running != lastLfoRunning);
         lastLfoPhaseIndex = idx;
@@ -202,16 +207,34 @@ static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
     drawTickAt(disp, col, value, color, isSelected, isPlaying);
 }
 
-// Draws one column of the LFO waveform preview: the shape is spread over
-// the 16 available columns as one full cycle, so it visually redraws live
-// as waveform/value/amount change, with a playhead marking the current
-// phase reported by the engine.
-static void drawLfoTick(PicoGFX_SSD1322 &disp, int col, uint8_t index)
+// Draws the LFO waveform as a continuous line across the full width of a
+// single display (LFO_DISPLAY_RES sample points spanning one full cycle),
+// plus a bright playhead column following the engine's actual phase. Redraws
+// live as waveform/value/amount/rate change. Single-screen for now — the
+// second display keeps its button/encoder labels but no waveform.
+static void drawLfoWaveform(PicoGFX_SSD1322 &disp)
 {
-    float phase = (float)index / (float)SEQ_STEPS;
-    uint8_t value = lfo.previewOutput(SEQ_TEST_TRACK, phase);
-    bool isPlayhead = lfo.isRunning() && index == lastLfoPhaseIndex;
-    drawTickAt(disp, col, value, 11, false, isPlayhead);
+    const int width = 256;
+    const int areaTop = 17;
+    const int areaBottom = 43;
+    const int areaH = areaBottom - areaTop;
+
+    int prevX = 0, prevY = areaBottom;
+    for (int i = 0; i <= LFO_DISPLAY_RES; i++) {
+        float phase = (float)i / (float)LFO_DISPLAY_RES;
+        uint8_t value = lfo.previewOutput(SEQ_TEST_TRACK, phase);
+        int x = (i * width) / LFO_DISPLAY_RES;
+        int y = areaBottom - map(value, 0, 127, 0, areaH);
+        if (i > 0)
+            disp.drawLine(prevX, prevY, x, y, 11);
+        prevX = x;
+        prevY = y;
+    }
+
+    if (lfo.isRunning()) {
+        int x = constrain((int)(lfo.getPhase(SEQ_TEST_TRACK) * width), 0, width - 1);
+        disp.fillRect(x, areaTop, 1, areaH, 15);
+    }
 }
 
 void drawSequencerView()
@@ -239,9 +262,11 @@ void drawSequencerView()
     drawButtonBox(display1, 128, 0, "-");
     drawEncoderLabel(display1, 0, 10, labelPos1);
     drawEncoderLabel(display1, 128, 10, labelPos2);
-    for (int i = 0; i < 8; i++) {
-        if (lfoMode) drawLfoTick(display1, i, i);
-        else drawStepTick(display1, i, i);
+    if (lfoMode) {
+        drawLfoWaveform(display1);
+    } else {
+        for (int i = 0; i < 8; i++)
+            drawStepTick(display1, i, i);
     }
     drawEncoderLabel(display1, 0, 46, "-");
     drawEncoderLabel(display1, 128, 46, "-");
@@ -254,10 +279,11 @@ void drawSequencerView()
     drawButtonBox(display2, 128, 0, "CLR");
     drawEncoderLabel(display2, 0, 10, labelPos3);
     drawEncoderLabel(display2, 128, 10, labelPos4);
-    for (int i = 0; i < 8; i++) {
-        if (lfoMode) drawLfoTick(display2, i, i + 8);
-        else drawStepTick(display2, i, i + 8);
+    if (!lfoMode) {
+        for (int i = 0; i < 8; i++)
+            drawStepTick(display2, i, i + 8);
     }
+    // LFO waveform is shown on display1 only for now (single screen).
     drawEncoderLabel(display2, 0, 46, "-");
     drawEncoderLabel(display2, 128, 46, runLabel);
     drawButtonBox(display2, 0, 54, "-");

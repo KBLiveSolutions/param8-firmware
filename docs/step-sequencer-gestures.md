@@ -86,11 +86,18 @@ pattern que `Sequencer` — un `Lfo` par track 0-7, calcule une valeur continue
 à chaque tick d'horloge en fonction de la phase dans le cycle, et n'envoie un
 CC que si la valeur a changé), **et maintenant branché dans le test boot
 standalone** (`sequencerView.{h,cpp}`) : toggle step-seq/LFO fonctionnel,
-affichage temps réel de la forme d'onde + playhead, édition waveform/value/
-rate/amount en direct. Toujours pas branché à une vraie page "Encoder
-Settings" ni aux gestes Shift — le test boot reste isolé (voir layout
-ci-dessous, qui documente maintenant l'état réellement implémenté plutôt
-qu'un plan).
+édition waveform/value/rate/amount en direct. Toujours pas branché à une
+vraie page "Encoder Settings" ni aux gestes Shift — le test boot reste isolé
+(voir layout ci-dessous, qui documente maintenant l'état réellement
+implémenté plutôt qu'un plan).
+
+Affichage : la forme d'onde est dessinée en trait continu (pas des barres)
+sur toute la largeur d'un seul écran (`display1`, 256px), échantillonnée à
+`LFO_DISPLAY_RES` = 64 points par cycle complet, avec un curseur de lecture
+(playhead) qui suit la phase réelle envoyée par le moteur — donc visuellement
+réactif en direct aux changements de waveform/value/amount/rate. Le second
+écran garde ses labels/boîtes mais pas de courbe **pour l'instant** (à
+réévaluer une fois qu'on saura ce qu'on veut y montrer).
 
 ## Layout du test boot standalone (step sequencer + LFO)
 
