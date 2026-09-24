@@ -22,6 +22,7 @@ PicoGFX_SSD1322 display2(256, 64, &SPI, 12, 11, 13); // DC=12, RST=11, CS=13
 #include "view/display.h"
 #include "core/actions.h"
 #include "sequencer/sequencer.h"
+#include "sequencer/lfo.h"
 #include "sequencer/sequencerView.h"
 
 // Temporary: boots straight into the standalone step-sequencer test
@@ -45,6 +46,7 @@ void setup() {
   encoders.setup();
   setupButtons();
   sequencer.setup();
+  lfo.setup();
   setupSequencerView();
   watchdog_enable(8000, true);
   Serial.println("=== SEQUENCER TEST BOOT ===");
@@ -93,6 +95,7 @@ void setup() {
   setupButtons();
   setupLeds();
   sequencer.setup();
+  lfo.setup();
   watchdog_enable(8000, true);
   Serial.println("=== STARTUP COMPLETE ===");
   delay(100);

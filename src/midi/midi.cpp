@@ -7,6 +7,7 @@
 #include "../core/jsonManager.h"
 #include "../usb/serial_editor.h"
 #include "../sequencer/sequencer.h"
+#include "../sequencer/lfo.h"
 
 bool liveConnected = false;
 bool isSysExContinued = false;
@@ -170,10 +171,10 @@ void handleMIDIDAWMessage(uint8_t *packet)
   case 0xF0: // System Realtime (Clock/Start/Continue/Stop, 24 ppqn)
   {
     switch (packet[1]) {
-      case 0xF8: sequencer.onClockTick(); break;
-      case 0xFA: sequencer.onClockStart(); break;
-      case 0xFB: sequencer.onClockStart(); break; // Continue (position resume not tracked yet)
-      case 0xFC: sequencer.onClockStop(); break;
+      case 0xF8: sequencer.onClockTick(); lfo.onClockTick(); break;
+      case 0xFA: sequencer.onClockStart(); lfo.onClockStart(); break;
+      case 0xFB: sequencer.onClockStart(); lfo.onClockStart(); break; // Continue (position resume not tracked yet)
+      case 0xFC: sequencer.onClockStop(); lfo.onClockStop(); break;
       default: break;
     }
     break;
