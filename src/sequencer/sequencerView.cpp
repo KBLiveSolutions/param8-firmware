@@ -1,75 +1,142 @@
 #include "sequencerView.h"
 #include "sequencer.h"
+#include "lfo.h"
 #include "../input/encoders.h"
 #include "../input/buttons.h"
 #include "../view/display.h"
 
+static bool lfoMode = false; // false = step sequencer, true = LFO
 static uint8_t selectedStep = 0;
+
 static uint8_t lastPlayingStep = 255; // sentinel: forces a first draw
 static bool lastRunning = false;
+static uint8_t lastLfoPhaseIndex = 255;
+static bool lastLfoRunning = false;
+
+static void setMode(bool toLfo)
+{
+    if (toLfo == lfoMode) return;
+    lfoMode = toLfo;
+    sequencer.arm(SEQ_TEST_TRACK, !toLfo);
+    lfo.arm(SEQ_TEST_TRACK, toLfo);
+}
 
 void setupSequencerView()
 {
     sequencer.setOutput(SEQ_TEST_TRACK, SEQ_OUTPUT_CC, SEQ_OUTPUT_CHANNEL);
+    lfo.setOutput(SEQ_TEST_TRACK, SEQ_OUTPUT_CC, SEQ_OUTPUT_CHANNEL);
     sequencer.arm(SEQ_TEST_TRACK, true);
+    lfo.arm(SEQ_TEST_TRACK, false);
 }
 
 bool readSequencerEncoders()
 {
     bool changed = false;
-    uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
 
-    int stepDelta = encoders.readDelta(SEQ_ENC_STEP);
-    if (stepDelta != 0) {
-        int next = ((int)selectedStep + stepDelta) % length;
-        if (next < 0) next += length;
-        selectedStep = (uint8_t)next;
+    bool toggleReading = pcf.digitalRead(SEQ_BTN_TOGGLE);
+    updateButton(SEQ_BTN_TOGGLE, toggleReading);
+    if (wasShortPressed(SEQ_BTN_TOGGLE)) {
+        setMode(!lfoMode);
         changed = true;
     }
 
-    int valueDelta = encoders.readDeltaVarispeed(SEQ_ENC_VALUE);
-    if (valueDelta != 0) {
-        int value = (int)sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep) + valueDelta;
-        value = constrain(value, 0, 127);
-        sequencer.setStepValue(SEQ_TEST_TRACK, selectedStep, (uint8_t)value);
+    bool clearReading = pcf.digitalRead(SEQ_BTN_CLEAR);
+    updateButton(SEQ_BTN_CLEAR, clearReading);
+    if (wasShortPressed(SEQ_BTN_CLEAR)) {
+        if (lfoMode)
+            lfo.setAmount(SEQ_TEST_TRACK, 0);
+        else
+            sequencer.setStepValue(SEQ_TEST_TRACK, selectedStep, 0);
         changed = true;
     }
 
-    int lengthDelta = encoders.readDelta(SEQ_ENC_LENGTH);
-    if (lengthDelta != 0) {
-        int newLength = (int)length + (lengthDelta > 0 ? 1 : -1);
-        newLength = constrain(newLength, 1, SEQ_STEPS);
-        sequencer.setLength(SEQ_TEST_TRACK, (uint8_t)newLength);
-        if (selectedStep >= newLength)
-            selectedStep = newLength - 1;
-        changed = true;
+    if (lfoMode) {
+        int wfDelta = encoders.readDelta(SEQ_ENC_STEP);
+        if (wfDelta != 0) {
+            int wf = ((int)lfo.getWaveform(SEQ_TEST_TRACK) + (wfDelta > 0 ? 1 : -1));
+            wf = ((wf % LFO_WAVEFORM_COUNT) + LFO_WAVEFORM_COUNT) % LFO_WAVEFORM_COUNT;
+            lfo.setWaveform(SEQ_TEST_TRACK, (LfoWaveform)wf);
+            changed = true;
+        }
+
+        int valueDelta = encoders.readDeltaVarispeed(SEQ_ENC_VALUE);
+        if (valueDelta != 0) {
+            int value = (int)lfo.getValue(SEQ_TEST_TRACK) + valueDelta;
+            lfo.setValue(SEQ_TEST_TRACK, (uint8_t)constrain(value, 0, 127));
+            changed = true;
+        }
+
+        int amountDelta = encoders.readDeltaVarispeed(SEQ_ENC_LENGTH);
+        if (amountDelta != 0) {
+            int amount = (int)lfo.getAmount(SEQ_TEST_TRACK) + amountDelta;
+            lfo.setAmount(SEQ_TEST_TRACK, (uint8_t)constrain(amount, 0, 127));
+            changed = true;
+        }
+    } else {
+        uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
+
+        int stepDelta = encoders.readDelta(SEQ_ENC_STEP);
+        if (stepDelta != 0) {
+            int next = ((int)selectedStep + stepDelta) % length;
+            if (next < 0) next += length;
+            selectedStep = (uint8_t)next;
+            changed = true;
+        }
+
+        int valueDelta = encoders.readDeltaVarispeed(SEQ_ENC_VALUE);
+        if (valueDelta != 0) {
+            int value = (int)sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep) + valueDelta;
+            value = constrain(value, 0, 127);
+            sequencer.setStepValue(SEQ_TEST_TRACK, selectedStep, (uint8_t)value);
+            changed = true;
+        }
+
+        int lengthDelta = encoders.readDelta(SEQ_ENC_LENGTH);
+        if (lengthDelta != 0) {
+            int newLength = (int)length + (lengthDelta > 0 ? 1 : -1);
+            newLength = constrain(newLength, 1, SEQ_STEPS);
+            sequencer.setLength(SEQ_TEST_TRACK, (uint8_t)newLength);
+            if (selectedStep >= newLength)
+                selectedStep = newLength - 1;
+            changed = true;
+        }
     }
 
+    // Rate: shared control, applies to whichever mode is active.
     int rateDelta = encoders.readDelta(SEQ_ENC_RATE);
     if (rateDelta != 0) {
-        int rate = (int)sequencer.getRate(SEQ_TEST_TRACK) + (rateDelta > 0 ? 1 : -1);
-        rate = constrain(rate, 0, SEQ_RATE_COUNT - 1);
-        sequencer.setRate(SEQ_TEST_TRACK, (SeqRate)rate);
+        if (lfoMode) {
+            int rate = (int)lfo.getRate(SEQ_TEST_TRACK) + (rateDelta > 0 ? 1 : -1);
+            rate = constrain(rate, 0, SEQ_RATE_COUNT - 1);
+            lfo.setRate(SEQ_TEST_TRACK, (SeqRate)rate);
+        } else {
+            int rate = (int)sequencer.getRate(SEQ_TEST_TRACK) + (rateDelta > 0 ? 1 : -1);
+            rate = constrain(rate, 0, SEQ_RATE_COUNT - 1);
+            sequencer.setRate(SEQ_TEST_TRACK, (SeqRate)rate);
+        }
         changed = true;
     }
 
     return changed;
 }
 
-bool readSequencerExitButton()
-{
-    bool reading = pcf.digitalRead(SEQ_EXIT_BUTTON);
-    updateButton(SEQ_EXIT_BUTTON, reading);
-    return wasShortPressed(SEQ_EXIT_BUTTON);
-}
-
 bool sequencerViewDirty()
 {
-    uint8_t curStep = sequencer.getCurrentStep(SEQ_TEST_TRACK);
-    bool running = sequencer.isRunning();
-    bool dirty = (curStep != lastPlayingStep) || (running != lastRunning);
-    lastPlayingStep = curStep;
-    lastRunning = running;
+    bool dirty;
+    if (lfoMode) {
+        float phase = lfo.getPhase(SEQ_TEST_TRACK);
+        uint8_t idx = (uint8_t)constrain((int)(phase * SEQ_STEPS), 0, SEQ_STEPS - 1);
+        bool running = lfo.isRunning();
+        dirty = (idx != lastLfoPhaseIndex) || (running != lastLfoRunning);
+        lastLfoPhaseIndex = idx;
+        lastLfoRunning = running;
+    } else {
+        uint8_t curStep = sequencer.getCurrentStep(SEQ_TEST_TRACK);
+        bool running = sequencer.isRunning();
+        dirty = (curStep != lastPlayingStep) || (running != lastRunning);
+        lastPlayingStep = curStep;
+        lastRunning = running;
+    }
     return dirty;
 }
 
@@ -77,7 +144,7 @@ bool sequencerViewDirty()
 // mirrored top and bottom, per screen:
 //   y=0-9    button box row
 //   y=10-17  encoder label row
-//   y=17-43  step grid (ticks + markers)
+//   y=17-43  step/LFO grid (ticks + markers)
 //   y=46-53  encoder label row
 //   y=54-63  button box row
 
@@ -104,7 +171,7 @@ static void drawEncoderLabel(PicoGFX_SSD1322 &disp, int cellX, int y, const char
     disp.print(label);
 }
 
-static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
+static void drawTickAt(PicoGFX_SSD1322 &disp, int col, uint8_t value, int color, bool marker, bool playhead)
 {
     const int colW = 32;
     const int margin = 4;
@@ -114,56 +181,87 @@ static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
     const int areaBottom = 40;
     const int areaH = areaBottom - areaTop;
 
-    uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
-    bool active = step < length;
-
-    uint8_t value = sequencer.getStepValue(SEQ_TEST_TRACK, step);
     int y = areaBottom - map(value, 0, 127, 0, areaH);
-
-    int color = (step == selectedStep) ? 15 : (active ? 11 : 4);
     disp.fillRect(x, y, tickW, 2, color);
 
-    if (step == selectedStep)
+    if (marker)
         disp.fillRect(x, areaBottom + 2, tickW, 1, 15);
 
-    if (sequencer.isRunning() && step == sequencer.getCurrentStep(SEQ_TEST_TRACK))
+    if (playhead)
         disp.fillRect(x, areaTop - 3, tickW, 1, 15);
+}
+
+static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
+{
+    uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
+    bool active = step < length;
+    uint8_t value = active ? sequencer.getStepValue(SEQ_TEST_TRACK, step) : 0;
+    bool isSelected = (step == selectedStep);
+    bool isPlaying = sequencer.isRunning() && step == sequencer.getCurrentStep(SEQ_TEST_TRACK);
+    int color = isSelected ? 15 : (active ? 11 : 4);
+    drawTickAt(disp, col, value, color, isSelected, isPlaying);
+}
+
+// Draws one column of the LFO waveform preview: the shape is spread over
+// the 16 available columns as one full cycle, so it visually redraws live
+// as waveform/value/amount change, with a playhead marking the current
+// phase reported by the engine.
+static void drawLfoTick(PicoGFX_SSD1322 &disp, int col, uint8_t index)
+{
+    float phase = (float)index / (float)SEQ_STEPS;
+    uint8_t value = lfo.previewOutput(SEQ_TEST_TRACK, phase);
+    bool isPlayhead = lfo.isRunning() && index == lastLfoPhaseIndex;
+    drawTickAt(disp, col, value, 11, false, isPlayhead);
 }
 
 void drawSequencerView()
 {
-    char labelStep[16], labelValue[16], labelLength[16], labelRate[16];
-    uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
-    snprintf(labelStep, sizeof(labelStep), "STEP %d/%d", selectedStep + 1, length);
-    snprintf(labelValue, sizeof(labelValue), "VAL %d", sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep));
-    snprintf(labelLength, sizeof(labelLength), "LEN %d", length);
-    snprintf(labelRate, sizeof(labelRate), "RATE %s", Sequencer::rateLabel(sequencer.getRate(SEQ_TEST_TRACK)));
+    char labelPos1[16], labelPos2[16], labelPos3[16], labelPos4[16];
 
-    // --- Display 1: STEP (idx0) / VALUE (idx1) ---
+    if (lfoMode) {
+        snprintf(labelPos1, sizeof(labelPos1), "WAVE %s", Lfo::waveformLabel(lfo.getWaveform(SEQ_TEST_TRACK)));
+        snprintf(labelPos2, sizeof(labelPos2), "VAL %d", lfo.getValue(SEQ_TEST_TRACK));
+        snprintf(labelPos3, sizeof(labelPos3), "RATE %s", Sequencer::rateLabel(lfo.getRate(SEQ_TEST_TRACK)));
+        snprintf(labelPos4, sizeof(labelPos4), "AMT %d", lfo.getAmount(SEQ_TEST_TRACK));
+    } else {
+        uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
+        snprintf(labelPos1, sizeof(labelPos1), "STEP %d/%d", selectedStep + 1, length);
+        snprintf(labelPos2, sizeof(labelPos2), "VAL %d", sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep));
+        snprintf(labelPos3, sizeof(labelPos3), "RATE %s", Sequencer::rateLabel(sequencer.getRate(SEQ_TEST_TRACK)));
+        snprintf(labelPos4, sizeof(labelPos4), "LEN %d", length);
+    }
+
+    const char* runLabel = (lfoMode ? lfo.isRunning() : sequencer.isRunning()) ? "RUN" : "STOP";
+
+    // --- Display 1: positions 1/2 (top), 5/6 (bottom) ---
     display1.fillScreen(0);
-    drawButtonBox(display1, 0, 0, "-");
+    drawButtonBox(display1, 0, 0, "SEQ/LFO");
     drawButtonBox(display1, 128, 0, "-");
-    drawEncoderLabel(display1, 0, 10, labelStep);
-    drawEncoderLabel(display1, 128, 10, labelValue);
-    for (int i = 0; i < 8; i++)
-        drawStepTick(display1, i, i);
+    drawEncoderLabel(display1, 0, 10, labelPos1);
+    drawEncoderLabel(display1, 128, 10, labelPos2);
+    for (int i = 0; i < 8; i++) {
+        if (lfoMode) drawLfoTick(display1, i, i);
+        else drawStepTick(display1, i, i);
+    }
     drawEncoderLabel(display1, 0, 46, "-");
     drawEncoderLabel(display1, 128, 46, "-");
-    drawButtonBox(display1, 0, 54, "-");
+    drawButtonBox(display1, 0, 54, "MIDI");
     drawButtonBox(display1, 128, 54, "-");
 
-    // --- Display 2: LENGTH (idx2) / RATE (idx3), EXIT on button 8 (idx7) ---
+    // --- Display 2: positions 3/4 (top), 7/8 (bottom) ---
     display2.fillScreen(0);
-    drawButtonBox(display2, 0, 0, "-");
-    drawButtonBox(display2, 128, 0, "-");
-    drawEncoderLabel(display2, 0, 10, labelLength);
-    drawEncoderLabel(display2, 128, 10, labelRate);
-    for (int i = 0; i < 8; i++)
-        drawStepTick(display2, i, i + 8);
+    drawButtonBox(display2, 0, 0, "SYNC");
+    drawButtonBox(display2, 128, 0, "CLR");
+    drawEncoderLabel(display2, 0, 10, labelPos3);
+    drawEncoderLabel(display2, 128, 10, labelPos4);
+    for (int i = 0; i < 8; i++) {
+        if (lfoMode) drawLfoTick(display2, i, i + 8);
+        else drawStepTick(display2, i, i + 8);
+    }
     drawEncoderLabel(display2, 0, 46, "-");
-    drawEncoderLabel(display2, 128, 46, sequencer.isRunning() ? "RUN" : "STOP");
+    drawEncoderLabel(display2, 128, 46, runLabel);
     drawButtonBox(display2, 0, 54, "-");
-    drawButtonBox(display2, 128, 54, "EXIT");
+    drawButtonBox(display2, 128, 54, "CLR");
 
     display1.displayBlocking();
     display2.displayBlocking();

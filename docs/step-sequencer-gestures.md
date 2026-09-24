@@ -84,37 +84,51 @@ Paramètres du LFO :
 Implémenté côté firmware (`src/sequencer/lfo.{h,cpp}`, moteur autonome, même
 pattern que `Sequencer` — un `Lfo` par track 0-7, calcule une valeur continue
 à chaque tick d'horloge en fonction de la phase dans le cycle, et n'envoie un
-CC que si la valeur a changé). **Pas encore branché à l'UI ni au toggle
-Clear/step-seq-LFO** — ça viendra avec la page Encoder Settings elle-même.
+CC que si la valeur a changé), **et maintenant branché dans le test boot
+standalone** (`sequencerView.{h,cpp}`) : toggle step-seq/LFO fonctionnel,
+affichage temps réel de la forme d'onde + playhead, édition waveform/value/
+rate/amount en direct. Toujours pas branché à une vraie page "Encoder
+Settings" ni aux gestes Shift — le test boot reste isolé (voir layout
+ci-dessous, qui documente maintenant l'état réellement implémenté plutôt
+qu'un plan).
 
-## Layout de la page "Encoder Settings"
+## Layout du test boot standalone (step sequencer + LFO)
 
-Une fois entré (Shift + push sur l'encodeur N, voir plus haut), les 8 encodeurs
-physiques sont repurposés pour éditer les réglages de l'encodeur cible N :
-step sequencer / LFO (au choix via Clear) + assignation MIDI + slew. L'édition
-CC/Ch dédiée (accès direct sans passer par tout le reste) se fait en appuyant
-sur l'encodeur 5.
+Actuellement implémenté directement au boot (`SEQUENCER_TEST_BOOT`), sans
+geste Shift ni page dédiée — ce layout remplace le brouillon précédent de
+la page "Encoder Settings", qu'il préfigure :
 
 | Position | Push (bouton) | Turn (rotation) |
 |---|---|---|
-| 1 (haut, col1) | Clear | Step select |
-| 2 (haut, col2) | — | Step value |
-| 3 (haut, col3) | Synced/Free (mode du Rate) | Rate |
-| 4 (haut, col4) | Exit | Length |
-| 5 (bas, col1) | PUSH/TURN editing | Ch |
-| 6 (bas, col2) | Note/CC type | Note/CC # |
+| 1 (haut, col1) | Toggle LFO/Step seq | Step select / Waveform (LFO) |
+| 2 (haut, col2) | — | Step value / Value (LFO) |
+| 3 (haut, col3) | Synced/Free (mode du Rate) — placeholder, non fonctionnel | Rate |
+| 4 (haut, col4) | Clear (reset step à 0 / amount à 0) | Length / Amount (LFO) |
+| 5 (bas, col1) | Edit MIDI — placeholder | — |
+| 6 (bas, col2) | — | — |
 | 7 (bas, col3) | — | — |
-| 8 (bas, col4) | Synced/Free (mode du Slew) | Slew time |
+| 8 (bas, col4) | Clear — placeholder | — |
 
 Précisions :
-- **Rate** et **Slew** ont chacun leur propre toggle Synced/Free indépendant
-  (position 3 pour le rate du step sequencer, position 8 pour le slew).
-- **Ch / Note-CC# / Note-CC type** (positions 5-6) éditent soit le mapping
-  MIDI du **push** de l'encodeur cible (`controls.getButtonShort(idx)`),
-  soit celui de sa **rotation** (`controls.getEncoder(idx)`) — deux structures
-  déjà distinctes et indépendantes dans le firmware. Le push de la position 5
-  ("PUSH/TURN editing") bascule lequel des deux est actuellement visé par
-  ces 3 contrôles.
+- **Rate** est un contrôle partagé : une seule valeur par mode (step
+  sequencer et LFO ont chacun leur propre `SeqRate`), la molette agit sur
+  celui du mode actif.
+- **Synced/Free** (position 3) et les deux `Clear`/`Edit MIDI` de la rangée
+  du bas (positions 5, 6, 7, 8) sont des placeholders : la boîte s'affiche
+  mais rien n'est branché derrière pour l'instant (pas de mode "Free" pour
+  le rate, pas de page d'édition MIDI).
+- Le toggle (position 1) désarme l'un des deux moteurs et arme l'autre
+  (`sequencer.arm`/`lfo.arm`), donc un seul des deux tourne et envoie du
+  MIDI à la fois sur la track de test.
+- L'affichage LFO réutilise la grille de steps : la forme d'onde est
+  échantillonnée sur 16 colonnes (un cycle complet), avec un repère de
+  lecture (« playhead ») qui suit la phase réelle envoyée par le moteur —
+  donc visuellement réactif en direct aux changements de waveform/value/
+  amount/rate.
+- La page "Encoder Settings" proper (accessible via Shift+push, avec édition
+  MIDI dédiée sur l'encodeur 5, cf. gestes ci-dessus) reste à construire —
+  ce layout de test boot en est la base de départ, pas encore le produit
+  final.
 
 ## Questions ouvertes
 

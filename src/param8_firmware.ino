@@ -60,13 +60,6 @@ void loop() {
   if (encChanged || viewChanged) {
     drawSequencerView();
   }
-  if (readSequencerExitButton()) {
-    // Placeholder: no other mode to return to in this isolated test boot.
-    // Stops the sequencer for now; real navigation comes with integration.
-    sequencer.arm(SEQ_TEST_TRACK, false);
-    sequencer.onClockStop();
-    Serial.println("EXIT pressed (stub: sequencer stopped)");
-  }
 }
 
 #else

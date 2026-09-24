@@ -52,6 +52,10 @@ public:
     uint8_t getCurrentOutput(uint8_t track) const;
     float getPhase(uint8_t track) const; // 0..1, for display
 
+    // Value the LFO would output at an arbitrary phase (0..1), without
+    // touching any state. Used by views to draw the waveform shape.
+    uint8_t previewOutput(uint8_t track, float phase) const;
+
     static const char* waveformLabel(LfoWaveform wf);
 
 private:

@@ -51,15 +51,21 @@ void Lfo::updateTrack(uint8_t track)
     if (ticksPerCycle == 0) ticksPerCycle = 1;
 
     float phase = (float)(_tickCount % ticksPerCycle) / (float)ticksPerCycle;
-    float wave = waveformValue(t.waveform, phase);
+    uint8_t output = previewOutput(track, phase);
 
-    int output = (int)t.value + (int)roundf(wave * (float)t.amount);
-    output = constrain(output, 0, 127);
-
-    if ((uint8_t)output != _lastOutput[track]) {
-        _lastOutput[track] = (uint8_t)output;
-        sendMidiMessage(MIDI_CC, t.ccNumber, (uint8_t)output, t.channel);
+    if (output != _lastOutput[track]) {
+        _lastOutput[track] = output;
+        sendMidiMessage(MIDI_CC, t.ccNumber, output, t.channel);
     }
+}
+
+uint8_t Lfo::previewOutput(uint8_t track, float phase) const
+{
+    if (track >= SEQ_TRACKS) return 0;
+    const LfoTrack &t = _tracks[track];
+    float wave = waveformValue(t.waveform, phase);
+    int output = (int)t.value + (int)roundf(wave * (float)t.amount);
+    return (uint8_t)constrain(output, 0, 127);
 }
 
 void Lfo::onClockTick()
