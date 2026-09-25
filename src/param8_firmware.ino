@@ -27,12 +27,16 @@ unsigned long screenSaverDelay = 300000; // 5 minutes par défaut
 void setup() {
   Serial.begin(115200);
   delay(100);
+  Serial.println("[boot] setupJsonManager");
   setupJsonManager();
+  Serial.println("[boot] setupMIDI");
   setupMIDI();
+  Serial.println("[boot] SPI.begin");
   SPI.setSCK(6);  // Set SCK to GPIO 6
   SPI.setTX(7);   // Set MOSI to GPIO 7
   SPI.begin();
   delay(100);
+  Serial.println("[boot] setupDisplay (SPI)");
   setupDisplay();
   controls.setDefaults();
   int savedLayout = json.getLayout();
@@ -44,10 +48,15 @@ void setup() {
   setBrightness(savedBrightness);
   updateFaderTitles();
   updateFaderValues();
+  Serial.println("[boot] encoders.setup");
   encoders.setup();
+  Serial.println("[boot] setupButtons (I2C/PCF8574)");
   setupButtons();
+  Serial.println("[boot] setupLeds");
   setupLeds();
+#ifndef DEBUG_BUILD
   watchdog_enable(8000, true);
+#endif
   Serial.println("=== STARTUP COMPLETE ===");
   delay(100);
 
