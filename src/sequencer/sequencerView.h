@@ -24,7 +24,11 @@
 #define SEQ_BTN_TOGGLE 0 // toggles step sequencer <-> LFO for SEQ_TEST_TRACK
 #define SEQ_BTN_CLEAR 3  // resets the current step value (seq) / amount (LFO) to 0
 
+extern bool sequencerActive;
+
 void setupSequencerView();
+void enterSequencerFor(uint8_t encoderIdx);
+void exitSequencer();
 
 // Reads the dedicated encoders/buttons for the active mode and applies any
 // change. Returns true if something changed (selection, value, length,

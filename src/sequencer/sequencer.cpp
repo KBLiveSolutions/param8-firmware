@@ -49,6 +49,12 @@ const char* Sequencer::rateLabel(SeqRate rate)
     }
 }
 
+void Sequencer::setSongPosition(uint32_t ticks)
+{
+    _tickCount = ticks;
+    _running = true;
+}
+
 void Sequencer::onClockStart()
 {
     _tickCount = 0;

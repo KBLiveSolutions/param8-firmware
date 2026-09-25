@@ -36,6 +36,7 @@ public:
     void onClockStop();
     bool isRunning() const { return _running; }
 
+    void setSongPosition(uint32_t ticks);
     void arm(uint8_t track, bool on);
     bool isArmed(uint8_t track) const;
 

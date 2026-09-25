@@ -5,6 +5,7 @@ extern bool shiftPressed;
 extern bool latchPressed;
 extern bool latchHeld;
 extern bool revertMode;
+extern bool presetModeActive;
 extern unsigned long lastInputTime;
 extern unsigned long lastButtonReleaseTime[8];
 
@@ -18,6 +19,7 @@ void sendNameRequest(uint8_t idx, uint8_t isButton);
 void sendClearNaming(uint8_t idx, uint8_t isButton);
 void checkNamingPending();
 void checkLatchPending();
+void checkShiftPreset();
 void onShiftPress();
 void onShiftRelease();
 void onLatchPress();

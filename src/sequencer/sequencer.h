@@ -41,6 +41,7 @@ public:
     bool isRunning() const { return _running; }
 
     // Per-track (encoder index 0-7) control.
+    void setSongPosition(uint32_t ticks);
     void arm(uint8_t track, bool on);
     bool isArmed(uint8_t track) const;
     void setStepValue(uint8_t track, uint8_t step, uint8_t value);

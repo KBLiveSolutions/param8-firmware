@@ -470,6 +470,19 @@ void onSysEx(const uint8_t *sysex, size_t len)
     serialEditorSend(reply, 7);
     break;
   }
+#ifdef SEQUENCER_ENABLED
+  case 0x1C:
+  {
+    // Song position sync from script: F0 6F 1C <high7> <mid7> <low7> F7
+    if (len < 7) break;
+    uint32_t ticks = ((uint32_t)(sysex[3] & 0x7F) << 14)
+                   | ((uint32_t)(sysex[4] & 0x7F) << 7)
+                   | (sysex[5] & 0x7F);
+    sequencer.setSongPosition(ticks);
+    lfo.setSongPosition(ticks);
+    break;
+  }
+#endif
   default:
     break;
   }

@@ -28,42 +28,82 @@ PicoGFX_SSD1322 display2(256, 64, &SPI, 12, 11, 13); // DC=12, RST=11, CS=13
 #endif
 
 unsigned long screenSaverDelay = 300000; // 5 minutes par défaut
+unsigned long lastDisplay = 0;
+const unsigned long displayInterval = 100;
+unsigned long lastInactivityCheck = 0;
+const unsigned long inactivityCheckInterval = 250;
+bool bootPresetSent = false;
 
 #ifdef SEQUENCER_ENABLED
 
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("[boot] setupMIDI");
+  setupJsonManager();
   setupMIDI();
-  Serial.println("[boot] SPI.begin");
   SPI.setSCK(6);
   SPI.setTX(7);
   SPI.begin();
   delay(100);
-  Serial.println("[boot] setupDisplay (SPI)");
   setupDisplay();
-  Serial.println("[boot] encoders.setup");
+  controls.setDefaults();
+  int savedLayout = json.getLayout();
+  if (savedLayout >= 0 && savedLayout <= 2)
+    faderLayout = static_cast<FaderLayout>(savedLayout);
+  int savedSS = json.getDoc()["screensaver"] | 300;
+  screenSaverDelay = (unsigned long)savedSS * 1000UL;
+  int savedBrightness = json.getDoc()["brightness"] | 1;
+  setBrightness(savedBrightness);
+  updateFaderTitles();
+  updateFaderValues();
   encoders.setup();
-  Serial.println("[boot] setupButtons (I2C/PCF8574)");
   setupButtons();
-  Serial.println("[boot] sequencer.setup");
+  setupLeds();
   sequencer.setup();
   lfo.setup();
-  setupSequencerView();
 #ifndef DEBUG_BUILD
   watchdog_enable(8000, true);
 #endif
-  Serial.println("=== SEQUENCER TEST BOOT ===");
+  Serial.println("=== PARAM8 ADVANCED BOOT ===");
+  delay(100);
 }
 
 void loop() {
   watchdog_update();
   midiRead();
-  bool encChanged = readSequencerEncoders();
-  bool viewChanged = sequencerViewDirty();
-  if (encChanged || viewChanged) {
-    drawSequencerView();
+
+  if (!bootPresetSent && millis() > 2000) {
+    bootPresetSent = true;
+    sendPresetSysEx(controls.getPreset());
+  }
+
+  serialEditorRead();
+  readButtons();
+
+  if (sequencerActive) {
+    bool encChanged = readSequencerEncoders();
+    bool viewChanged = sequencerViewDirty();
+    if (encChanged || viewChanged)
+      drawSequencerView();
+  } else {
+    encoders.read();
+    checkLatchPending();
+    checkNamingPending();
+    checkShiftPreset();
+    updateLeds();
+    updateDisplay();
+
+    unsigned long currentTime = millis();
+    if (currentTime - lastInactivityCheck >= inactivityCheckInterval) {
+      controls.checkInactiveEncoders();
+      lastInactivityCheck = currentTime;
+    }
+    if (screenSaverDelay > 0 && !screenSaverActive && currentTime - lastInputTime > screenSaverDelay) {
+      screenSaverActive = true;
+    }
+    if (screenSaverActive) {
+      runScreenSaver();
+    }
   }
 }
 
@@ -106,12 +146,6 @@ void setup() {
   delay(100);
 }
 
-unsigned long lastDisplay = 0;
-const unsigned long displayInterval = 100;  // 20 FPS
-unsigned long lastInactivityCheck = 0;
-const unsigned long inactivityCheckInterval = 250;
-bool bootPresetSent = false;
-
 void loop() {
     watchdog_update();
     midiRead();
@@ -125,6 +159,7 @@ void loop() {
     readButtons();
     checkLatchPending();
     checkNamingPending();
+    checkShiftPreset();
     updateLeds();
     updateDisplay();
 

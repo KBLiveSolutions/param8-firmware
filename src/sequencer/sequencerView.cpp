@@ -4,14 +4,19 @@
 #include "../input/encoders.h"
 #include "../input/buttons.h"
 #include "../view/display.h"
+#include "../core/controls.h"
+#include "../core/actions.h"
+#include "../midi/midi.h"
 
+bool sequencerActive = false;
 static bool lfoMode = false; // false = step sequencer, true = LFO
 static uint8_t selectedStep = 0;
 
 static uint8_t lastPlayingStep = 255; // sentinel: forces a first draw
 static bool lastRunning = false;
-static uint8_t lastLfoPhaseIndex = 255;
 static bool lastLfoRunning = false;
+static unsigned long lastLfoRedrawTime = 0;
+#define LFO_REDRAW_INTERVAL_MS 50  // 20 FPS max
 
 // Resolution of the LFO waveform preview: number of sample points/line
 // segments spanning one full cycle, drawn on a single screen (display1).
@@ -32,6 +37,31 @@ void setupSequencerView()
     lfo.setOutput(SEQ_TEST_TRACK, SEQ_OUTPUT_CC, SEQ_OUTPUT_CHANNEL);
     sequencer.arm(SEQ_TEST_TRACK, true);
     lfo.arm(SEQ_TEST_TRACK, false);
+}
+
+void enterSequencerFor(uint8_t encoderIdx)
+{
+    uint8_t cc = controls.getEncoder(encoderIdx).number;
+    uint8_t ch = controls.getEncoder(encoderIdx).channel;
+    sequencer.setOutput(SEQ_TEST_TRACK, cc, ch);
+    lfo.setOutput(SEQ_TEST_TRACK, cc, ch);
+    sequencer.arm(SEQ_TEST_TRACK, true);
+    lfo.arm(SEQ_TEST_TRACK, false);
+    lfoMode = false;
+    selectedStep = 0;
+    sequencerActive = true;
+    // Request song position from script for immediate sync
+    uint8_t syncReq[5] = {240, 111, 0x1D, 0, 247};
+    usb_midi.write(syncReq, 5);
+    drawSequencerView();
+}
+
+void exitSequencer()
+{
+    sequencerActive = false;
+    updateFaderTitles();
+    updateFaderValues();
+    showDisplay();
 }
 
 bool readSequencerEncoders()
@@ -129,12 +159,13 @@ bool sequencerViewDirty()
 {
     bool dirty;
     if (lfoMode) {
-        float phase = lfo.getPhase(SEQ_TEST_TRACK);
-        uint8_t idx = (uint8_t)constrain((int)(phase * LFO_DISPLAY_RES), 0, LFO_DISPLAY_RES - 1);
+        unsigned long now = millis();
         bool running = lfo.isRunning();
-        dirty = (idx != lastLfoPhaseIndex) || (running != lastLfoRunning);
-        lastLfoPhaseIndex = idx;
-        lastLfoRunning = running;
+        dirty = (now - lastLfoRedrawTime >= LFO_REDRAW_INTERVAL_MS) || (running != lastLfoRunning);
+        if (dirty) {
+            lastLfoRedrawTime = now;
+            lastLfoRunning = running;
+        }
     } else {
         uint8_t curStep = sequencer.getCurrentStep(SEQ_TEST_TRACK);
         bool running = sequencer.isRunning();

@@ -4,8 +4,14 @@
 #include "jsonManager.h"
 #include "../view/display.h"
 #include "../view/leds.h"
+#ifdef SEQUENCER_ENABLED
+#include "../sequencer/sequencerView.h"
+#endif
 
 #define MAX_LATCH_EVENTS 256
+#define SHIFT_DOUBLE_TAP_WINDOW 300
+#define SHIFT_PRESET_SHOW_DELAY 500
+
 bool shiftPressed = false;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
@@ -21,6 +27,12 @@ bool latchHeld = false;
 bool namingPendingConfirm = false;
 unsigned long namingConfirmTime = 0;
 
+bool shiftDoubleTapPending = false;
+unsigned long shiftFirstReleaseTime = 0;
+bool shiftIsDoubleTap = false;
+unsigned long shiftSecondPressTime = 0;
+bool presetModeActive = false;
+
 // Pour le mode absolu : on stocke juste la dernière valeur et si elle a changé
 uint8_t latchAbsoluteValue[8] = {0};
 bool latchAbsoluteChanged[8] = {false};
@@ -31,9 +43,22 @@ bool revertAbsoluteChanged[8] = {false};
 
 void onShiftPress()
 {
+#ifdef SEQUENCER_ENABLED
+    if (sequencerActive) {
+        exitSequencer();
+        return;
+    }
+#endif
     shiftPressed = true;
     setLed(1, true);
     sendMidiMessage(0, 110, 127, 7);
+
+    unsigned long now = millis();
+    if (shiftDoubleTapPending && (now - shiftFirstReleaseTime < SHIFT_DOUBLE_TAP_WINDOW)) {
+        shiftIsDoubleTap = true;
+        shiftSecondPressTime = now;
+    }
+    shiftDoubleTapPending = false;
 
     if (revertMode)
     {
@@ -47,28 +72,24 @@ void onShiftPress()
         for (int i = 0; i < 8; ++i)
             revertAbsoluteChanged[i] = false;
     }
-    for (int i = 0; i < 8; ++i)
-    {
-
-        char buf[24];
-        static const char* buttonNames[] = {
-            "Preset 1", "Preset 2", "Preset 3", "Preset 4",
-            "Preset 5", "Preset 6", "Global", "Device"
-        };
-        snprintf(buf, sizeof(buf), buttonNames[i]);
-        faders[i]->drawButtonName(buf, i==controls.getPreset());
-    }
 }
 
 void onShiftRelease()
 {
     shiftPressed = false;
     setLed(1, false);
-    sendMidiMessage(0, 110, 0, 7);    
-    for (int i = 0; i < 8; ++i)
-    {
-    faders[i]->updateButtonName(controls.getButtonShort(i).value);
+    sendMidiMessage(0, 110, 0, 7);
+
+    if (presetModeActive) {
+        presetModeActive = false;
+    } else if (!shiftIsDoubleTap) {
+        shiftDoubleTapPending = true;
+        shiftFirstReleaseTime = millis();
     }
+    shiftIsDoubleTap = false;
+
+    for (int i = 0; i < 8; ++i)
+        faders[i]->updateButtonName(controls.getButtonShort(i).value);
 }
 
 void sendNameRequest(uint8_t idx, uint8_t isButton)
@@ -111,6 +132,25 @@ void checkNamingPending()
     {
         namingPendingConfirm = false;
         sendClearNaming(lastControlIdx, lastControlIsButton ? 1 : 0);
+    }
+}
+
+void checkShiftPreset()
+{
+    if (!shiftIsDoubleTap || presetModeActive)
+        return;
+    if (millis() - shiftSecondPressTime < SHIFT_PRESET_SHOW_DELAY)
+        return;
+    presetModeActive = true;
+    static const char* buttonNames[] = {
+        "Preset 1", "Preset 2", "Preset 3", "Preset 4",
+        "Preset 5", "Preset 6", "Global", "Device"
+    };
+    for (int i = 0; i < 8; ++i)
+    {
+        char buf[24];
+        snprintf(buf, sizeof(buf), buttonNames[i]);
+        faders[i]->drawButtonName(buf, i == controls.getPreset());
     }
 }
 
@@ -204,6 +244,9 @@ void onButtonShortPress(uint8_t idx)
 
 void onButtonPressed(uint8_t idx)
 {
+#ifdef SEQUENCER_ENABLED
+    if (sequencerActive) return;
+#endif
     lastControlIdx = idx;
     lastControlIsButton = true;
     lastInputTime = millis();
@@ -212,7 +255,13 @@ void onButtonPressed(uint8_t idx)
         screenSaverActive = false;
         showDisplay(); // réaffiche l'UI normale
     }
-    if (shiftPressed)
+#ifdef SEQUENCER_ENABLED
+    if (shiftPressed && !presetModeActive) {
+        enterSequencerFor(idx);
+        return;
+    }
+#endif
+    if (presetModeActive)
     {
         char buf[24];
         static const char* buttonNames[] = {
@@ -227,6 +276,7 @@ void onButtonPressed(uint8_t idx)
         updateFaderValues();
         showDisplay();
         sendPresetSysEx(idx);
+        presetModeActive = false;
         return;
     }
     else
@@ -256,6 +306,9 @@ void onButtonPressed(uint8_t idx)
 
 void onButtonReleased(uint8_t idx)
 {
+#ifdef SEQUENCER_ENABLED
+    if (sequencerActive) return;
+#endif
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;

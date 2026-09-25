@@ -50,7 +50,9 @@ void Lfo::updateTrack(uint8_t track)
     uint32_t ticksPerCycle = Sequencer::ticksPerStep(t.rate);
     if (ticksPerCycle == 0) ticksPerCycle = 1;
 
-    float phase = (float)(_tickCount % ticksPerCycle) / (float)ticksPerCycle;
+    // _tickCount was incremented before this call, so subtract 1 to align
+    // phase 0 with the first clock tick after Start (= the Ableton downbeat).
+    float phase = (float)((_tickCount - 1) % ticksPerCycle) / (float)ticksPerCycle;
     uint8_t output = previewOutput(track, phase);
 
     if (output != _lastOutput[track]) {
@@ -75,6 +77,21 @@ void Lfo::onClockTick()
     for (uint8_t i = 0; i < SEQ_TRACKS; i++) {
         if (_tracks[i].armed)
             updateTrack(i);
+    }
+}
+
+void Lfo::setSongPosition(uint32_t ticks)
+{
+    // +1 so the next clock tick gives phase = ticks%cycle / cycle (see updateTrack _tickCount-1)
+    _tickCount = ticks + 1;
+    _running = true;
+    for (uint8_t i = 0; i < SEQ_TRACKS; i++) {
+        if (_tracks[i].armed) {
+            uint32_t tpc = Sequencer::ticksPerStep(_tracks[i].rate);
+            if (tpc == 0) tpc = 1;
+            float phase = (float)(ticks % tpc) / (float)tpc;
+            _lastOutput[i] = previewOutput(i, phase);
+        }
     }
 }
 
@@ -147,10 +164,10 @@ uint8_t Lfo::getCurrentOutput(uint8_t track) const
 
 float Lfo::getPhase(uint8_t track) const
 {
-    if (track >= SEQ_TRACKS) return 0.0f;
+    if (track >= SEQ_TRACKS || _tickCount == 0) return 0.0f;
     uint32_t ticksPerCycle = Sequencer::ticksPerStep(_tracks[track].rate);
     if (ticksPerCycle == 0) return 0.0f;
-    return (float)(_tickCount % ticksPerCycle) / (float)ticksPerCycle;
+    return (float)((_tickCount - 1) % ticksPerCycle) / (float)ticksPerCycle;
 }
 
 const char* Lfo::waveformLabel(LfoWaveform wf)
