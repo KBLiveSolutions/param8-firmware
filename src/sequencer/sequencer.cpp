@@ -63,6 +63,11 @@ void Sequencer::onClockStart()
         _stepIndex[i] = 0;
 }
 
+void Sequencer::onClockContinue()
+{
+    _running = true;
+}
+
 void Sequencer::onClockStop()
 {
     _running = false;

@@ -33,6 +33,7 @@ public:
     // clock as Sequencer).
     void onClockTick();
     void onClockStart();
+    void onClockContinue();
     void onClockStop();
     bool isRunning() const { return _running; }
 

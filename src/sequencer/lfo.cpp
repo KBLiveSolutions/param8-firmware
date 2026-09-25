@@ -21,6 +21,11 @@ void Lfo::onClockStart()
     _running = true;
 }
 
+void Lfo::onClockContinue()
+{
+    _running = true;
+}
+
 void Lfo::onClockStop()
 {
     _running = false;

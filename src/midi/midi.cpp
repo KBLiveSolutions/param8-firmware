@@ -176,7 +176,7 @@ void handleMIDIDAWMessage(uint8_t *packet)
     switch (packet[1]) {
       case 0xF8: sequencer.onClockTick(); lfo.onClockTick(); break;
       case 0xFA: sequencer.onClockStart(); lfo.onClockStart(); break;
-      case 0xFB: sequencer.onClockStart(); lfo.onClockStart(); break; // Continue (position resume not tracked yet)
+      case 0xFB: sequencer.onClockContinue(); lfo.onClockContinue(); break;
       case 0xFC: sequencer.onClockStop(); lfo.onClockStop(); break;
       default: break;
     }

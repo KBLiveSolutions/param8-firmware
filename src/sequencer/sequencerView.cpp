@@ -31,14 +31,6 @@ static void setMode(bool toLfo)
     lfo.arm(SEQ_TEST_TRACK, toLfo);
 }
 
-void setupSequencerView()
-{
-    sequencer.setOutput(SEQ_TEST_TRACK, SEQ_OUTPUT_CC, SEQ_OUTPUT_CHANNEL);
-    lfo.setOutput(SEQ_TEST_TRACK, SEQ_OUTPUT_CC, SEQ_OUTPUT_CHANNEL);
-    sequencer.arm(SEQ_TEST_TRACK, true);
-    lfo.arm(SEQ_TEST_TRACK, false);
-}
-
 void enterSequencerFor(uint8_t encoderIdx)
 {
     uint8_t cc = controls.getEncoder(encoderIdx).number;

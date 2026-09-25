@@ -37,6 +37,7 @@ public:
     // MIDI realtime handlers, call from the incoming-clock parser.
     void onClockTick();
     void onClockStart();
+    void onClockContinue();
     void onClockStop();
     bool isRunning() const { return _running; }
 

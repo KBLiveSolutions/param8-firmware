@@ -26,7 +26,6 @@
 
 extern bool sequencerActive;
 
-void setupSequencerView();
 void enterSequencerFor(uint8_t encoderIdx);
 void exitSequencer();
 
