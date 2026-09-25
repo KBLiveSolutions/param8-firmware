@@ -6,8 +6,10 @@
 #include "../view/display.h"
 #include "../core/jsonManager.h"
 #include "../usb/serial_editor.h"
+#ifdef SEQUENCER_ENABLED
 #include "../sequencer/sequencer.h"
 #include "../sequencer/lfo.h"
+#endif
 
 bool liveConnected = false;
 bool isSysExContinued = false;
@@ -170,6 +172,7 @@ void handleMIDIDAWMessage(uint8_t *packet)
   }
   case 0xF0: // System Realtime (Clock/Start/Continue/Stop, 24 ppqn)
   {
+#ifdef SEQUENCER_ENABLED
     switch (packet[1]) {
       case 0xF8: sequencer.onClockTick(); lfo.onClockTick(); break;
       case 0xFA: sequencer.onClockStart(); lfo.onClockStart(); break;
@@ -177,6 +180,7 @@ void handleMIDIDAWMessage(uint8_t *packet)
       case 0xFC: sequencer.onClockStop(); lfo.onClockStop(); break;
       default: break;
     }
+#endif
     break;
   }
   default:
