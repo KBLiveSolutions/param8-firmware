@@ -481,6 +481,7 @@ void updateFaderTitles()
     if (preset == 7) {
         deviceLabel[0] = '\0';
         bankLabel[0] = '\0';
+        trackLabel[0] = '\0';
     } else if (preset == 6) {
         strncpy(deviceLabel, "Track", sizeof(deviceLabel));
         strncpy(bankLabel, "Global", sizeof(bankLabel));
