@@ -301,6 +301,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     strncpy(trackLabel, ascii_string, sizeof(trackLabel));
     trackLabel[sizeof(trackLabel)-1] = '\0';
     trackLabelDirty = true;
+    drawDeviceBankLabels();
+    flushDisplays();
     break;
 
   case 5:

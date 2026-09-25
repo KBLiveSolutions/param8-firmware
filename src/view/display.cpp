@@ -140,7 +140,7 @@ void updateDisplay() {
 
 void drawDeviceBankLabels() {
     if (screenSaverActive) return;
-    if (!deviceLabelDirty && !bankLabelDirty) return;
+    if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty) return;
     if (deviceLabelDirty) {
         deviceLabelDirty = false;
         if (deviceLabel[0] != '\0')
