@@ -7,20 +7,11 @@
 FaderLayout faderLayout = LAYOUT_COMPACT;
 
 void FaderWidget::drawPresetButton(const char* line1, const char* line2, bool selected) {
-    char u1[20] = {0}, u2[20] = {0};
-    for (size_t i = 0; line1[i] && i < sizeof(u1) - 1; i++)
-        u1[i] = toupper((unsigned char)line1[i]);
-    if (line2) {
-        for (size_t i = 0; line2[i] && i < sizeof(u2) - 1; i++)
-            u2[i] = toupper((unsigned char)line2[i]);
-    }
-
     display.fillRect(x_offset, y_offset, 128, 32, 0);
 
-    // Same width/position as button boxes
-    int btn_x = x_offset + 32;
+    int btn_x = x_offset + 2;
     int btn_y = y_offset + 3;
-    int btn_w = 64;
+    int btn_w = 124;
     int btn_h = 26;
 
     if (selected)
@@ -29,29 +20,21 @@ void FaderWidget::drawPresetButton(const char* line1, const char* line2, bool se
         display.drawRect(btn_x, btn_y, btn_w, btn_h, 15);
 
     int textColor = selected ? 0 : 15;
-    bool twoLines = (u2[0] != '\0');
+    bool twoLines = (line2 && line2[0] != '\0');
 
+    display.setFont(NULL);
+    display.setTextColor(textColor);
     if (twoLines) {
-        // Line 1: 7pt bold (cursor = baseline)
-        display.setFont(&Arial_Bold7pt7b);
-        int tw1 = getStrWidth(display, u1);
-        display.setCursor(btn_x + (btn_w - tw1) / 2, btn_y + 10);
-        display.setTextColor(textColor);
-        display.print(u1);
-        // Line 2: default font (cursor = top-left of char)
-        display.setFont(NULL);
-        int tw2 = getStrWidth(display, u2);
-        display.setCursor(btn_x + (btn_w - tw2) / 2, btn_y + 16);
-        display.setTextColor(textColor);
-        display.print(u2);
+        int tw1 = getStrWidth(display, line1);
+        display.setCursor(btn_x + (btn_w - tw1) / 2, btn_y + 7);
+        display.print(line1);
+        int tw2 = getStrWidth(display, line2);
+        display.setCursor(btn_x + (btn_w - tw2) / 2, btn_y + 17);
+        display.print(line2);
     } else {
-        // Single line centered
-        display.setFont(&Arial_Bold7pt7b);
-        int tw = getStrWidth(display, u1);
-        display.setCursor(btn_x + (btn_w - tw) / 2, btn_y + (btn_h + 8) / 2);
-        display.setTextColor(textColor);
-        display.print(u1);
-        display.setFont(NULL);
+        int tw = getStrWidth(display, line1);
+        display.setCursor(btn_x + (btn_w - tw) / 2, btn_y + (btn_h - 8) / 2);
+        display.print(line1);
     }
 }
 
