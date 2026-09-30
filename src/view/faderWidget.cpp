@@ -26,7 +26,7 @@ void FaderWidget::drawPresetButton(const char* line1, const char* line2, bool se
     display.setTextColor(textColor);
     if (twoLines) {
         int tw1 = getStrWidth(display, line1);
-        display.setCursor(btn_x + (btn_w - tw1) / 2, btn_y + 8);
+        display.setCursor(btn_x + (btn_w - tw1) / 2, btn_y + 10);
         display.print(line1);
         int tw2 = getStrWidth(display, line2);
         display.setCursor(btn_x + (btn_w - tw2) / 2, btn_y + 21);
