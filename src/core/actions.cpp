@@ -9,7 +9,7 @@
 #endif
 
 #define MAX_LATCH_EVENTS 256
-#define SHIFT_PRESET_HOLD_MS 700
+#define SHIFT_PRESET_HOLD_MS 500
 
 bool shiftPressed = false;
 unsigned long shiftPressTime = 0;
