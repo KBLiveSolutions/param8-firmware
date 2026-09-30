@@ -124,14 +124,19 @@ void checkShiftPreset()
     if (millis() - shiftPressTime < SHIFT_PRESET_HOLD_MS) return;
 
     presetModeActive = true;
-    static const char* presetNames[] = {
-        "Preset 1", "Preset 2", "Preset 3", "Preset 4",
-        "Preset 5", "Preset 6", "Global", "Device"
-    };
     display1.fillScreen(0);
     display2.fillScreen(0);
-    for (int i = 0; i < 8; ++i)
-        faders[i]->drawPresetButton(presetNames[i], i == controls.getPreset());
+    for (int i = 0; i < 8; ++i) {
+        char l1[20], l2[20] = {0};
+        if (i == 6)      { strcpy(l1, "Global"); strcpy(l2, "Mode"); }
+        else if (i == 7) { strcpy(l1, "Device"); strcpy(l2, "Mode"); }
+        else {
+            snprintf(l1, sizeof(l1), "Preset %d", i + 1);
+            const char* pname = controls.getPresetName(i);
+            if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
+        }
+        faders[i]->drawPresetButton(l1, l2, i == controls.getPreset());
+    }
     flushDisplays();
 }
 
@@ -244,11 +249,15 @@ void onButtonPressed(uint8_t idx)
         }
 #endif
         if (presetModeActive) {
-            static const char* presetNames[] = {
-                "Preset 1", "Preset 2", "Preset 3", "Preset 4",
-                "Preset 5", "Preset 6", "Global", "Device"
-            };
-            faders[idx]->drawPresetButton(presetNames[idx], true);
+            char l1[20], l2[20] = {0};
+            if (idx == 6)      { strcpy(l1, "Global"); strcpy(l2, "Mode"); }
+            else if (idx == 7) { strcpy(l1, "Device"); strcpy(l2, "Mode"); }
+            else {
+                snprintf(l1, sizeof(l1), "Preset %d", idx + 1);
+                const char* pname = controls.getPresetName(idx);
+                if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
+            }
+            faders[idx]->drawPresetButton(l1, l2, true);
             flushDisplays();
             controls.setPreset(idx);
             presetModeActive = false;
