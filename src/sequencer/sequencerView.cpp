@@ -96,7 +96,7 @@ bool readSequencerEncoders()
         int amountDelta = encoders.readDeltaVarispeed(SEQ_ENC_LENGTH);
         if (amountDelta != 0) {
             int amount = (int)lfo.getAmount(SEQ_TEST_TRACK) + amountDelta;
-            lfo.setAmount(SEQ_TEST_TRACK, (uint8_t)constrain(amount, 0, 127));
+            lfo.setAmount(SEQ_TEST_TRACK, (int8_t)constrain(amount, -127, 127));
             changed = true;
         }
     } else {

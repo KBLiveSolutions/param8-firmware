@@ -144,13 +144,15 @@ uint8_t Lfo::getValue(uint8_t track) const
     return track < SEQ_TRACKS ? _tracks[track].value : 64;
 }
 
-void Lfo::setAmount(uint8_t track, uint8_t amount)
+void Lfo::setAmount(uint8_t track, int8_t amount)
 {
     if (track >= SEQ_TRACKS) return;
-    _tracks[track].amount = constrain(amount, 0, 127);
+    int v = (int)_tracks[track].value;
+    int a = constrain((int)amount, -v, 127 - v);
+    _tracks[track].amount = (int8_t)a;
 }
 
-uint8_t Lfo::getAmount(uint8_t track) const
+int8_t Lfo::getAmount(uint8_t track) const
 {
     return track < SEQ_TRACKS ? _tracks[track].amount : 0;
 }

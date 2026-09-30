@@ -16,7 +16,7 @@ struct LfoTrack {
     LfoWaveform waveform = LFO_SINE;
     SeqRate rate = SEQ_RATE_1_4; // cycle length, synced to clock (same rate table as Sequencer)
     uint8_t value = 64;          // center value, 0-127 - same meaning as the CC value, the LFO oscillates around it
-    uint8_t amount = 32;         // modulation depth, 0-127
+    int8_t  amount = 0;           // modulation depth, -127..+127 (sign inverts waveform)
     bool armed = false;
     uint8_t ccNumber = 1;
     uint8_t channel = 0; // 0-indexed (displayed as channel+1)
@@ -47,8 +47,8 @@ public:
     SeqRate getRate(uint8_t track) const;
     void setValue(uint8_t track, uint8_t value);
     uint8_t getValue(uint8_t track) const;
-    void setAmount(uint8_t track, uint8_t amount);
-    uint8_t getAmount(uint8_t track) const;
+    void setAmount(uint8_t track, int8_t amount);
+    int8_t getAmount(uint8_t track) const;
     void setOutput(uint8_t track, uint8_t ccNumber, uint8_t channel);
 
     uint8_t getCurrentOutput(uint8_t track) const;
