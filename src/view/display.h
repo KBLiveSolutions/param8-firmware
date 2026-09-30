@@ -13,6 +13,8 @@ extern char deviceLabel[20];
 extern char bankLabel[20];
 extern bool deviceLabelDirty;
 extern bool bankLabelDirty;
+extern char trackLabel[20];
+extern bool trackLabelDirty;
 
 // Helper: pixel width of str using the current font on disp
 // TODO: result accuracy depends on current font; call after setFont()

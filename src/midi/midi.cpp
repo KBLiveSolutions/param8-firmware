@@ -295,6 +295,15 @@ void onSysEx(const uint8_t *sysex, size_t len)
     }
     break;
   }
+  case 6:
+  {
+    strncpy(trackLabel, ascii_string, sizeof(trackLabel));
+    trackLabel[sizeof(trackLabel)-1] = '\0';
+    trackLabelDirty = true;
+    drawDeviceBankLabels();
+    flushDisplays();
+    break;
+  }
   case 7:
   {
     controls.getPresetControls(param_number);
@@ -378,10 +387,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
       ? controls.getButtonShortAt(preset, idx)
       : controls.getEncoderAt(preset, idx);
     strncpy(ctrl.controlName, name, sizeof(ctrl.controlName) - 1);
-
-    const char* section = isButton ? "button_names" : "encoder_names";
-    json.getDoc()[String(preset)][section][String(idx)] = name;
-    json.save();
 
     if (preset == controls.getPreset()) {
       updateFaderTitles();

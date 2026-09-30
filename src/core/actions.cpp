@@ -92,10 +92,6 @@ void sendClearNaming(uint8_t idx, uint8_t isButton)
     if (!isButton)
         ctrl.hasWatcher = false;
 
-    const char* section = isButton ? "button_names" : "encoder_names";
-    json.getDoc()[String(preset)][section].remove(String(idx));
-    json.save();
-
     updateFaderTitles();
     showDisplay();
 
@@ -428,6 +424,7 @@ void updateFaderTitles()
     if (preset == 7) {
         deviceLabel[0] = '\0';
         bankLabel[0] = '\0';
+        trackLabel[0] = '\0';
     } else if (preset == 6) {
         strncpy(deviceLabel, "Track", sizeof(deviceLabel));
         strncpy(bankLabel, "Global", sizeof(bankLabel));
