@@ -261,6 +261,7 @@ void onButtonPressed(uint8_t idx)
             flushDisplays();
             controls.setPreset(idx);
             presetModeActive = false;
+            shiftPressTime = millis();
             updateFaderTitles();
             updateFaderValues();
             showDisplay();
