@@ -6,6 +6,35 @@
 
 FaderLayout faderLayout = LAYOUT_COMPACT;
 
+void FaderWidget::drawPresetButton(const char* txt, bool selected) {
+    char upper[20];
+    for (size_t i = 0; txt[i] && i < sizeof(upper) - 1; i++) {
+        upper[i] = toupper((unsigned char)txt[i]);
+        upper[i + 1] = '\0';
+    }
+
+    display.fillRect(x_offset, y_offset, 128, 32, 0);
+
+    int btn_x = x_offset + 2;
+    int btn_y = y_offset + 3;
+    int btn_w = 124;
+    int btn_h = 26;
+
+    if (selected)
+        display.fillRect(btn_x, btn_y, btn_w, btn_h, 15);
+    else
+        display.drawRect(btn_x, btn_y, btn_w, btn_h, 15);
+
+    display.setFont(&Arial_Bold7pt7b);
+    int tw = getStrWidth(display, upper);
+    int text_x = btn_x + (btn_w - tw) / 2;
+    int text_y = btn_y + (btn_h + 8) / 2;
+    display.setCursor(text_x, text_y);
+    display.setTextColor(selected ? 0 : 15);
+    display.print(upper);
+    display.setFont(NULL);
+}
+
 void FaderWidget::drawSeparators() {
 }
 

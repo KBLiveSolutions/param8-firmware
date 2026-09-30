@@ -44,5 +44,6 @@ public:
     void updateTitle(const char* txt);
     void setParamName(const char* txt);
     void showParamName();
+    void drawPresetButton(const char* txt, bool selected);
     void drawSeparators();
 };

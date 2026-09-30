@@ -9,10 +9,11 @@
 #endif
 
 #define MAX_LATCH_EVENTS 256
-#define SHIFT_DOUBLE_TAP_WINDOW 300
-#define SHIFT_PRESET_SHOW_DELAY 500
+#define SHIFT_PRESET_HOLD_MS 1000
 
 bool shiftPressed = false;
+unsigned long shiftPressTime = 0;
+bool presetModeActive = false;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t latchEncoderEventCount[8] = {0};
@@ -27,11 +28,6 @@ bool latchHeld = false;
 bool namingPendingConfirm = false;
 unsigned long namingConfirmTime = 0;
 
-bool shiftDoubleTapPending = false;
-unsigned long shiftFirstReleaseTime = 0;
-bool shiftIsDoubleTap = false;
-unsigned long shiftSecondPressTime = 0;
-bool presetModeActive = false;
 
 // Pour le mode absolu : on stocke juste la dernière valeur et si elle a changé
 uint8_t latchAbsoluteValue[8] = {0};
@@ -50,15 +46,9 @@ void onShiftPress()
     }
 #endif
     shiftPressed = true;
+    shiftPressTime = millis();
     setLed(1, true);
     sendMidiMessage(0, 110, 127, 7);
-
-    unsigned long now = millis();
-    if (shiftDoubleTapPending && (now - shiftFirstReleaseTime < SHIFT_DOUBLE_TAP_WINDOW)) {
-        shiftIsDoubleTap = true;
-        shiftSecondPressTime = now;
-    }
-    shiftDoubleTapPending = false;
 
     if (revertMode)
     {
@@ -82,14 +72,11 @@ void onShiftRelease()
 
     if (presetModeActive) {
         presetModeActive = false;
-    } else if (!shiftIsDoubleTap) {
-        shiftDoubleTapPending = true;
-        shiftFirstReleaseTime = millis();
+        showDisplay();
+    } else {
+        for (int i = 0; i < 8; ++i)
+            faders[i]->updateButtonName(controls.getButtonShort(i).value);
     }
-    shiftIsDoubleTap = false;
-
-    for (int i = 0; i < 8; ++i)
-        faders[i]->updateButtonName(controls.getButtonShort(i).value);
 }
 
 void sendNameRequest(uint8_t idx, uint8_t isButton)
@@ -113,10 +100,6 @@ void sendClearNaming(uint8_t idx, uint8_t isButton)
     if (!isButton)
         ctrl.hasWatcher = false;
 
-    const char* section = isButton ? "button_names" : "encoder_names";
-    json.getDoc()[String(preset)][section].remove(String(idx));
-    json.save();
-
     updateFaderTitles();
     showDisplay();
 
@@ -137,21 +120,19 @@ void checkNamingPending()
 
 void checkShiftPreset()
 {
-    if (!shiftIsDoubleTap || presetModeActive)
-        return;
-    if (millis() - shiftSecondPressTime < SHIFT_PRESET_SHOW_DELAY)
-        return;
+    if (!shiftPressed || presetModeActive) return;
+    if (millis() - shiftPressTime < SHIFT_PRESET_HOLD_MS) return;
+
     presetModeActive = true;
-    static const char* buttonNames[] = {
+    static const char* presetNames[] = {
         "Preset 1", "Preset 2", "Preset 3", "Preset 4",
         "Preset 5", "Preset 6", "Global", "Device"
     };
+    display1.fillScreen(0);
+    display2.fillScreen(0);
     for (int i = 0; i < 8; ++i)
-    {
-        char buf[24];
-        snprintf(buf, sizeof(buf), buttonNames[i]);
-        faders[i]->drawButtonName(buf, i == controls.getPreset());
-    }
+        faders[i]->drawPresetButton(presetNames[i], i == controls.getPreset());
+    flushDisplays();
 }
 
 void checkLatchPending()
@@ -255,31 +236,29 @@ void onButtonPressed(uint8_t idx)
         screenSaverActive = false;
         showDisplay(); // réaffiche l'UI normale
     }
+    if (shiftPressed) {
 #ifdef SEQUENCER_ENABLED
-    if (shiftPressed && !presetModeActive) {
-        enterSequencerFor(idx);
-        return;
-    }
+        if (!presetModeActive) {
+            enterSequencerFor(idx);
+            return;
+        }
 #endif
-    if (presetModeActive)
-    {
-        char buf[24];
-        static const char* buttonNames[] = {
-            "Preset 1", "Preset 2", "Preset 3", "Preset 4",
-            "Preset 5", "Preset 6", "Global", "Device"
-        };
-        snprintf(buf, sizeof(buf), buttonNames[idx]);
-        faders[idx]->drawButtonName(buf, true);
-        flushDisplays();
-        controls.setPreset(idx);
-        updateFaderTitles();
-        updateFaderValues();
-        showDisplay();
-        sendPresetSysEx(idx);
-        presetModeActive = false;
+        if (presetModeActive) {
+            static const char* presetNames[] = {
+                "Preset 1", "Preset 2", "Preset 3", "Preset 4",
+                "Preset 5", "Preset 6", "Global", "Device"
+            };
+            faders[idx]->drawPresetButton(presetNames[idx], true);
+            flushDisplays();
+            controls.setPreset(idx);
+            presetModeActive = false;
+            updateFaderTitles();
+            updateFaderValues();
+            showDisplay();
+            sendPresetSysEx(idx);
+        }
         return;
     }
-    else
     {
         uint8_t _value = 127;
         controls.getButtonShort(idx).value = _value;
