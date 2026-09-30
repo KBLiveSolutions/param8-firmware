@@ -404,10 +404,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
       : controls.getEncoderAt(preset, idx);
     strncpy(ctrl.controlName, name, sizeof(ctrl.controlName) - 1);
 
-    const char* section = isButton ? "button_names" : "encoder_names";
-    json.getDoc()[String(preset)][section][String(idx)] = name;
-    json.save();
-
     if (preset == controls.getPreset()) {
       updateFaderTitles();
       // setParamName() only updates the string; the fader area needs an

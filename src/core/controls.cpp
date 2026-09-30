@@ -111,10 +111,8 @@ void ControlsManager::setDefaults() {
                 bool toggleMode = json.getButtonToggleMode(_preset, i) > 0;
                 setButtonShort(_preset, i, type, number, channel, toggleMode);
 
-                const char* encName = json.getDoc()[String(_preset)]["encoder_names"][String(i)] | "";
-                strncpy(_presets[_preset].encoder[i].controlName, encName, 11);
-                const char* btnName = json.getDoc()[String(_preset)]["button_names"][String(i)] | "";
-                strncpy(_presets[_preset].buttons_short[i].controlName, btnName, 11);
+                _presets[_preset].encoder[i].controlName[0] = '\0';
+                _presets[_preset].buttons_short[i].controlName[0] = '\0';
             }
 
             _presets[_preset].encoder[i].value = 64;
