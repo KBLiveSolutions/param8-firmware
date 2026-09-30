@@ -22,20 +22,21 @@ void FaderWidget::drawPresetButton(const char* line1, const char* line2, bool se
     int textColor = selected ? 0 : 15;
     bool twoLines = (line2 && line2[0] != '\0');
 
-    display.setFont(NULL);
+    display.setFont(&Arial_Bold7pt7b);
     display.setTextColor(textColor);
     if (twoLines) {
         int tw1 = getStrWidth(display, line1);
-        display.setCursor(btn_x + (btn_w - tw1) / 2, btn_y + 7);
+        display.setCursor(btn_x + (btn_w - tw1) / 2, btn_y + 9);
         display.print(line1);
         int tw2 = getStrWidth(display, line2);
-        display.setCursor(btn_x + (btn_w - tw2) / 2, btn_y + 17);
+        display.setCursor(btn_x + (btn_w - tw2) / 2, btn_y + 19);
         display.print(line2);
     } else {
         int tw = getStrWidth(display, line1);
-        display.setCursor(btn_x + (btn_w - tw) / 2, btn_y + (btn_h - 8) / 2);
+        display.setCursor(btn_x + (btn_w - tw) / 2, btn_y + (btn_h + 8) / 2);
         display.print(line1);
     }
+    display.setFont(NULL);
 }
 
 void FaderWidget::drawSeparators() {
