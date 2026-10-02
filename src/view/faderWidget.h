@@ -39,6 +39,7 @@ public:
     void drawFaderCompact();
     void drawTitle();
     void setButtonName(const char* txt);
+    void drawPresetButton(const char* line1, const char* line2, bool selected);
     void drawButtonName(const char* txt, bool);
     void updateButtonName(bool);
     void updateTitle(const char* txt);

@@ -47,28 +47,28 @@ void onShiftPress()
         for (int i = 0; i < 8; ++i)
             revertAbsoluteChanged[i] = false;
     }
-    for (int i = 0; i < 8; ++i)
-    {
-
-        char buf[24];
-        static const char* buttonNames[] = {
-            "Preset 1", "Preset 2", "Preset 3", "Preset 4",
-            "Preset 5", "Preset 6", "Global", "Device"
-        };
-        snprintf(buf, sizeof(buf), buttonNames[i]);
-        faders[i]->drawButtonName(buf, i==controls.getPreset());
+    display1.fillScreen(0);
+    display2.fillScreen(0);
+    for (int i = 0; i < 8; ++i) {
+        char l1[20], l2[20] = {0};
+        if (i == 6)      { strcpy(l1, "Global"); strcpy(l2, "Mode"); }
+        else if (i == 7) { strcpy(l1, "Device"); strcpy(l2, "Mode"); }
+        else {
+            snprintf(l1, sizeof(l1), "Preset %d", i + 1);
+            const char* pname = controls.getPresetName(i);
+            if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
+        }
+        faders[i]->drawPresetButton(l1, l2, i == controls.getPreset());
     }
+    flushDisplays();
 }
 
 void onShiftRelease()
 {
     shiftPressed = false;
     setLed(1, false);
-    sendMidiMessage(0, 110, 0, 7);    
-    for (int i = 0; i < 8; ++i)
-    {
-    faders[i]->updateButtonName(controls.getButtonShort(i).value);
-    }
+    sendMidiMessage(0, 110, 0, 7);
+    showDisplay();
 }
 
 void sendNameRequest(uint8_t idx, uint8_t isButton)
@@ -227,11 +227,20 @@ void onButtonPressed(uint8_t idx)
     }
     else
     {
-        uint8_t _value = 127;
-        controls.getButtonShort(idx).value = _value;
         uint8_t channel = controls.getButtonShort(idx).channel;
         ControlMidiType type = controls.getButtonShort(idx).type;
         uint8_t number = controls.getButtonShort(idx).number;
+        uint8_t _value;
+        bool isToggle = (controls.getPreset() < 6) && controls.getButtonShort(idx).toggleMode;
+        if (isToggle) {
+            bool newState = !faders[idx]->buttonState;
+            faders[idx]->buttonState = newState;
+            faders[idx]->updateButtonName(newState);
+            _value = newState ? 127 : 0;
+        } else {
+            _value = 127;
+        }
+        controls.getButtonShort(idx).value = _value;
         sendMidiMessage(type, number, _value, channel);
         if (controls.getPreset() == 6) {
             if (idx == 3 || idx == 7) {
@@ -255,8 +264,11 @@ void onButtonReleased(uint8_t idx)
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
-    sendMidiMessage(type, number, 0, channel);
-    controls.getButtonShort(idx).value = 0;
+    bool isToggle = (controls.getPreset() < 6) && controls.getButtonShort(idx).toggleMode;
+    if (!isToggle) {
+        sendMidiMessage(type, number, 0, channel);
+        controls.getButtonShort(idx).value = 0;
+    }
     lastButtonReleaseTime[idx] = millis();
     if (controls.getPreset() == 6 && (idx == 3 || idx == 7)) {
         faders[idx]->updateButtonName(false);

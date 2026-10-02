@@ -291,6 +291,39 @@ void FaderWidget::drawFaderCompact() {
     drawSeparators();
 }
 
+void FaderWidget::drawPresetButton(const char* line1, const char* line2, bool selected) {
+    display.fillRect(x_offset, y_offset, 128, 32, 0);
+
+    int btn_x = x_offset + 2;
+    int btn_y = y_offset + 3;
+    int btn_w = 124;
+    int btn_h = 26;
+
+    if (selected)
+        display.fillRoundRect(btn_x, btn_y, btn_w, btn_h, BUTTON_CORNER, 15);
+    else
+        display.drawRoundRect(btn_x, btn_y, btn_w, btn_h, BUTTON_CORNER, BUTTON_BORDER_COLOR);
+
+    int textColor = selected ? 0 : 15;
+    bool twoLines = (line2 && line2[0] != '\0');
+
+    display.setFont(&Arial_Bold7pt7b);
+    display.setTextColor(textColor);
+    if (twoLines) {
+        int tw1 = getStrWidth(display, line1);
+        display.setCursor(btn_x + (btn_w - tw1) / 2, btn_y + 10);
+        display.print(line1);
+        int tw2 = getStrWidth(display, line2);
+        display.setCursor(btn_x + (btn_w - tw2) / 2, btn_y + 21);
+        display.print(line2);
+    } else {
+        int tw = getStrWidth(display, line1);
+        display.setCursor(btn_x + (btn_w - tw) / 2, btn_y + (btn_h + 8) / 2);
+        display.print(line1);
+    }
+    display.setFont(NULL);
+}
+
 void FaderWidget::drawButtonName(const char* txt, bool state) {
     char upper[20];
     for (size_t i = 0; txt[i] && i < sizeof(upper) - 1; i++) {
@@ -319,7 +352,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
 
     int textColor;
     if (state) {
-        display.fillRect(btn_x, area_y, btn_w, area_h, 15);
+        display.fillRoundRect(btn_x, area_y, btn_w, area_h, BUTTON_CORNER, 15);
         textColor = 0;
     } else {
         textColor = 15;
@@ -342,7 +375,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
         display.print(truncated);
     }
 
-    display.drawRect(btn_x, area_y, btn_w, area_h, 15);
+    display.drawRoundRect(btn_x, area_y, btn_w, area_h, BUTTON_CORNER, BUTTON_BORDER_COLOR);
     drawSeparators();
 }
 
