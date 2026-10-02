@@ -52,8 +52,8 @@ JsonArray JsonManager::getButtonShort(uint8_t preset, uint8_t btn) {
 
 void JsonManager::setButtonShort(uint8_t preset, uint8_t btn, int v0, int v1) {
     JsonArray arr = _doc[String(preset)]["buttons_short"][String(btn)].to<JsonArray>();
-    arr[0] = v0;
-    arr[1] = v1;
+    arr.add(v0);
+    arr.add(v1);
 }
 
 int JsonManager::getButtonToggleMode(uint8_t preset, uint8_t btn) {
@@ -61,8 +61,7 @@ int JsonManager::getButtonToggleMode(uint8_t preset, uint8_t btn) {
 }
 
 void JsonManager::setButtonToggleMode(uint8_t preset, uint8_t btn, int v0) {
-    JsonArray arr = _doc[String(preset)]["buttons_toggle"][String(btn)].to<JsonArray>();
-    arr[0] = v0;
+    _doc[String(preset)]["buttons_toggle"][String(btn)] = v0;
 }
 
 JsonArray JsonManager::getEncoder(uint8_t preset, uint8_t enc) {
@@ -86,9 +85,9 @@ ControlData JsonManager::getControlData(const char* control_type, uint8_t preset
 
 void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel) {
     JsonArray arr = _doc[String(preset)]["encoders"][String(enc)].to<JsonArray>();
-    arr[0] = type;
-    arr[1] = number;
-    arr[2] = channel;
+    arr.add(type);
+    arr.add(number);
+    arr.add(channel);
 }
 
 void setupJsonManager() {
