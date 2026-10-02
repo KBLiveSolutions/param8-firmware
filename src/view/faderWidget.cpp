@@ -15,9 +15,9 @@ void FaderWidget::drawPresetButton(const char* line1, const char* line2, bool se
     int btn_h = 26;
 
     if (selected)
-        display.fillRect(btn_x, btn_y, btn_w, btn_h, 15);
+        display.fillRoundRect(btn_x, btn_y, btn_w, btn_h, BUTTON_CORNER, 15);
     else
-        display.drawRect(btn_x, btn_y, btn_w, btn_h, 15);
+        display.drawRoundRect(btn_x, btn_y, btn_w, btn_h, BUTTON_CORNER, BUTTON_BORDER_COLOR);
 
     int textColor = selected ? 0 : 15;
     bool twoLines = (line2 && line2[0] != '\0');
