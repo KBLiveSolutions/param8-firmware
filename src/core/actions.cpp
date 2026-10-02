@@ -69,6 +69,9 @@ void onShiftRelease()
     setLed(1, false);
     sendMidiMessage(0, 110, 0, 7);
     showDisplay();
+    for (int i = 0; i < 8; ++i)
+        faders[i]->updateButtonName(faders[i]->buttonState);
+    flushDisplays();
 }
 
 void sendNameRequest(uint8_t idx, uint8_t isButton)
@@ -210,14 +213,18 @@ void onButtonPressed(uint8_t idx)
     }
     if (shiftPressed)
     {
-        char buf[24];
-        static const char* buttonNames[] = {
-            "Preset 1", "Preset 2", "Preset 3", "Preset 4",
-            "Preset 5", "Preset 6", "Global", "Device"
-        };
-        snprintf(buf, sizeof(buf), buttonNames[idx]);
-        faders[idx]->drawButtonName(buf, true);
-        flushDisplays();
+        {
+            char l1[20], l2[20] = {0};
+            if (idx == 6)      { strcpy(l1, "Global"); strcpy(l2, "Mode"); }
+            else if (idx == 7) { strcpy(l1, "Device"); strcpy(l2, "Mode"); }
+            else {
+                snprintf(l1, sizeof(l1), "Preset %d", idx + 1);
+                const char* pname = controls.getPresetName(idx);
+                if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
+            }
+            faders[idx]->drawPresetButton(l1, l2, true);
+            flushDisplays();
+        }
         controls.setPreset(idx);
         updateFaderTitles();
         updateFaderValues();
