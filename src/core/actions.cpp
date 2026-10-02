@@ -6,13 +6,17 @@
 #include "../view/leds.h"
 #ifdef SEQUENCER_ENABLED
 #include "../sequencer/sequencerView.h"
+#include "../sequencer/lfo.h"
 #endif
 
 #define MAX_LATCH_EVENTS 256
-#define SHIFT_PRESET_HOLD_MS 500
+#define SHIFT_PRESET_HOLD_MS 200
+#define SHIFT_DOUBLE_TAP_WINDOW_MS 300
 
 bool shiftPressed = false;
 unsigned long shiftPressTime = 0;
+unsigned long shiftFirstTapReleaseTime = 0;
+bool shiftDoubleTapDetected = false;
 bool presetModeActive = false;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
@@ -45,8 +49,18 @@ void onShiftPress()
         return;
     }
 #endif
+    unsigned long now = millis();
     shiftPressed = true;
-    shiftPressTime = millis();
+    shiftPressTime = now;
+
+    if (shiftFirstTapReleaseTime > 0 && now - shiftFirstTapReleaseTime < SHIFT_DOUBLE_TAP_WINDOW_MS) {
+        shiftDoubleTapDetected = true;
+        shiftFirstTapReleaseTime = 0;
+    } else {
+        shiftDoubleTapDetected = false;
+        shiftFirstTapReleaseTime = 0;
+    }
+
     setLed(1, true);
     sendMidiMessage(0, 110, 127, 7);
 
@@ -72,8 +86,12 @@ void onShiftRelease()
 
     if (presetModeActive) {
         presetModeActive = false;
+        shiftDoubleTapDetected = false;
         showDisplay();
     } else {
+        if (!shiftDoubleTapDetected)
+            shiftFirstTapReleaseTime = millis(); // arm double-tap window
+        shiftDoubleTapDetected = false;
         for (int i = 0; i < 8; ++i)
             faders[i]->updateButtonName(controls.getButtonShort(i).value);
     }
@@ -121,6 +139,7 @@ void checkNamingPending()
 void checkShiftPreset()
 {
     if (!shiftPressed || presetModeActive) return;
+    if (!shiftDoubleTapDetected) return;
     if (millis() - shiftPressTime < SHIFT_PRESET_HOLD_MS) return;
 
     presetModeActive = true;
@@ -243,7 +262,7 @@ void onButtonPressed(uint8_t idx)
     }
     if (shiftPressed) {
 #ifdef SEQUENCER_ENABLED
-        if (!presetModeActive) {
+        if (!presetModeActive && controls.getPreset() < 6) {
             enterSequencerFor(idx);
             return;
         }
@@ -261,6 +280,7 @@ void onButtonPressed(uint8_t idx)
             flushDisplays();
             controls.setPreset(idx);
             presetModeActive = false;
+            shiftDoubleTapDetected = false;
             shiftPressTime = millis();
             updateFaderTitles();
             updateFaderValues();
@@ -270,11 +290,20 @@ void onButtonPressed(uint8_t idx)
         return;
     }
     {
-        uint8_t _value = 127;
-        controls.getButtonShort(idx).value = _value;
         uint8_t channel = controls.getButtonShort(idx).channel;
         ControlMidiType type = controls.getButtonShort(idx).type;
         uint8_t number = controls.getButtonShort(idx).number;
+        uint8_t _value;
+        bool isToggle = (controls.getPreset() < 6) && controls.getButtonShort(idx).toggleMode;
+        if (isToggle) {
+            bool newState = !faders[idx]->buttonState;
+            faders[idx]->buttonState = newState;
+            faders[idx]->updateButtonName(newState);
+            _value = newState ? 127 : 0;
+        } else {
+            _value = 127;
+        }
+        controls.getButtonShort(idx).value = _value;
         sendMidiMessage(type, number, _value, channel);
         if (controls.getPreset() == 6) {
             if (idx == 3 || idx == 7) {
@@ -301,8 +330,11 @@ void onButtonReleased(uint8_t idx)
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
-    sendMidiMessage(type, number, 0, channel);
-    controls.getButtonShort(idx).value = 0;
+    bool isToggle = (controls.getPreset() < 6) && controls.getButtonShort(idx).toggleMode;
+    if (!isToggle) {
+        sendMidiMessage(type, number, 0, channel);
+        controls.getButtonShort(idx).value = 0;
+    }
     lastButtonReleaseTime[idx] = millis();
     if (controls.getPreset() == 6 && (idx == 3 || idx == 7)) {
         faders[idx]->updateButtonName(false);
@@ -343,22 +375,30 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
         estimated_display = 127;
 
     controls.getEncoder(idx).value = estimated_display;
-
-    if (revertMode)
+#ifdef SEQUENCER_ENABLED
+    // Only intercept for the LFO if this encoder's CC/Ch matches what the LFO
+    // was armed with. On a different preset with different CC/Ch, send normally.
+    if (lfo.isArmed(idx) && lfo.getCCNumber(idx) == number && lfo.getCCChannel(idx) == channel) {
+        lfo.setValue(idx, (uint8_t)estimated_display);
+    } else
+#endif
     {
-        revertAbsoluteChanged[idx] = true;
-        sendRelativeCC(type, number, delta, channel);
-    }
-    else if (!latchPressed)
-    {
-        sendRelativeCC(type, number, delta, channel);
-    }
-    else
-    {
-        uint8_t relValue = (uint8_t)(delta & 0x7F);
-        if (latchEncoderEventCount[idx] < MAX_LATCH_EVENTS)
+        if (revertMode)
         {
-            latchEncoderEvents[idx][latchEncoderEventCount[idx]++] = relValue;
+            revertAbsoluteChanged[idx] = true;
+            sendRelativeCC(type, number, delta, channel);
+        }
+        else if (!latchPressed)
+        {
+            sendRelativeCC(type, number, delta, channel);
+        }
+        else
+        {
+            uint8_t relValue = (uint8_t)(delta & 0x7F);
+            if (latchEncoderEventCount[idx] < MAX_LATCH_EVENTS)
+            {
+                latchEncoderEvents[idx][latchEncoderEventCount[idx]++] = relValue;
+            }
         }
     }
 
@@ -388,20 +428,26 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     if (newValue > 127)
         newValue = 127;
     controls.getEncoder(idx).value = newValue;
-    
-    if (revertMode)
+#ifdef SEQUENCER_ENABLED
+    if (lfo.isArmed(idx) && lfo.getCCNumber(idx) == number && lfo.getCCChannel(idx) == channel) {
+        lfo.setValue(idx, (uint8_t)newValue);
+    } else
+#endif
     {
-        revertAbsoluteChanged[idx] = true;
-        sendMidiMessage(type, number, (uint8_t)newValue, channel);
-    }
-    else if (!latchPressed)
-    {
-        sendMidiMessage(type, number, (uint8_t)newValue, channel);
-    }
-    else
-    {
-        latchAbsoluteValue[idx] = (uint8_t)newValue;
-        latchAbsoluteChanged[idx] = true;
+        if (revertMode)
+        {
+            revertAbsoluteChanged[idx] = true;
+            sendMidiMessage(type, number, (uint8_t)newValue, channel);
+        }
+        else if (!latchPressed)
+        {
+            sendMidiMessage(type, number, (uint8_t)newValue, channel);
+        }
+        else
+        {
+            latchAbsoluteValue[idx] = (uint8_t)newValue;
+            latchAbsoluteChanged[idx] = true;
+        }
     }
     updateFader(idx, (uint8_t)newValue);
     char buffer[16];
@@ -477,6 +523,8 @@ void updateFaderTitles()
         deviceLabelDirty = true;
         bankLabelDirty = true;
     } else {
+        trackLabel[0] = '\0';
+        trackLabelDirty = true;
         const char* pName = controls.getPresetName(preset);
         if (pName[0] != '\0') {
             strncpy(bankLabel, pName, sizeof(bankLabel));

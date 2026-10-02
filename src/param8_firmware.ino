@@ -56,6 +56,7 @@ void setup() {
   setBrightness(savedBrightness);
   updateFaderTitles();
   updateFaderValues();
+  showDisplay();
   encoders.setup();
   setupButtons();
   setupLeds();
@@ -79,12 +80,13 @@ void loop() {
 
   serialEditorRead();
   readButtons();
+  lfo.onTimer();
 
   if (sequencerActive) {
     bool encChanged = readSequencerEncoders();
     bool viewChanged = sequencerViewDirty();
     if (encChanged || viewChanged)
-      drawSequencerView();
+      drawSequencerView(encChanged);
   } else {
     encoders.read();
     checkLatchPending();

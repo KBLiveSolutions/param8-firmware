@@ -352,7 +352,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
 
     int textColor;
     if (state) {
-        display.fillRect(btn_x, area_y, btn_w, area_h, 15);
+        display.fillRoundRect(btn_x, area_y, btn_w, area_h, BUTTON_CORNER, 15);
         textColor = 0;
     } else {
         textColor = 15;
@@ -375,7 +375,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
         display.print(truncated);
     }
 
-    display.drawRect(btn_x, area_y, btn_w, area_h, 15);
+    display.drawRoundRect(btn_x, area_y, btn_w, area_h, BUTTON_CORNER, BUTTON_BORDER_COLOR);
     drawSeparators();
 }
 

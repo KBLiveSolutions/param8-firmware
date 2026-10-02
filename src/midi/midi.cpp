@@ -231,6 +231,17 @@ void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 {
   if (value == 0 && liveConnectedTime > 0 && millis() - liveConnectedTime < 500)
     return;
+#ifdef SEQUENCER_ENABLED
+  // Ignore CC echoes from Ableton for LFO-armed tracks — we emitted those
+  // CCs ourselves. Compare against the LFO's stored CC/Ch (not the current
+  // preset's encoder config, which may differ after a preset switch).
+  for (uint8_t i = 0; i < SEQ_TRACKS; i++) {
+    if (lfo.isArmed(i) &&
+        lfo.getCCChannel(i) == channel &&
+        lfo.getCCNumber(i)  == control)
+      return;
+  }
+#endif
   controls.onMidiValueChange(channel, control, value);
 }
 
@@ -483,7 +494,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
                    | ((uint32_t)(sysex[4] & 0x7F) << 7)
                    | (sysex[5] & 0x7F);
     sequencer.setSongPosition(ticks);
-    lfo.setSongPosition(ticks);
     break;
   }
 #endif

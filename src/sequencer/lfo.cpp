@@ -10,25 +10,10 @@ void Lfo::setup()
     for (uint8_t i = 0; i < SEQ_TRACKS; i++) {
         _tracks[i] = LfoTrack();
         _lastOutput[i] = 0;
+        _phase[i] = 0.0f;
+        _shValue[i] = 0.0f;
     }
-    _tickCount = 0;
-    _running = false;
-}
-
-void Lfo::onClockStart()
-{
-    _tickCount = 0;
-    _running = true;
-}
-
-void Lfo::onClockContinue()
-{
-    _running = true;
-}
-
-void Lfo::onClockStop()
-{
-    _running = false;
+    _lastMs = 0;
 }
 
 float Lfo::waveformValue(LfoWaveform wf, float phase)
@@ -37,32 +22,13 @@ float Lfo::waveformValue(LfoWaveform wf, float phase)
         case LFO_SINE:
             return sinf(2.0f * (float)M_PI * phase);
         case LFO_TRIANGLE:
-            return 1.0f - 4.0f * fabsf(phase - 0.5f);
+            return 1.0f - 4.0f * fabsf(fmodf(phase + 0.25f, 1.0f) - 0.5f);
         case LFO_SQUARE:
             return phase < 0.5f ? 1.0f : -1.0f;
-        case LFO_SAW_UP:
+        case LFO_SAW:
             return 2.0f * phase - 1.0f;
-        case LFO_SAW_DOWN:
-            return 1.0f - 2.0f * phase;
         default:
             return 0.0f;
-    }
-}
-
-void Lfo::updateTrack(uint8_t track)
-{
-    LfoTrack &t = _tracks[track];
-    uint32_t ticksPerCycle = Sequencer::ticksPerStep(t.rate);
-    if (ticksPerCycle == 0) ticksPerCycle = 1;
-
-    // _tickCount was incremented before this call, so subtract 1 to align
-    // phase 0 with the first clock tick after Start (= the Ableton downbeat).
-    float phase = (float)((_tickCount - 1) % ticksPerCycle) / (float)ticksPerCycle;
-    uint8_t output = previewOutput(track, phase);
-
-    if (output != _lastOutput[track]) {
-        _lastOutput[track] = output;
-        sendMidiMessage(MIDI_CC, t.ccNumber, output, t.channel);
     }
 }
 
@@ -70,32 +36,46 @@ uint8_t Lfo::previewOutput(uint8_t track, float phase) const
 {
     if (track >= SEQ_TRACKS) return 0;
     const LfoTrack &t = _tracks[track];
-    float wave = waveformValue(t.waveform, phase);
+    float wave = (t.waveform == LFO_SAMPLE_HOLD) ? _shValue[track]
+                                                  : waveformValue(t.waveform, phase);
     int output = (int)t.value + (int)roundf(wave * (float)t.amount);
     return (uint8_t)constrain(output, 0, 127);
 }
 
-void Lfo::onClockTick()
+void Lfo::onTimer()
 {
-    if (!_running) return;
-    _tickCount++;
-    for (uint8_t i = 0; i < SEQ_TRACKS; i++) {
-        if (_tracks[i].armed)
-            updateTrack(i);
-    }
-}
+    uint32_t now = (uint32_t)millis();
+    if (_lastMs == 0) { _lastMs = now; return; }
+    float dt = (float)(now - _lastMs) / 1000.0f;
+    if (dt == 0.0f) return;  // sub-ms call, nothing to do
+    _lastMs = now;
 
-void Lfo::setSongPosition(uint32_t ticks)
-{
-    // +1 so the next clock tick gives phase = ticks%cycle / cycle (see updateTrack _tickCount-1)
-    _tickCount = ticks + 1;
-    _running = true;
+    // Pass 1: advance all phases (no MIDI send here).
     for (uint8_t i = 0; i < SEQ_TRACKS; i++) {
-        if (_tracks[i].armed) {
-            uint32_t tpc = Sequencer::ticksPerStep(_tracks[i].rate);
-            if (tpc == 0) tpc = 1;
-            float phase = (float)(ticks % tpc) / (float)tpc;
-            _lastOutput[i] = previewOutput(i, phase);
+        if (!_tracks[i].armed) continue;
+        _phase[i] += _tracks[i].freq * dt;
+        while (_phase[i] >= 1.0f) {
+            _phase[i] -= 1.0f;
+            if (_tracks[i].waveform == LFO_SAMPLE_HOLD)
+                _shValue[i] = ((float)random(201) / 100.0f) - 1.0f;
+        }
+    }
+
+    // Pass 2: send at most ONE CC per call (round-robin across tracks).
+    // Prevents back-to-back writePacket() calls from saturating the TinyUSB
+    // FIFO and blocking the main loop.
+    for (uint8_t j = 0; j < SEQ_TRACKS; j++) {
+        uint8_t i = (_sendCursor + j) % SEQ_TRACKS;
+        if (!_tracks[i].armed) continue;
+        uint8_t output = previewOutput(i, _phase[i]);
+        if (output != _lastOutput[i]) {
+            _lastOutput[i] = output;
+            if ((now - _lastSendMs[i]) >= 5) {
+                _lastSendMs[i] = now;
+                sendMidiMessage(MIDI_CC, _tracks[i].ccNumber, output, _tracks[i].channel);
+                _sendCursor = (i + 1) % SEQ_TRACKS;
+                return;
+            }
         }
     }
 }
@@ -122,15 +102,15 @@ LfoWaveform Lfo::getWaveform(uint8_t track) const
     return track < SEQ_TRACKS ? _tracks[track].waveform : LFO_SINE;
 }
 
-void Lfo::setRate(uint8_t track, SeqRate rate)
+void Lfo::setFreq(uint8_t track, float hz)
 {
     if (track >= SEQ_TRACKS) return;
-    _tracks[track].rate = rate;
+    _tracks[track].freq = hz;
 }
 
-SeqRate Lfo::getRate(uint8_t track) const
+float Lfo::getFreq(uint8_t track) const
 {
-    return track < SEQ_TRACKS ? _tracks[track].rate : SEQ_RATE_1_4;
+    return track < SEQ_TRACKS ? _tracks[track].freq : 1.0f;
 }
 
 void Lfo::setValue(uint8_t track, uint8_t value)
@@ -148,7 +128,8 @@ void Lfo::setAmount(uint8_t track, int8_t amount)
 {
     if (track >= SEQ_TRACKS) return;
     int v = (int)_tracks[track].value;
-    int a = constrain((int)amount, -v, 127 - v);
+    int maxAmt = min(v, 127 - v);
+    int a = constrain((int)amount, -maxAmt, maxAmt);
     _tracks[track].amount = (int8_t)a;
 }
 
@@ -164,6 +145,16 @@ void Lfo::setOutput(uint8_t track, uint8_t ccNumber, uint8_t channel)
     _tracks[track].channel = channel;
 }
 
+uint8_t Lfo::getCCNumber(uint8_t track) const
+{
+    return track < SEQ_TRACKS ? _tracks[track].ccNumber : 0;
+}
+
+uint8_t Lfo::getCCChannel(uint8_t track) const
+{
+    return track < SEQ_TRACKS ? _tracks[track].channel : 0;
+}
+
 uint8_t Lfo::getCurrentOutput(uint8_t track) const
 {
     return track < SEQ_TRACKS ? _lastOutput[track] : 0;
@@ -171,10 +162,7 @@ uint8_t Lfo::getCurrentOutput(uint8_t track) const
 
 float Lfo::getPhase(uint8_t track) const
 {
-    if (track >= SEQ_TRACKS || _tickCount == 0) return 0.0f;
-    uint32_t ticksPerCycle = Sequencer::ticksPerStep(_tracks[track].rate);
-    if (ticksPerCycle == 0) return 0.0f;
-    return (float)((_tickCount - 1) % ticksPerCycle) / (float)ticksPerCycle;
+    return track < SEQ_TRACKS ? _phase[track] : 0.0f;
 }
 
 const char* Lfo::waveformLabel(LfoWaveform wf)
@@ -183,8 +171,8 @@ const char* Lfo::waveformLabel(LfoWaveform wf)
         case LFO_SINE:     return "SINE";
         case LFO_TRIANGLE: return "TRI";
         case LFO_SQUARE:   return "SQR";
-        case LFO_SAW_UP:   return "SAW+";
-        case LFO_SAW_DOWN: return "SAW-";
-        default:           return "?";
+        case LFO_SAW:         return "SAW";
+        case LFO_SAMPLE_HOLD: return "S&H";
+        default:              return "?";
     }
 }

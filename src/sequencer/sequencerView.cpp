@@ -9,42 +9,52 @@
 #include "../midi/midi.h"
 
 bool sequencerActive = false;
-static bool lfoMode = false; // false = step sequencer, true = LFO
+static bool lfoMode = false;      // false = step sequencer, true = LFO
+static uint8_t activeTrack = 0;  // encoder index currently being edited
 static uint8_t selectedStep = 0;
+static uint8_t entryButtonConsumed = 255; // suppresses the first wasShortPressed for the button that triggered entry
 
 static uint8_t lastPlayingStep = 255; // sentinel: forces a first draw
 static bool lastRunning = false;
 static bool lastLfoRunning = false;
 static unsigned long lastLfoRedrawTime = 0;
-#define LFO_REDRAW_INTERVAL_MS 50  // 20 FPS max
+#define LFO_REDRAW_INTERVAL_MS 120  // ~8 FPS; display blocking takes ~72ms, leaving loop time for CC
 
-// Resolution of the LFO waveform preview: number of sample points/line
-// segments spanning one full cycle, drawn on a single screen (display1).
-// Also used as the dirty-check granularity for clock-driven redraws.
-#define LFO_DISPLAY_RES 64
 
 static void setMode(bool toLfo)
 {
     if (toLfo == lfoMode) return;
     lfoMode = toLfo;
-    sequencer.arm(SEQ_TEST_TRACK, !toLfo);
-    lfo.arm(SEQ_TEST_TRACK, toLfo);
+    sequencer.arm(activeTrack, !toLfo);
+    lfo.arm(activeTrack, toLfo);
 }
 
 void enterSequencerFor(uint8_t encoderIdx)
 {
-    uint8_t cc = controls.getEncoder(encoderIdx).number;
-    uint8_t ch = controls.getEncoder(encoderIdx).channel;
-    sequencer.setOutput(SEQ_TEST_TRACK, cc, ch);
-    lfo.setOutput(SEQ_TEST_TRACK, cc, ch);
-    sequencer.arm(SEQ_TEST_TRACK, true);
-    lfo.arm(SEQ_TEST_TRACK, false);
-    lfoMode = false;
+    activeTrack = encoderIdx;
+
+    if (!lfo.isArmed(activeTrack) && !sequencer.isArmed(activeTrack)) {
+        // First entry: initialise output mapping and value from the encoder.
+        uint8_t cc  = controls.getEncoder(encoderIdx).number;
+        uint8_t ch  = controls.getEncoder(encoderIdx).channel;
+        uint8_t val = controls.getEncoder(encoderIdx).value;
+        sequencer.setOutput(activeTrack, cc, ch);
+        lfo.setOutput(activeTrack, cc, ch);
+        lfo.setValue(activeTrack, val);
+        lfo.setAmount(activeTrack, 0);
+        for (uint8_t s = 0; s < SEQ_STEPS; s++)
+            sequencer.setStepValue(activeTrack, s, val);
+        lfo.arm(activeTrack, true);
+        sequencer.arm(activeTrack, false);
+        lfoMode = true;
+    } else {
+        // Track already running: keep its CC/Ch, just restore the display mode.
+        lfoMode = lfo.isArmed(activeTrack);
+    }
+
     selectedStep = 0;
     sequencerActive = true;
-    // Request song position from script for immediate sync
-    uint8_t syncReq[5] = {240, 111, 0x1D, 0, 247};
-    usb_midi.write(syncReq, 5);
+    entryButtonConsumed = encoderIdx;
     drawSequencerView();
 }
 
@@ -60,47 +70,88 @@ bool readSequencerEncoders()
 {
     bool changed = false;
 
+    // readButtons() runs before readSequencerEncoders() in the main loop.
+    // The shift+push that entered the sequencer fires a button release on the
+    // same frame, setting shortPressEventPending for that button. Consume it
+    // silently so it doesn't trigger a sequencer action (e.g. CLEAR/STOP).
+    auto guardedPressed = [](uint8_t btn) -> bool {
+        if (!wasShortPressed(btn)) return false;
+        if (btn == entryButtonConsumed) { entryButtonConsumed = 255; return false; }
+        return true;
+    };
+
     bool toggleReading = pcf.digitalRead(SEQ_BTN_TOGGLE);
     updateButton(SEQ_BTN_TOGGLE, toggleReading);
-    if (wasShortPressed(SEQ_BTN_TOGGLE)) {
+    if (guardedPressed(SEQ_BTN_TOGGLE)) {
         setMode(!lfoMode);
+        changed = true;
+    }
+
+    bool nextReading = pcf.digitalRead(SEQ_BTN_NEXT);
+    updateButton(SEQ_BTN_NEXT, nextReading);
+    if (guardedPressed(SEQ_BTN_NEXT) && !lfoMode) {
+        uint8_t len = sequencer.getLength(activeTrack);
+        selectedStep = (selectedStep + 1) % len;
         changed = true;
     }
 
     bool clearReading = pcf.digitalRead(SEQ_BTN_CLEAR);
     updateButton(SEQ_BTN_CLEAR, clearReading);
-    if (wasShortPressed(SEQ_BTN_CLEAR)) {
-        if (lfoMode)
-            lfo.setAmount(SEQ_TEST_TRACK, 0);
-        else
-            sequencer.setStepValue(SEQ_TEST_TRACK, selectedStep, 0);
+    if (guardedPressed(SEQ_BTN_CLEAR)) {
+        if (lfoMode) {
+            lfo.setAmount(activeTrack, 0);
+        } else {
+            uint8_t val = sequencer.getStepValue(activeTrack, selectedStep);
+            for (uint8_t s = 0; s < SEQ_STEPS; s++)
+                sequencer.setStepValue(activeTrack, s, val);
+        }
+        changed = true;
+    }
+
+    bool stopReading = pcf.digitalRead(SEQ_BTN_STOP);
+    updateButton(SEQ_BTN_STOP, stopReading);
+    if (guardedPressed(SEQ_BTN_STOP)) {
+        if (lfoMode) {
+            lfo.setAmount(activeTrack, 0);
+        } else {
+            sequencer.arm(activeTrack, false);
+            lfo.arm(activeTrack, false);
+        }
+        changed = true;
+    }
+
+    bool rndReading = pcf.digitalRead(SEQ_BTN_RND);
+    updateButton(SEQ_BTN_RND, rndReading);
+    if (guardedPressed(SEQ_BTN_RND) && !lfoMode) {
+        for (uint8_t s = 0; s < SEQ_STEPS; s++)
+            sequencer.setStepValue(activeTrack, s, (uint8_t)random(128));
         changed = true;
     }
 
     if (lfoMode) {
         int wfDelta = encoders.readDelta(SEQ_ENC_STEP);
         if (wfDelta != 0) {
-            int wf = ((int)lfo.getWaveform(SEQ_TEST_TRACK) + (wfDelta > 0 ? 1 : -1));
-            wf = ((wf % LFO_WAVEFORM_COUNT) + LFO_WAVEFORM_COUNT) % LFO_WAVEFORM_COUNT;
-            lfo.setWaveform(SEQ_TEST_TRACK, (LfoWaveform)wf);
+            int wf = constrain((int)lfo.getWaveform(activeTrack) + (wfDelta > 0 ? 1 : -1),
+                               0, LFO_WAVEFORM_COUNT - 1);
+            lfo.setWaveform(activeTrack, (LfoWaveform)wf);
             changed = true;
         }
 
         int valueDelta = encoders.readDeltaVarispeed(SEQ_ENC_VALUE);
         if (valueDelta != 0) {
-            int value = (int)lfo.getValue(SEQ_TEST_TRACK) + valueDelta;
-            lfo.setValue(SEQ_TEST_TRACK, (uint8_t)constrain(value, 0, 127));
+            int value = (int)lfo.getValue(activeTrack) + valueDelta;
+            lfo.setValue(activeTrack, (uint8_t)constrain(value, 0, 127));
             changed = true;
         }
 
         int amountDelta = encoders.readDeltaVarispeed(SEQ_ENC_LENGTH);
         if (amountDelta != 0) {
-            int amount = (int)lfo.getAmount(SEQ_TEST_TRACK) + amountDelta;
-            lfo.setAmount(SEQ_TEST_TRACK, (int8_t)constrain(amount, -127, 127));
+            int amount = (int)lfo.getAmount(activeTrack) + amountDelta;
+            lfo.setAmount(activeTrack, (int8_t)constrain(amount, -127, 127));
             changed = true;
         }
     } else {
-        uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
+        uint8_t length = sequencer.getLength(activeTrack);
 
         int stepDelta = encoders.readDelta(SEQ_ENC_STEP);
         if (stepDelta != 0) {
@@ -112,9 +163,9 @@ bool readSequencerEncoders()
 
         int valueDelta = encoders.readDeltaVarispeed(SEQ_ENC_VALUE);
         if (valueDelta != 0) {
-            int value = (int)sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep) + valueDelta;
+            int value = (int)sequencer.getStepValue(activeTrack, selectedStep) + valueDelta;
             value = constrain(value, 0, 127);
-            sequencer.setStepValue(SEQ_TEST_TRACK, selectedStep, (uint8_t)value);
+            sequencer.setStepValue(activeTrack, selectedStep, (uint8_t)value);
             changed = true;
         }
 
@@ -122,26 +173,31 @@ bool readSequencerEncoders()
         if (lengthDelta != 0) {
             int newLength = (int)length + (lengthDelta > 0 ? 1 : -1);
             newLength = constrain(newLength, 1, SEQ_STEPS);
-            sequencer.setLength(SEQ_TEST_TRACK, (uint8_t)newLength);
+            sequencer.setLength(activeTrack, (uint8_t)newLength);
             if (selectedStep >= newLength)
                 selectedStep = newLength - 1;
             changed = true;
         }
     }
 
-    // Rate: shared control, applies to whichever mode is active.
-    int rateDelta = encoders.readDelta(SEQ_ENC_RATE);
-    if (rateDelta != 0) {
-        if (lfoMode) {
-            int rate = (int)lfo.getRate(SEQ_TEST_TRACK) + (rateDelta > 0 ? 1 : -1);
-            rate = constrain(rate, 0, SEQ_RATE_COUNT - 1);
-            lfo.setRate(SEQ_TEST_TRACK, (SeqRate)rate);
-        } else {
-            int rate = (int)sequencer.getRate(SEQ_TEST_TRACK) + (rateDelta > 0 ? 1 : -1);
-            rate = constrain(rate, 0, SEQ_RATE_COUNT - 1);
-            sequencer.setRate(SEQ_TEST_TRACK, (SeqRate)rate);
+    // Rate (LFO: freq varispeed) / Rate (seq: inverted, up=slower).
+    if (lfoMode) {
+        int rateDelta = encoders.readDeltaVarispeed(SEQ_ENC_RATE);
+        if (rateDelta != 0) {
+            float freq = lfo.getFreq(activeTrack);
+            freq = constrain(freq * powf(1.15f, (float)rateDelta), 0.05f, 2.0f);
+            lfo.setFreq(activeTrack, freq);
+            changed = true;
         }
-        changed = true;
+    } else {
+        int rateDelta = encoders.readDelta(SEQ_ENC_RATE);
+        if (rateDelta != 0) {
+            // encoder up = slower (toward 4 BARS = lower index)
+            int rate = (int)sequencer.getRate(activeTrack) - (rateDelta > 0 ? 1 : -1);
+            rate = constrain(rate, 0, SEQ_RATE_COUNT - 1);
+            sequencer.setRate(activeTrack, (SeqRate)rate);
+            changed = true;
+        }
     }
 
     return changed;
@@ -159,7 +215,7 @@ bool sequencerViewDirty()
             lastLfoRunning = running;
         }
     } else {
-        uint8_t curStep = sequencer.getCurrentStep(SEQ_TEST_TRACK);
+        uint8_t curStep = sequencer.getCurrentStep(activeTrack);
         bool running = sequencer.isRunning();
         dirty = (curStep != lastPlayingStep) || (running != lastRunning);
         lastPlayingStep = curStep;
@@ -168,66 +224,100 @@ bool sequencerViewDirty()
     return dirty;
 }
 
-// --- Layout: button box (outer edge) / encoder label (inner) / grid+title (center) ---
-// mirrored top and bottom, per screen:
-//   y=0-9    button box row
-//   y=10-17  encoder label row
-//   y=17-43  step/LFO grid (ticks + markers)
-//   y=46-53  encoder label row
-//   y=54-63  button box row
+// Display1 layout: button boxes at y=0 and y=54, compact fader widgets fill y=10-53.
+// Display2 layout: full-height visualization (y=5-58).
+
+static void drawToggleBox(PicoGFX_SSD1322 &disp, int cellX, int y, bool leftActive)
+{
+    const int totalW = 64;
+    const int boxH   = 9;
+    const int halfW  = totalW / 2;
+    const int boxX   = cellX + (128 - totalW) / 2;
+
+    disp.setFont(NULL);
+
+    // Fill the full box rounded, then erase the inactive half so only the
+    // active side keeps white fill (rounded outer corners, flat inner edge).
+    disp.fillRoundRect(boxX, y, totalW, boxH, BUTTON_CORNER, 15);
+    if (leftActive)
+        disp.fillRect(boxX + halfW, y, halfW, boxH, 0);
+    else
+        disp.fillRect(boxX,         y, halfW, boxH, 0);
+
+    disp.drawRoundRect(boxX, y, totalW, boxH, BUTTON_CORNER, BUTTON_BORDER_COLOR);
+    disp.drawLine(boxX + halfW, y, boxX + halfW, y + boxH - 1, BUTTON_BORDER_COLOR);
+
+    disp.setTextColor(leftActive ? 0 : 8);
+    int tw = getStrWidth(disp, "SEQ");
+    disp.setCursor(boxX + (halfW - tw) / 2, y + 1);
+    disp.print("SEQ");
+
+    disp.setTextColor(!leftActive ? 0 : 8);
+    tw = getStrWidth(disp, "LFO");
+    disp.setCursor(boxX + halfW + (halfW - tw) / 2, y + 1);
+    disp.print("LFO");
+}
 
 static void drawButtonBox(PicoGFX_SSD1322 &disp, int cellX, int y, const char* label)
 {
     const int boxW = 64;
     const int boxH = 9;
     const int boxX = cellX + (128 - boxW) / 2;
-
     disp.setFont(NULL);
     int tw = getStrWidth(disp, label);
-    disp.drawRect(boxX, y, boxW, boxH, 15);
+    disp.drawRoundRect(boxX, y, boxW, boxH, BUTTON_CORNER, BUTTON_BORDER_COLOR);
     disp.setCursor(boxX + (boxW - tw) / 2, y + 1);
     disp.setTextColor(15);
     disp.print(label);
 }
 
-static void drawEncoderLabel(PicoGFX_SSD1322 &disp, int cellX, int y, const char* label)
+
+static void drawSeqGrid(PicoGFX_SSD1322 &disp)
 {
+    const int axisX      = 21;
+    const int startX     = axisX + 1;
+    const int waveW      = 256 - startX;
+    const int areaTop    = 5;
+    const int areaBottom = 58;
+    const int areaH      = areaBottom - areaTop;
+
     disp.setFont(NULL);
-    int tw = getStrWidth(disp, label);
-    disp.setCursor(cellX + (128 - tw) / 2, y);
-    disp.setTextColor(10);
-    disp.print(label);
-}
+    disp.setTextColor(5);
 
-static void drawTickAt(PicoGFX_SSD1322 &disp, int col, uint8_t value, int color, bool marker, bool playhead)
-{
-    const int colW = 32;
-    const int margin = 4;
-    const int x = col * colW + margin;
-    const int tickW = colW - margin * 2;
-    const int areaTop = 20;
-    const int areaBottom = 40;
-    const int areaH = areaBottom - areaTop;
+    struct { uint8_t val; const char* lbl; } refs[] = {{127,"127"},{63,"63"},{0,"0"}};
+    for (auto &r : refs) {
+        int y = areaBottom - map(r.val, 0, 127, 0, areaH);
+        disp.drawLine(startX, y, 255, y, 4);
+        int tw = getStrWidth(disp, r.lbl);
+        disp.setCursor(axisX - tw - 1, y - 3);
+        disp.print(r.lbl);
+    }
 
-    int y = areaBottom - map(value, 0, 127, 0, areaH);
-    disp.fillRect(x, y, tickW, 2, color);
+    disp.drawLine(axisX, areaTop, axisX, areaBottom, 5);
 
-    if (marker)
-        disp.fillRect(x, areaBottom + 2, tickW, 1, 15);
+    uint8_t length  = sequencer.getLength(activeTrack);
+    uint8_t curStep = sequencer.getCurrentStep(activeTrack);
+    bool    running = sequencer.isRunning();
 
-    if (playhead)
-        disp.fillRect(x, areaTop - 3, tickW, 1, 15);
-}
+    for (int i = 0; i < SEQ_STEPS; i++) {
+        int x    = startX + (i * waveW) / SEQ_STEPS + 1;
+        int xEnd = startX + ((i + 1) * waveW) / SEQ_STEPS - 1;
+        int tw   = max(xEnd - x, 1);
 
-static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
-{
-    uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
-    bool active = step < length;
-    uint8_t value = active ? sequencer.getStepValue(SEQ_TEST_TRACK, step) : 0;
-    bool isSelected = (step == selectedStep);
-    bool isPlaying = sequencer.isRunning() && step == sequencer.getCurrentStep(SEQ_TEST_TRACK);
-    int color = isSelected ? 15 : (active ? 11 : 4);
-    drawTickAt(disp, col, value, color, isSelected, isPlaying);
+        bool active     = i < (int)length;
+        uint8_t value   = active ? sequencer.getStepValue(activeTrack, i) : 0;
+        bool isSelected = (i == (int)selectedStep);
+        bool isPlaying  = running && (i == (int)curStep);
+        int color       = isSelected ? 15 : (active ? 11 : 4);
+
+        int y = areaBottom - map(value, 0, 127, 0, areaH);
+        disp.fillRect(x, y, tw, 2, color);
+
+        if (isSelected)
+            disp.fillRect(x, areaBottom + 2, tw, 1, 15);
+        if (isPlaying)
+            disp.fillRect(x, areaTop, tw, 2, 15);
+    }
 }
 
 // Draws the LFO waveform as a continuous line across the full width of a
@@ -237,81 +327,136 @@ static void drawStepTick(PicoGFX_SSD1322 &disp, int col, uint8_t step)
 // second display keeps its button/encoder labels but no waveform.
 static void drawLfoWaveform(PicoGFX_SSD1322 &disp)
 {
-    const int width = 256;
-    const int areaTop = 17;
-    const int areaBottom = 43;
-    const int areaH = areaBottom - areaTop;
+    static const int N = 64;
 
-    int prevX = 0, prevY = areaBottom;
-    for (int i = 0; i <= LFO_DISPLAY_RES; i++) {
-        float phase = (float)i / (float)LFO_DISPLAY_RES;
-        uint8_t value = lfo.previewOutput(SEQ_TEST_TRACK, phase);
-        int x = (i * width) / LFO_DISPLAY_RES;
-        int y = areaBottom - map(value, 0, 127, 0, areaH);
-        if (i > 0)
-            disp.drawLine(prevX, prevY, x, y, 11);
-        prevX = x;
-        prevY = y;
+    const int axisX      = 21;
+    const int waveX      = axisX + 1;
+    const int waveW      = 256 - waveX;
+    const int areaTop    = 5;
+    const int areaBottom = 58;
+    const int areaH      = areaBottom - areaTop;
+
+    disp.setFont(NULL);
+    disp.setTextColor(5);
+
+    struct { uint8_t val; const char* lbl; } refs[] = {{127,"127"},{63,"63"},{0,"0"}};
+    for (auto &r : refs) {
+        int y = areaBottom - map(r.val, 0, 127, 0, areaH);
+        disp.drawLine(waveX, y, 255, y, 4);
+        int tw = getStrWidth(disp, r.lbl);
+        disp.setCursor(axisX - tw - 1, y - 3);
+        disp.print(r.lbl);
+    }
+    disp.drawLine(axisX, areaTop, axisX, areaBottom, 5);
+
+    // Phase window centred on currentPhase: bar i=N/2 == currentPhase,
+    // bars 0..(N/2-1) are the past half-cycle, bars (N/2+1)..(N-1) the future.
+    float currentPhase = lfo.getPhase(activeTrack);
+    for (int i = 0; i < N; i++) {
+        float phase = fmodf(currentPhase + (float)i / (float)N - 0.5f + 2.0f, 1.0f);
+        uint8_t value = lfo.previewOutput(activeTrack, phase);
+        int x   = waveX + (i       * waveW) / N;
+        int xNx = waveX + ((i + 1) * waveW) / N;
+        int bw  = max(xNx - x, 1);
+        int y   = areaBottom - map(value, 0, 127, 0, areaH);
+        int bh  = areaBottom - y;
+        disp.fillRect(x, y,     bw, 1,       11);
+        if (bh > 1) disp.fillRect(x, y + 1, bw, bh - 1, 4);
     }
 
-    if (lfo.isRunning()) {
-        int x = constrain((int)(lfo.getPhase(SEQ_TEST_TRACK) * width), 0, width - 1);
-        disp.fillRect(x, areaTop, 1, areaH, 15);
-    }
+    // Fixed dot at centre X, tracking the current output value.
+    int dotX = waveX + waveW / 2;
+    int dotY = areaBottom - map(lfo.previewOutput(activeTrack, currentPhase), 0, 127, 0, areaH);
+    disp.fillRect(dotX - 1, dotY - 1, 3, 3, 15);
 }
 
-void drawSequencerView()
+void drawSequencerView(bool fullRedraw)
 {
-    char labelPos1[16], labelPos2[16], labelPos3[16], labelPos4[16];
-
-    if (lfoMode) {
-        snprintf(labelPos1, sizeof(labelPos1), "WAVE %s", Lfo::waveformLabel(lfo.getWaveform(SEQ_TEST_TRACK)));
-        snprintf(labelPos2, sizeof(labelPos2), "VAL %d", lfo.getValue(SEQ_TEST_TRACK));
-        snprintf(labelPos3, sizeof(labelPos3), "RATE %s", Sequencer::rateLabel(lfo.getRate(SEQ_TEST_TRACK)));
-        snprintf(labelPos4, sizeof(labelPos4), "AMT %d", lfo.getAmount(SEQ_TEST_TRACK));
-    } else {
-        uint8_t length = sequencer.getLength(SEQ_TEST_TRACK);
-        snprintf(labelPos1, sizeof(labelPos1), "STEP %d/%d", selectedStep + 1, length);
-        snprintf(labelPos2, sizeof(labelPos2), "VAL %d", sequencer.getStepValue(SEQ_TEST_TRACK, selectedStep));
-        snprintf(labelPos3, sizeof(labelPos3), "RATE %s", Sequencer::rateLabel(sequencer.getRate(SEQ_TEST_TRACK)));
-        snprintf(labelPos4, sizeof(labelPos4), "LEN %d", length);
-    }
-
-    const char* runLabel = (lfoMode ? lfo.isRunning() : sequencer.isRunning()) ? "RUN" : "STOP";
-
-    // --- Display 1: positions 1/2 (top), 5/6 (bottom) ---
-    display1.fillScreen(0);
-    drawButtonBox(display1, 0, 0, "SEQ/LFO");
-    drawButtonBox(display1, 128, 0, "-");
-    drawEncoderLabel(display1, 0, 10, labelPos1);
-    drawEncoderLabel(display1, 128, 10, labelPos2);
-    if (lfoMode) {
-        drawLfoWaveform(display1);
-    } else {
-        for (int i = 0; i < 8; i++)
-            drawStepTick(display1, i, i);
-    }
-    drawEncoderLabel(display1, 0, 46, "-");
-    drawEncoderLabel(display1, 128, 46, "-");
-    drawButtonBox(display1, 0, 54, "MIDI");
-    drawButtonBox(display1, 128, 54, "-");
-
-    // --- Display 2: positions 3/4 (top), 7/8 (bottom) ---
+    // --- Display 2 (right): full-height visualization ---
     display2.fillScreen(0);
-    drawButtonBox(display2, 0, 0, "SYNC");
-    drawButtonBox(display2, 128, 0, "CLR");
-    drawEncoderLabel(display2, 0, 10, labelPos3);
-    drawEncoderLabel(display2, 128, 10, labelPos4);
-    if (!lfoMode) {
-        for (int i = 0; i < 8; i++)
-            drawStepTick(display2, i, i + 8);
-    }
-    // LFO waveform is shown on display1 only for now (single screen).
-    drawEncoderLabel(display2, 0, 46, "-");
-    drawEncoderLabel(display2, 128, 46, runLabel);
-    drawButtonBox(display2, 0, 54, "-");
-    drawButtonBox(display2, 128, 54, "CLR");
+    if (lfoMode)
+        drawLfoWaveform(display2);
+    else
+        drawSeqGrid(display2);
 
-    display1.displayBlocking();
-    display2.displayBlocking();
+    // Display2 always refreshes (cursor/playhead moves on every dirty frame).
+    display2.display();
+    while (!display2.isTransferComplete()) {
+        yield();
+        midiRead();
+        lfo.onTimer();
+    }
+
+    // Display1 (left, compact encoder layout) only needs updating when a
+    // parameter actually changed — skip it on cursor-only frames.
+    if (!fullRedraw) return;
+
+    // --- Display 1 (left): button boxes + compact fader widgets ---
+    display1.fillScreen(0);
+    drawToggleBox(display1, 0, 0, !lfoMode);
+    drawButtonBox(display1, 128, 0,  lfoMode ? "-" : "NEXT");
+    drawButtonBox(display1, 0,   54, "STOP");
+    drawButtonBox(display1, 128, 54, lfoMode ? "-" : "RND");
+
+    char title0[20], title1[20], title4[20], title5[20];
+
+    if (lfoMode) {
+        uint8_t wf  = (uint8_t)lfo.getWaveform(activeTrack);
+        uint8_t val = lfo.getValue(activeTrack);
+        float   freq = lfo.getFreq(activeTrack);
+        int8_t  amt = lfo.getAmount(activeTrack);
+
+        snprintf(title0, sizeof(title0), "%s", Lfo::waveformLabel((LfoWaveform)wf));
+        snprintf(title1, sizeof(title1), "%d", val);
+        if (freq < 1.0f) snprintf(title4, sizeof(title4), "%.2fHz", freq);
+        else             snprintf(title4, sizeof(title4), "%.1fHz", freq);
+        snprintf(title5, sizeof(title5), "%d", amt);
+
+        strncpy(faders[0]->paramName, "Wave",   sizeof(faders[0]->paramName));
+        strncpy(faders[1]->paramName, "Value",  sizeof(faders[1]->paramName));
+        strncpy(faders[4]->paramName, "Freq",   sizeof(faders[4]->paramName));
+        strncpy(faders[5]->paramName, "Amount", sizeof(faders[5]->paramName));
+
+        faders[0]->value = (wf * 127) / (LFO_WAVEFORM_COUNT - 1);
+        faders[1]->value = val;
+        faders[4]->value = (int)constrain(
+            (logf(freq) - logf(0.05f)) / (logf(2.0f) - logf(0.05f)) * 127.0f, 0, 127);
+        faders[5]->value = (amt + 127) / 2;
+    } else {
+        uint8_t length = sequencer.getLength(activeTrack);
+        uint8_t val    = sequencer.getStepValue(activeTrack, selectedStep);
+        uint8_t rate   = (uint8_t)sequencer.getRate(activeTrack);
+
+        snprintf(title0, sizeof(title0), "%d/%d", selectedStep + 1, length);
+        snprintf(title1, sizeof(title1), "%d", val);
+        snprintf(title4, sizeof(title4), "%s", Sequencer::rateLabel((SeqRate)rate));
+        snprintf(title5, sizeof(title5), "%d", length);
+
+        strncpy(faders[0]->paramName, "Step",   sizeof(faders[0]->paramName));
+        strncpy(faders[1]->paramName, "Value",  sizeof(faders[1]->paramName));
+        strncpy(faders[4]->paramName, "Rate",   sizeof(faders[4]->paramName));
+        strncpy(faders[5]->paramName, "Length", sizeof(faders[5]->paramName));
+
+        faders[0]->value = length > 1 ? (selectedStep * 127) / (length - 1) : 0;
+        faders[1]->value = val;
+        faders[4]->value = ((SEQ_RATE_COUNT - 1 - rate) * 127) / (SEQ_RATE_COUNT - 1);
+        faders[5]->value = ((length - 1) * 127) / (SEQ_STEPS - 1);
+    }
+
+    strncpy(faders[0]->title, title0, sizeof(faders[0]->title));
+    strncpy(faders[1]->title, title1, sizeof(faders[1]->title));
+    strncpy(faders[4]->title, title4, sizeof(faders[4]->title));
+    strncpy(faders[5]->title, title5, sizeof(faders[5]->title));
+
+    faders[0]->drawFaderCompact();
+    faders[1]->drawFaderCompact();
+    faders[4]->drawFaderCompact();
+    faders[5]->drawFaderCompact();
+
+    display1.display();
+    while (!display1.isTransferComplete()) {
+        yield();
+        midiRead();
+        lfo.onTimer();
+    }
 }

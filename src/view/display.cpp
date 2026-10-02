@@ -17,7 +17,9 @@ bool screenSaverActive = false;
 
 void setupDisplay() {
     display1.begin();
+    display1.displayOff(); // begin() ends with DISPLAYON but GRAM is still random
     display2.begin();
+    display2.displayOff();
 
     // Fix remap for ZJY panels: enable nibble remap to un-mirror
     // Bits: A[0]=col remap, A[1]=nibble remap, A[2]=addr inc, A[4]=COM remap
@@ -43,6 +45,17 @@ void setupDisplay() {
     display2.oled_command(SSD1322_PRECHARGE);   display2.oled_data(0x17);
     display2.oled_command(SSD1322_SETVCOM);     display2.oled_data(0x04);
 
+    // Push black to GRAM, wait for DMA, then turn ON — panel stays dark until clean.
+    display1.fillScreen(0);
+    display1.display();
+    while (!display1.isTransferComplete()) {}
+    display1.displayOn();
+
+    display2.fillScreen(0);
+    display2.display();
+    while (!display2.isTransferComplete()) {}
+    display2.displayOn();
+
     // display1: faders 1,2,5,6
     faders[0] = new FaderWidget(display1, "Fader 1",   0,   0, 0);
     faders[1] = new FaderWidget(display1, "Fader 2", 128,   0, 1);
@@ -59,8 +72,6 @@ void setupDisplay() {
     display1.displayBlocking();
     display2.fillScreen(0);
     display2.displayBlocking();
-
-    showDisplay();
 }
 
 static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
