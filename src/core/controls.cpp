@@ -99,17 +99,15 @@ void ControlsManager::setDefaults() {
                 setButtonShort(_preset, i, MIDI_CC, 20 + i, 7, false);
             } else {
                 ControlData data = json.getControlData("encoders", _preset, i);
-                ControlMidiType type = static_cast<ControlMidiType>(data.value0);
-                uint8_t number = static_cast<uint8_t>(data.value1);
-                uint8_t channel = static_cast<uint8_t>(data.value2);
-                setEncoder(_preset, i, type, number, channel);
+                _presets[_preset].encoder[i].type    = static_cast<ControlMidiType>(data.value0);
+                _presets[_preset].encoder[i].number  = static_cast<uint8_t>(data.value1);
+                _presets[_preset].encoder[i].channel = static_cast<uint8_t>(data.value2);
 
                 data = json.getControlData("buttons_short", _preset, i);
-                type = static_cast<ControlMidiType>(data.value0);
-                number = static_cast<uint8_t>(data.value1);
-                channel = static_cast<uint8_t>(data.value2);
-                bool toggleMode = json.getButtonToggleMode(_preset, i) > 0;
-                setButtonShort(_preset, i, type, number, channel, toggleMode);
+                _presets[_preset].buttons_short[i].type    = static_cast<ControlMidiType>(data.value0);
+                _presets[_preset].buttons_short[i].number  = static_cast<uint8_t>(data.value1);
+                _presets[_preset].buttons_short[i].channel = static_cast<uint8_t>(data.value2);
+                _presets[_preset].buttons_short[i].toggleMode = json.getButtonToggleMode(_preset, i) > 0;
 
                 _presets[_preset].encoder[i].controlName[0] = '\0';
                 _presets[_preset].buttons_short[i].controlName[0] = '\0';
