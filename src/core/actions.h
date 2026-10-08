@@ -19,6 +19,7 @@ void sendPresetSysEx(uint8_t preset);
 void sendNameRequest(uint8_t idx, uint8_t isButton);
 void sendClearNaming(uint8_t idx, uint8_t isButton);
 void checkNamingPending();
+void checkShiftPending();
 void checkLatchPending();
 void onShiftPress();
 void onShiftRelease();

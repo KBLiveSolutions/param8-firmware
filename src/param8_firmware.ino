@@ -79,6 +79,7 @@ void loop() {
     serialEditorRead();
     encoders.read();
     readButtons();
+    checkShiftPending();
     checkLatchPending();
     checkNamingPending();
     updateLeds();

@@ -6,12 +6,14 @@
 #include "../view/leds.h"
 
 #define MAX_LATCH_EVENTS 256
-#define SHIFT_DOUBLE_TAP_WINDOW_MS 300
+#define SHIFT_DOUBLE_TAP_WINDOW_MS 400
 
 uint8_t presetTable = 0;
 bool shiftPressed = false;
 bool settingsModeActive = false;
 static unsigned long lastShiftReleaseTime = 0;
+static unsigned long shiftFirstPressTime = 0;
+static bool shiftPendingPresetPage = false;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t latchEncoderEventCount[8] = {0};
@@ -60,11 +62,16 @@ static void drawPresetPage()
 static void drawSettingsPage() {
     display1.fillScreen(0);
     display2.fillScreen(0);
-    static const char* bnames[] = {"Low", "Medium", "High"};
     const char* layoutName = (faderLayout == LAYOUT_DYNAMIC) ? "Dynamic" : "Compact";
-    faders[0]->drawPresetButton("Brightness", bnames[brightnessLevel], false);
-    faders[1]->drawPresetButton("Layout", layoutName, false);
-    for (int i = 2; i < 8; ++i) {
+    faders[0]->disabled   = false;
+    faders[0]->dimmed     = false;
+    faders[0]->valueOnly  = false;
+    faders[0]->showingValue = false;
+    faders[0]->setParamName("Brightness");
+    faders[0]->setValue(brightnessLevel * 63);
+    faders[0]->setButtonName(layoutName);
+    faders[0]->draw();
+    for (int i = 1; i < 8; ++i) {
         faders[i]->setEmpty();
         faders[i]->draw();
     }
@@ -81,6 +88,7 @@ void onShiftPress()
         lastShiftReleaseTime = 0;
         // fall through to normal shift press
     } else if (lastShiftReleaseTime > 0 && now - lastShiftReleaseTime < SHIFT_DOUBLE_TAP_WINDOW_MS) {
+        shiftPendingPresetPage = false;
         settingsModeActive = true;
         setLed(1, true);
         lastShiftReleaseTime = 0;
@@ -88,6 +96,8 @@ void onShiftPress()
         return;
     }
 
+    shiftFirstPressTime = now;
+    shiftPendingPresetPage = true;
     shiftPressed = true;
     setLed(1, true);
     sendMidiMessage(0, 110, 127, 7);
@@ -105,12 +115,13 @@ void onShiftPress()
             revertAbsoluteChanged[i] = false;
     }
     if (controls.getPreset() < 24) presetTable = controls.getPreset() / 6;
-    drawPresetPage();
+    // Preset page drawn by checkShiftPending() after double-tap window expires
 }
 
 void onShiftRelease()
 {
     lastShiftReleaseTime = millis();
+    shiftPendingPresetPage = false;
     if (settingsModeActive) return;
     shiftPressed = false;
     setLed(1, false);
@@ -158,6 +169,14 @@ void checkNamingPending()
         namingPendingConfirm = false;
         sendClearNaming(lastControlIdx, lastControlIsButton ? 1 : 0);
     }
+}
+
+void checkShiftPending()
+{
+    if (!shiftPendingPresetPage) return;
+    if (millis() - shiftFirstPressTime < SHIFT_DOUBLE_TAP_WINDOW_MS) return;
+    shiftPendingPresetPage = false;
+    if (shiftPressed) drawPresetPage();
 }
 
 void checkLatchPending()

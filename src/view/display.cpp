@@ -195,6 +195,7 @@ void runScreenSaver() {
 void setBrightness(uint8_t level) {
     static const uint8_t contrasts[] = { 0x40, 0x80, 0xD0 };
     if (level > 2) level = 2;
+    brightnessLevel = level;
     display1.setContrast(contrasts[level]);
     display2.setContrast(contrasts[level]);
     // TODO: SSD1322 master current (cmd 0xC7) has no direct PicoGFX_SSD1322 API.
