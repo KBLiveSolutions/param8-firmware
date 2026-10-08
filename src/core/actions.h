@@ -7,6 +7,7 @@ extern bool latchHeld;
 extern bool revertMode;
 extern unsigned long lastInputTime;
 extern unsigned long lastButtonReleaseTime[8];
+extern uint8_t presetTable;
 
 void onButtonShortPress(uint8_t idx);
 void onRelativeEncoderChange(uint8_t idx, int value);

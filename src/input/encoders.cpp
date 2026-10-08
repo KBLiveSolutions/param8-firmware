@@ -36,16 +36,25 @@ void  Encoders::read(){
       unsigned long now = millis();
       unsigned long dt = now - lastTime[i];
 
-      bool isRelative = controls.getPreset() > 5;
+      if (shiftPressed) {
+          onRelativeEncoderChange(i, delta > 0 ? 1 : -1);
+          lastPos[i] = newPos;
+          lastTime[i] = now;
+          continue;
+      }
+
+      bool isRelative = controls.getPreset() > 23;
+      bool isHiRes = !isRelative && controls.getEncoder(i).hiRes;
       const int gain_min = 1;
-      const int gain_max = isRelative ? 5 : 4;
+      const int gain_max = isRelative ? 5 : (isHiRes ? 64 : 4);
       const unsigned long dt_min = 15;
-      const unsigned long dt_max = 150;
+      const unsigned long dt_max = isHiRes ? 500UL : 150UL;
 
       unsigned long dt_clamped = min(max(dt, dt_min), dt_max);
 
       float t = float(dt_clamped - dt_min) / float(dt_max - dt_min);
-      int gain = int(gain_min + (gain_max - gain_min) * (1.0f - t * t));
+      float factor = isHiRes ? ((1.0f - t) * (1.0f - t) * (1.0f - t)) : (1.0f - t * t);
+      int gain = int(gain_min + (gain_max - gain_min) * factor);
 
       if (isRelative) onRelativeEncoderChange(i, delta * gain);
       else onAbsoluteEncoderChange(i, delta * gain);

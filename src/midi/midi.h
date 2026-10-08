@@ -2,7 +2,7 @@
 #include <MIDI.h>
 #include <Adafruit_TinyUSB.h>
 
-extern Adafruit_USBD_MIDI usb_midi;
+extern Adafruit_USBD_MIDI usb_midi;  // cable 1="DAW" (global/device), cable 2="User" (user presets)
 // extern MIDI_NAMESPACE::MidiInterface<Adafruit_USBD_MIDI> USBMIDI;
 
 #define MIDI_MAX_PACKET_SIZE 4

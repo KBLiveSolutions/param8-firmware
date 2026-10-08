@@ -6,6 +6,7 @@
 #include "../view/leds.h"
 
 #define MAX_LATCH_EVENTS 256
+uint8_t presetTable = 0;
 bool shiftPressed = false;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
@@ -29,6 +30,29 @@ bool latchAbsoluteChanged[8] = {false};
 uint8_t revertAbsoluteOriginal[8] = {0};
 bool revertAbsoluteChanged[8] = {false};
 
+static void drawPresetPage()
+{
+    display1.fillScreen(0);
+    display2.fillScreen(0);
+    for (int i = 0; i < 8; ++i) {
+        char l1[20], l2[20] = {0};
+        if (i == 6)      { strcpy(l1, "Global"); strcpy(l2, "Mode"); }
+        else if (i == 7) { strcpy(l1, "Device"); strcpy(l2, "Mode"); }
+        else {
+            uint8_t presetIdx = presetTable * 6 + i;
+            snprintf(l1, sizeof(l1), "Preset %d", presetIdx + 1);
+            const char* pname = controls.getPresetName(presetIdx);
+            if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
+        }
+        bool isActive;
+        if (i == 6) isActive = (controls.getPreset() == 24);
+        else if (i == 7) isActive = (controls.getPreset() == 25);
+        else isActive = ((presetTable * 6 + i) == controls.getPreset());
+        faders[i]->drawPresetButton(l1, l2, isActive);
+    }
+    flushDisplays();
+}
+
 void onShiftPress()
 {
     shiftPressed = true;
@@ -37,7 +61,7 @@ void onShiftPress()
 
     if (revertMode)
     {
-        if (controls.getPreset() > 5)
+        if (controls.getPreset() > 23)
         {
             uint8_t pkt[5] = {240, 111, 0x1A, 2, 247};
             usb_midi.write(pkt, 5);
@@ -47,20 +71,8 @@ void onShiftPress()
         for (int i = 0; i < 8; ++i)
             revertAbsoluteChanged[i] = false;
     }
-    display1.fillScreen(0);
-    display2.fillScreen(0);
-    for (int i = 0; i < 8; ++i) {
-        char l1[20], l2[20] = {0};
-        if (i == 6)      { strcpy(l1, "Global"); strcpy(l2, "Mode"); }
-        else if (i == 7) { strcpy(l1, "Device"); strcpy(l2, "Mode"); }
-        else {
-            snprintf(l1, sizeof(l1), "Preset %d", i + 1);
-            const char* pname = controls.getPresetName(i);
-            if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
-        }
-        faders[i]->drawPresetButton(l1, l2, i == controls.getPreset());
-    }
-    flushDisplays();
+    if (controls.getPreset() < 24) presetTable = controls.getPreset() / 6;
+    drawPresetPage();
 }
 
 void onShiftRelease()
@@ -86,7 +98,7 @@ void sendNameRequest(uint8_t idx, uint8_t isButton)
 void sendClearNaming(uint8_t idx, uint8_t isButton)
 {
     uint8_t preset = controls.getPreset();
-    if (preset >= 6) return;
+    if (preset >= 24) return;
 
     MidiControl& ctrl = isButton
         ? controls.getButtonShort(idx)
@@ -147,7 +159,7 @@ void onLatchPress()
     if (revertMode && !shiftPressed)
     {
         latchPendingActivation = false;
-        if (controls.getPreset() > 5)
+        if (controls.getPreset() > 23)
         {
             uint8_t pkt[5] = {240, 111, 0x1A, 0, 247};
             usb_midi.write(pkt, 5);
@@ -169,7 +181,7 @@ void onLatchPress()
                 revertAbsoluteOriginal[i] = controls.getEncoder(i).value;
                 revertAbsoluteChanged[i] = false;
             }
-            if (controls.getPreset() > 5)
+            if (controls.getPreset() > 23)
             {
                 uint8_t pkt[5] = {240, 111, 0x1A, 1, 247};
                 usb_midi.write(pkt, 5);
@@ -213,23 +225,27 @@ void onButtonPressed(uint8_t idx)
     }
     if (shiftPressed)
     {
-        {
-            char l1[20], l2[20] = {0};
-            if (idx == 6)      { strcpy(l1, "Global"); strcpy(l2, "Mode"); }
-            else if (idx == 7) { strcpy(l1, "Device"); strcpy(l2, "Mode"); }
-            else {
-                snprintf(l1, sizeof(l1), "Preset %d", idx + 1);
-                const char* pname = controls.getPresetName(idx);
-                if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
-            }
-            faders[idx]->drawPresetButton(l1, l2, true);
-            flushDisplays();
+        uint8_t newPreset;
+        char l1[20], l2[20] = {0};
+        if (idx == 6) {
+            newPreset = 24;
+            strcpy(l1, "Global"); strcpy(l2, "Mode");
+        } else if (idx == 7) {
+            newPreset = 25;
+            strcpy(l1, "Device"); strcpy(l2, "Mode");
+        } else {
+            newPreset = presetTable * 6 + idx;
+            snprintf(l1, sizeof(l1), "Preset %d", newPreset + 1);
+            const char* pname = controls.getPresetName(newPreset);
+            if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
         }
-        controls.setPreset(idx);
+        faders[idx]->drawPresetButton(l1, l2, true);
+        flushDisplays();
+        controls.setPreset(newPreset);
         updateFaderTitles();
         updateFaderValues();
         showDisplay();
-        sendPresetSysEx(idx);
+        sendPresetSysEx(newPreset);
         return;
     }
     else
@@ -238,18 +254,22 @@ void onButtonPressed(uint8_t idx)
         ControlMidiType type = controls.getButtonShort(idx).type;
         uint8_t number = controls.getButtonShort(idx).number;
         uint8_t _value;
-        bool isToggle = (controls.getPreset() < 6) && controls.getButtonShort(idx).toggleMode;
+        bool isToggle = (controls.getPreset() < 24) && controls.getButtonShort(idx).toggleMode;
         if (isToggle) {
             bool newState = !faders[idx]->buttonState;
             faders[idx]->buttonState = newState;
             faders[idx]->updateButtonName(newState);
-            _value = newState ? 127 : 0;
+            if (controls.getPreset() < 24) {
+                _value = newState ? controls.getButtonShort(idx).maxVal : controls.getButtonShort(idx).minVal;
+            } else {
+                _value = newState ? 127 : 0;
+            }
         } else {
-            _value = 127;
+            _value = (controls.getPreset() < 24) ? controls.getButtonShort(idx).maxVal : 127;
         }
         controls.getButtonShort(idx).value = _value;
         sendMidiMessage(type, number, _value, channel);
-        if (controls.getPreset() == 6) {
+        if (controls.getPreset() == 24) {
             if (idx == 3 || idx == 7) {
                 faders[idx]->updateButtonName(true);
             } else {
@@ -258,7 +278,7 @@ void onButtonPressed(uint8_t idx)
                 faders[idx]->updateButtonName(on);
             }
         }
-        if (controls.getPreset() == 7) {
+        if (controls.getPreset() == 25) {
             if (idx != 2 && idx != 3) {
                 faders[idx]->updateButtonName(true);
             }
@@ -271,16 +291,17 @@ void onButtonReleased(uint8_t idx)
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
-    bool isToggle = (controls.getPreset() < 6) && controls.getButtonShort(idx).toggleMode;
-    if (!isToggle) {
-        sendMidiMessage(type, number, 0, channel);
-        controls.getButtonShort(idx).value = 0;
+    bool isToggle = (controls.getPreset() < 24) && controls.getButtonShort(idx).toggleMode;
+    if (!isToggle && type != MIDI_PC) {
+        uint8_t releaseVal = (controls.getPreset() < 24) ? controls.getButtonShort(idx).minVal : 0;
+        sendMidiMessage(type, number, releaseVal, channel);
+        controls.getButtonShort(idx).value = releaseVal;
     }
     lastButtonReleaseTime[idx] = millis();
-    if (controls.getPreset() == 6 && (idx == 3 || idx == 7)) {
+    if (controls.getPreset() == 24 && (idx == 3 || idx == 7)) {
         faders[idx]->updateButtonName(false);
     }
-    if (controls.getPreset() == 7 && idx != 2 && idx != 3) {
+    if (controls.getPreset() == 25 && idx != 2 && idx != 3) {
         faders[idx]->updateButtonName(false);
     }
 }
@@ -299,6 +320,13 @@ void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel)
 
 void onRelativeEncoderChange(uint8_t idx, int delta)
 {
+    if (shiftPressed) {
+        if (delta > 0 && presetTable < 3) presetTable++;
+        else if (delta < 0 && presetTable > 0) presetTable--;
+        drawPresetPage();
+        return;
+    }
+
     lastControlIdx = idx;
     lastControlIsButton = false;
 
@@ -335,7 +363,7 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
         }
     }
 
-    if (latchPressed || controls.getPreset() < 6)
+    if (latchPressed || controls.getPreset() < 24)
     {
         updateFader(idx, (uint8_t)estimated_display);
         char buffer[16];
@@ -347,6 +375,13 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
 
 void onAbsoluteEncoderChange(uint8_t idx, int delta)
 {
+    if (shiftPressed) {
+        if (delta > 0 && presetTable < 3) presetTable++;
+        else if (delta < 0 && presetTable > 0) presetTable--;
+        drawPresetPage();
+        return;
+    }
+
     lastControlIdx = idx;
     lastControlIsButton = false;
 
@@ -355,13 +390,45 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     uint8_t number = controls.getEncoder(idx).number;
     controls.getEncoder(idx).lastActivity = millis();
     faders[idx]->showingValue = true;
+
+    if ((type == MIDI_CC && controls.getEncoder(idx).hiRes) || type == MIDI_PB) {
+        int newHv = (int)controls.getHiResValue(controls.getPreset(), idx) + delta;
+        int minHv = (int)controls.getEncoder(idx).minVal << 7;
+        int maxHv = ((int)controls.getEncoder(idx).maxVal << 7) | 0x7F;
+        if (minHv >= maxHv) { minHv = 0; maxHv = 16383; }
+        if (newHv < minHv) newHv = minHv;
+        if (newHv > maxHv) newHv = maxHv;
+        controls.setHiResValue(controls.getPreset(), idx, (uint16_t)newHv);
+        uint8_t msb = (uint8_t)(newHv >> 7);
+        uint8_t lsb = (uint8_t)(newHv & 0x7F);
+        controls.getEncoder(idx).value = msb;
+        if (revertMode) {
+            revertAbsoluteChanged[idx] = true;
+            if (type == MIDI_PB) sendMidiMessage(MIDI_PB, lsb, msb, channel);
+            else { sendMidiMessage(MIDI_CC, number, msb, channel); sendMidiMessage(MIDI_CC, number + 32, lsb, channel); }
+        } else if (!latchPressed) {
+            if (type == MIDI_PB) sendMidiMessage(MIDI_PB, lsb, msb, channel);
+            else { sendMidiMessage(MIDI_CC, number, msb, channel); sendMidiMessage(MIDI_CC, number + 32, lsb, channel); }
+        } else {
+            latchAbsoluteValue[idx] = msb;
+            latchAbsoluteChanged[idx] = true;
+        }
+        updateFader(idx, msb);
+        char buffer[16];
+        sprintf(buffer, "%d", newHv);
+        if (!controls.getEncoder(idx).hasWatcher)
+            faders[idx]->updateTitle(buffer);
+        return;
+    }
+
     int newValue = controls.getEncoder(idx).value + delta;
-    if (newValue < 0)
-        newValue = 0;
-    if (newValue > 127)
-        newValue = 127;
+    int minV = controls.getEncoder(idx).minVal;
+    int maxV = controls.getEncoder(idx).maxVal;
+    if (minV >= maxV) { minV = 0; maxV = 127; }
+    if (newValue < minV) newValue = minV;
+    if (newValue > maxV) newValue = maxV;
     controls.getEncoder(idx).value = newValue;
-    
+
     if (revertMode)
     {
         revertAbsoluteChanged[idx] = true;
@@ -391,7 +458,7 @@ void updateFaderTitles()
         char buf[24];
         MidiControl& enc = controls.getEncoder(i);
         faders[i]->buttonState = false;
-        faders[i]->valueOnly = (preset == 6 && (i == 2 || i == 3 || i == 6));
+        faders[i]->valueOnly = (preset == 24 && (i == 2 || i == 3 || i == 6));
         if (faders[i]->valueOnly) {
             faders[i]->showingValue = true;
             faders[i]->updateTitle("---");
@@ -400,26 +467,31 @@ void updateFaderTitles()
         }
         if (enc.controlName[0] != '\0') {
             faders[i]->setParamName(enc.controlName);
-        } else if (preset == 6) {
+        } else if (preset == 24) {
             static const char* mixerParamNames[] = {
                 "Master Vol.", "Cue Vol.", "Tempo", "Scene",
                 "Volume", "Pan", "Position", "Sel. Param."
             };
             faders[i]->setParamName(mixerParamNames[i]);
-        } else if (preset == 7) {
+        } else if (preset == 25) {
             faders[i]->setParamName("---");
         } else {
-            snprintf(buf, sizeof(buf), "CC%d/%d", enc.number, enc.channel + 1);
+            if (enc.type == MIDI_AT)
+                snprintf(buf, sizeof(buf), "AT/%d", enc.channel + 1);
+            else if (enc.type == MIDI_PB)
+                snprintf(buf, sizeof(buf), "PB/%d", enc.channel + 1);
+            else
+                snprintf(buf, sizeof(buf), "CC%d/%d", enc.number, enc.channel + 1);
             faders[i]->setParamName(buf);
         }
-        if(controls.getPreset() == 7){
+        if(controls.getPreset() == 25){
             static const char* buttonNames[] = {
                 "Track -", "Track +", "Device On", "A/B",
                 "Device -", "Device +", "Bank -", "Bank +"
             };
             snprintf(buf, sizeof(buf), buttonNames[i]);
         }
-        else if(controls.getPreset() == 6){
+        else if(controls.getPreset() == 24){
             static const char* buttonNames[] = {
                 "Metronome", "Arm", "Play/Stop", "Launch",
                 "Mute", "Solo", "Arr. Loop", "-> Default"
@@ -432,6 +504,8 @@ void updateFaderTitles()
             snprintf(buf, sizeof(buf), "%s", btn.controlName);
         } else if (btn.type == MIDI_CC) {
             snprintf(buf, sizeof(buf), "CC%d/%d", btn.number, btn.channel + 1);
+        } else if (btn.type == MIDI_PC) {
+            snprintf(buf, sizeof(buf), "PC%d/%d", btn.number, btn.channel + 1);
         } else {
             static const char* noteNames[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
             int octave = (btn.number / 12) - 2;
@@ -440,16 +514,18 @@ void updateFaderTitles()
         }
         faders[i]->setButtonName(buf);
     }
-    if (preset == 7) {
+    if (preset == 25) {
         deviceLabel[0] = '\0';
         bankLabel[0] = '\0';
         trackLabel[0] = '\0';
-    } else if (preset == 6) {
+    } else if (preset == 24) {
         strncpy(deviceLabel, "Track", sizeof(deviceLabel));
         strncpy(bankLabel, "Global", sizeof(bankLabel));
         deviceLabelDirty = true;
         bankLabelDirty = true;
     } else {
+        trackLabel[0] = '\0';
+        trackLabelDirty = true;
         const char* pName = controls.getPresetName(preset);
         if (pName[0] != '\0') {
             strncpy(bankLabel, pName, sizeof(bankLabel));
@@ -468,7 +544,7 @@ void updateFaderValues()
         uint8_t val = controls.getEncoder(i).value;
         faders[i]->setValue(val);
         if (faderLayout != LAYOUT_DYNAMIC && !controls.getEncoder(i).hasWatcher) {
-            if (controls.getPreset() < 6) {
+            if (controls.getPreset() < 24) {
                 char buf[16];
                 snprintf(buf, sizeof(buf), "%d", val);
                 faders[i]->updateTitle(buf);
@@ -535,7 +611,7 @@ void releaseLatchAndSend()
 
 void sendRevertEvents()
 {
-    bool isRelative = controls.getPreset() > 5;
+    bool isRelative = controls.getPreset() > 23;
     for (int i = 0; i < 8; ++i)
     {
         if (!revertAbsoluteChanged[i])
