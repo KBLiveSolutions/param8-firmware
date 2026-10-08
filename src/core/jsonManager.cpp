@@ -77,17 +77,23 @@ void JsonManager::getEncoderArray(uint8_t preset, uint8_t enc, int result[2]) {
 ControlData JsonManager::getControlData(const char* control_type, uint8_t preset, uint8_t enc) {
     JsonArray arr = _doc[String(preset)][control_type][String(enc)].as<JsonArray>();
     ControlData data;
-    data.value0 = arr[0] | 0;  // Default to 0 if null
-    data.value1 = arr[1] | 0;  // Default to 0 if null
-    data.value2 = arr[2] | 0;  // Default to 0 if null
+    data.value0 = arr[0] | 0;
+    data.value1 = arr[1] | 0;
+    data.value2 = arr[2] | 0;
+    data.value3 = arr[3] | 0;
+    data.value4 = arr[4].isNull() ? -1 : (int)arr[4].as<int>();
+    data.value5 = arr[5].isNull() ? -1 : (int)arr[5].as<int>();
     return data;
 }
 
-void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel) {
+void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel, int hiRes, int minVal, int maxVal) {
     JsonArray arr = _doc[String(preset)]["encoders"][String(enc)].to<JsonArray>();
     arr.add(type);
     arr.add(number);
     arr.add(channel);
+    arr.add(hiRes);
+    arr.add(minVal);
+    arr.add(maxVal);
 }
 
 void setupJsonManager() {

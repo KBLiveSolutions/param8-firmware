@@ -68,10 +68,16 @@ void setupDisplay() {
     faders[6] = new FaderWidget(display2, "Fader 7",   0,  32, 6);
     faders[7] = new FaderWidget(display2, "Fader 8", 128,  32, 7);
 
+    // Push black to GRAM, wait for DMA, then turn ON — panel stays dark until clean.
     display1.fillScreen(0);
-    display1.displayBlocking();
+    display1.display();
+    while (!display1.isTransferComplete()) {}
+    display1.displayOn();
+
     display2.fillScreen(0);
-    display2.displayBlocking();
+    display2.display();
+    while (!display2.isTransferComplete()) {}
+    display2.displayOn();
 }
 
 static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
@@ -123,6 +129,8 @@ void drawAllWidgets() {
     for (int i : {2, 3, 6, 7}) {
         faders[i]->draw();
     }
+    if (trackLabel[0] != '\0')
+        drawLabelOverButton(display1, trackLabel, 0);
     if (deviceLabel[0] != '\0')
         drawLabelOverButton(display1, deviceLabel, 54);
     if (bankLabel[0] != '\0')
@@ -153,6 +161,11 @@ void updateDisplay() {
 void drawDeviceBankLabels() {
     if (screenSaverActive) return;
     if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty) return;
+    if (trackLabelDirty) {
+        trackLabelDirty = false;
+        if (trackLabel[0] != '\0')
+            drawLabelOverButton(display1, trackLabel, 0);
+    }
     if (deviceLabelDirty) {
         deviceLabelDirty = false;
         if (deviceLabel[0] != '\0')
@@ -162,11 +175,6 @@ void drawDeviceBankLabels() {
         bankLabelDirty = false;
         if (bankLabel[0] != '\0')
             drawLabelOverButton(display2, bankLabel, 54);
-    }
-    if (trackLabelDirty) {
-        trackLabelDirty = false;
-        if (trackLabel[0] != '\0')
-            drawLabelOverButton(display1, trackLabel, 0);
     }
 }
 

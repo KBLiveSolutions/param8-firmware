@@ -8,7 +8,7 @@
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 USING_NAMESPACE_MIDI
-Adafruit_USBD_MIDI usb_midi;
+Adafruit_USBD_MIDI usb_midi(2);  // cable 1="DAW", cable 2="User"
 MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
 
 // SPI: SCK=GPIO6, MOSI=GPIO7 (set in setup())
@@ -113,11 +113,11 @@ void loop() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("[boot] setupMIDI");
+  setupMIDI();  // Must be first: register MIDI interface before USB host enumerates
   delay(100);
   Serial.println("[boot] setupJsonManager");
   setupJsonManager();
-  Serial.println("[boot] setupMIDI");
-  setupMIDI();
   Serial.println("[boot] SPI.begin");
   SPI.setSCK(6);  // Set SCK to GPIO 6
   SPI.setTX(7);   // Set MOSI to GPIO 7

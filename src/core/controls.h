@@ -5,7 +5,9 @@
 enum ControlMidiType : uint8_t {
     MIDI_CC = 0,
     MIDI_NOTE = 1,
-    MIDI_PC = 2
+    MIDI_PC = 2,
+    MIDI_AT = 3,  // Channel Aftertouch
+    MIDI_PB = 4   // Pitch Bend (14-bit)
 };
 
 struct MidiControl {
@@ -17,6 +19,9 @@ struct MidiControl {
     unsigned long lastActivity = 0;
     char controlName[12] = {0};
     bool hasWatcher = false;
+    bool hiRes = false;
+    uint8_t minVal = 0;
+    uint8_t maxVal = 127;
 };
 
 struct PresetControls {
@@ -46,11 +51,15 @@ public:
     void setDefaults();
     void getPresetControls(uint8_t);
     void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value);
-    void checkInactiveEncoders(); // Nouvelle fonction pour vérifier les encodeurs inactifs
+    void checkInactiveEncoders();
+
+    uint16_t getHiResValue(uint8_t preset, uint8_t idx) const { return _hiResValues[preset][idx]; }
+    void setHiResValue(uint8_t preset, uint8_t idx, uint16_t v) { _hiResValues[preset][idx] = v; }
 
 private:
     uint8_t _currentPreset;
-    PresetControls _presets[8];
+    PresetControls _presets[26];
+    uint16_t _hiResValues[26][8];
 };
 
 extern ControlsManager controls;

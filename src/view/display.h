@@ -16,7 +16,7 @@ extern bool deviceLabelDirty;
 extern bool bankLabelDirty;
 extern bool trackLabelDirty;
 
-#define BUTTON_BORDER_COLOR 6   
+#define BUTTON_BORDER_COLOR 6
 #define BUTTON_CORNER       2
 
 // Helper: pixel width of str using the current font on disp

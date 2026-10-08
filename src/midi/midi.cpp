@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Adafruit_TinyUSB.h>
 #include "midi.h"
 #include "../core/controls.h"
 #include "../core/actions.h"
@@ -21,7 +22,18 @@ void setupMIDI()
 {
   USBDevice.setManufacturerDescriptor("KBD");
   USBDevice.setProductDescriptor("param8");
+  usb_midi.setCableName(1, "DAW");
+  usb_midi.setCableName(2, "User");
   usb_midi.begin();
+  // Force re-enumeration so the host picks up the 2-cable MIDI descriptor.
+  // TinyUSB_Device_Init() runs before setup(), so the device may already be
+  // mounted when begin() is called here and the new interface won't show up
+  // without a disconnect/reconnect cycle.
+  if (TinyUSBDevice.mounted()) {
+    TinyUSBDevice.detach();
+    delay(100);
+    TinyUSBDevice.attach();
+  }
   // usb_midi.setHandleNoteOn([](uint8_t channel, uint8_t note, uint8_t velocity) {
   //   Serial.printf("Note On: Channel %d, Note %d, Velocity %d\n", channel, note, velocity);
   // });
@@ -58,33 +70,48 @@ void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channe
   if (screenSaverActive)
   {
     screenSaverActive = false;
-    showDisplay(); // réaffiche l'UI normale
+    showDisplay();
   }
-  uint8_t packet[4] = {0x0A, 0, 0, 0};
-  // Serial.print("Sending MIDI: ");
-  // Serial.print(type);
-  // Serial.print(", Number: ");
-  // Serial.print(number);
-  // Serial.print(", Value: ");
-  // Serial.println(value);
+  // cable 0 = DAW (global/device modes), cable 1 = User (user presets 0-23)
+  uint8_t cable = (controls.getPreset() >= 24) ? 0 : 1;
+  uint8_t packet[4] = {0};
   switch (type)
   {
   case MIDI_NOTE:
+    packet[0] = (cable << 4) | 0x09;
     packet[1] = (uint8_t)(0x90 | (channel & 0x0F));
     packet[2] = number;
     packet[3] = value;
     usb_midi.writePacket(packet);
     break;
   case MIDI_CC:
+    packet[0] = (cable << 4) | 0x0B;
     packet[1] = (uint8_t)(0xB0 | (channel & 0x0F));
     packet[2] = number;
     packet[3] = value;
     usb_midi.writePacket(packet);
     break;
   case MIDI_PC:
-    uint8_t pcPacket[3] = {0x0A, (uint8_t)(0xC0 | (channel & 0x0F)), number};
-    usb_midi.write(pcPacket[1]);
-    usb_midi.write(pcPacket[2]);
+    packet[0] = (cable << 4) | 0x0C;
+    packet[1] = (uint8_t)(0xC0 | (channel & 0x0F));
+    packet[2] = number & 0x7F;
+    packet[3] = 0;
+    usb_midi.writePacket(packet);
+    break;
+  case MIDI_AT:
+    packet[0] = (cable << 4) | 0x0D;
+    packet[1] = (uint8_t)(0xD0 | (channel & 0x0F));
+    packet[2] = value & 0x7F;
+    packet[3] = 0;
+    usb_midi.writePacket(packet);
+    break;
+  case MIDI_PB:
+    // number = LSB (7-bit), value = MSB (7-bit)
+    packet[0] = (cable << 4) | 0x0E;
+    packet[1] = (uint8_t)(0xE0 | (channel & 0x0F));
+    packet[2] = number & 0x7F;
+    packet[3] = value & 0x7F;
+    usb_midi.writePacket(packet);
     break;
   }
 }
@@ -151,7 +178,7 @@ void handleMIDIDAWMessage(uint8_t *packet)
   case 0xC0: // Program change
   {
     uint8_t program = packet[2] & 0x7F;
-    if (program < 8) {
+    if (program < 26) {
       controls.setPreset(program);
       updateFaderTitles();
       updateFaderValues();
@@ -308,14 +335,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     deviceLabelDirty = true;
     break;
 
-  case 6:
-    strncpy(trackLabel, ascii_string, sizeof(trackLabel));
-    trackLabel[sizeof(trackLabel)-1] = '\0';
-    trackLabelDirty = true;
-    drawDeviceBankLabels();
-    flushDisplays();
-    break;
-
   case 5:
   {
     bool wasConnected = liveConnected;
@@ -324,11 +343,20 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
     if (!wasConnected) {
-      if (preset == 7 || preset == 6) {
+      if (preset == 25 || preset == 24) {
         updateFaderTitles();
       }
       showDisplay();
     }
+    break;
+  }
+  case 6:
+  {
+    strncpy(trackLabel, ascii_string, sizeof(trackLabel));
+    trackLabel[sizeof(trackLabel)-1] = '\0';
+    trackLabelDirty = true;
+    drawDeviceBankLabels();
+    flushDisplays();
     break;
   }
   case 7:
@@ -341,11 +369,27 @@ void onSysEx(const uint8_t *sysex, size_t len)
     Serial.println("Configuration des encoders reçue");
     // Chaque contrôle utilise 3 octets: type, number, channel
     uint8_t preset = sysex[3];
+    if (preset >= 24) break;
     param_number = sysex[4];
-    uint8_t type = sysex[5];
+    // sysex[5]: editor type (0=CC, 1=CC14bit, 2=AT, 3=PB)
+    uint8_t editorType = sysex[5];
     uint8_t number = sysex[6];
     uint8_t channel = sysex[7];
-    controls.setEncoder(preset, param_number, MIDI_CC, number, channel);
+    uint8_t encMin = (len >= 11) ? sysex[9]  : 0;
+    uint8_t encMax = (len >= 12) ? sysex[10] : 127;
+    ControlMidiType encType;
+    bool hiRes = false;
+    switch (editorType) {
+        case 1: encType = MIDI_CC; hiRes = true; break;
+        case 2: encType = MIDI_AT; break;
+        case 3: encType = MIDI_PB; break;
+        default: encType = MIDI_CC; break;
+    }
+    controls.setEncoder(preset, param_number, encType, number, channel);
+    controls.getEncoderAt(preset, param_number).hiRes = hiRes;
+    controls.getEncoderAt(preset, param_number).minVal = encMin;
+    controls.getEncoderAt(preset, param_number).maxVal = encMax;
+    json.setEncoder(preset, param_number, (int)encType, (int)number, (int)channel, hiRes ? 1 : 0, encMin, encMax);
     if (preset == controls.getPreset()) {
       updateFaderTitles();
       showDisplay();
@@ -358,16 +402,28 @@ void onSysEx(const uint8_t *sysex, size_t len)
     Serial.println("Configuration des boutons courts reçue (nouveau format)");
     // Structure : F0, constructeur, preset, status, type, control_number, channel, toggle, F7
     uint8_t preset = sysex[3];
+    if (preset >= 24) break;
     param_number = sysex[4];
-    ControlMidiType _type = (sysex[5] == 0) ? MIDI_CC : MIDI_NOTE;
+    ControlMidiType _type;
+    switch (sysex[5]) {
+      case 1:  _type = MIDI_NOTE; break;
+      case 2:  _type = MIDI_PC;   break;
+      default: _type = MIDI_CC;   break;
+    }
     uint8_t control = sysex[6];
     uint8_t channel = sysex[7];
     bool toggleMode = sysex[8] != 0;
+    uint8_t btnMin = (len >= 11) ? sysex[9]  : 0;
+    uint8_t btnMax = (len >= 12) ? sysex[10] : 127;
     controls.setButtonShort(preset, param_number, _type, control, channel, toggleMode);
+    controls.getButtonShortAt(preset, param_number).minVal = btnMin;
+    controls.getButtonShortAt(preset, param_number).maxVal = btnMax;
     JsonArray arr = json.getDoc()[String(preset)]["buttons_short"][String(param_number)].to<JsonArray>();
     arr[0] = static_cast<int>(_type);
     arr[1] = static_cast<int>(control);
     arr[2] = static_cast<int>(channel);
+    arr[3] = (int)btnMin;
+    arr[4] = (int)btnMax;
     json.setButtonToggleMode(preset, param_number, toggleMode ? 1 : 0);
     if (preset == controls.getPreset()) {
       updateFaderTitles();
@@ -384,7 +440,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
       json.setLayout(layout);
       json.save();
       uint8_t preset = controls.getPreset();
-      if (preset < 6) {
+      if (preset < 24) {
         updateFaderTitles();
       }
       updateFaderValues();
@@ -401,7 +457,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = sysex[3];
     uint8_t idx = sysex[4];
     uint8_t isButton = sysex[5];
-    if (preset >= 6 || idx >= 8) break;
+    if (preset >= 24 || idx >= 8) break;
 
     char name[12] = {0};
     size_t nameLen = 0;
@@ -426,7 +482,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   case 0x11:
   {
     uint8_t preset = sysex[3];
-    if (preset >= 6) break;
+    if (preset >= 24) break;
     char name[20] = {0};
     size_t nameLen = 0;
     for (size_t j = 4; j < len - 1 && nameLen < 19; j++) {
@@ -450,7 +506,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t idx = sysex[4];
     uint8_t on = sysex[5];
     Serial.printf("SysEx18 watcher: preset=%d idx=%d on=%d\n", preset, idx, on);
-    if (preset < 6 && idx < 8) {
+    if (preset < 24 && idx < 8) {
       controls.getEncoderAt(preset, idx).hasWatcher = on != 0;
       Serial.printf("  -> hasWatcher[%d][%d] = %d\n", preset, idx, controls.getEncoderAt(preset, idx).hasWatcher);
     }
