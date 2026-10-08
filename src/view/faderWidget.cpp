@@ -1,8 +1,11 @@
 #include "display.h"
 #include "../core/controls.h"
-#include "fonts/ArialBold9pt.h"   // SF Pro 7pt — title/dynamic
-#include "fonts/ArialBold7pt.h"   // SF Pro 6pt — compact param name
-#include "fonts/Arial8pt.h"       // SF Pro 6pt — compact value
+#include "fonts/MiscFixed7x13pt7b.h"  // Misc Fixed 7x13 — title/dynamic
+#include "fonts/MiscFixed7x13Bpt7b.h" // Misc Fixed 7x13 Bold — title/dynamic
+#include "fonts/MiscFixed6x10pt7b.h"  // Misc Fixed 6x10 — compact param name + value
+#include "fonts/MiscFixed5x8pt7b.h"   // Misc Fixed 5x8 — button labels
+
+#define DYNAMIC_LAYOUT_BOLD true
 
 FaderLayout faderLayout = LAYOUT_COMPACT;
 
@@ -86,11 +89,11 @@ void FaderWidget::drawTitle() {
 
     display.fillRect(area_x, area_y, area_w, area_h, 0);
 
-    display.setFont(&Arial_Bold9pt7b);
+    display.setFont(DYNAMIC_LAYOUT_BOLD ? &MiscFixed7x13Bpt7b : &MiscFixed7x13pt7b);
     if(strcmp(paramName, "******") != 0){
         int param_width = getStrWidth(display, title);
         int param_x = x_offset + (128 - param_width) / 2;
-        int param_y = y_offset + ((boutonNumber > 3) ? 11 : 21);
+        int param_y = y_offset + ((boutonNumber > 3) ? 12 : 22);
         display.setCursor(param_x, param_y);
         display.setTextColor(dimmed ? 6 : 15);
         display.print(title);
@@ -130,14 +133,14 @@ void FaderWidget::drawFaderDynamic() {
         {
             int fillWidth = map(value, 0, 127, 0, BAR_W - 2);
             int fader_y = BAR_Y + BAR_H - FADER_H - 1 + 16;
-            display.drawRect(BAR_X, fader_y, BAR_W, BAR_H, color);
-            if (!dimmed)
-                display.fillRect(BAR_X + 1, fader_y, fillWidth, FADER_H, 15);
+            display.drawRoundRect(BAR_X, fader_y, BAR_W, FADER_H, BUTTON_CORNER, BUTTON_BORDER_COLOR);
+            if (!dimmed && fillWidth > 0)
+                display.fillRect(BAR_X + 1, fader_y + 1, fillWidth, FADER_H - 2, 15);
         }
 
-        display.setFont(&Arial_Bold9pt7b);
+        display.setFont(DYNAMIC_LAYOUT_BOLD ? &MiscFixed7x13Bpt7b : &MiscFixed7x13pt7b);
         int text_width = getStrWidth(display, displayText);
-        int text_y = BAR_Y + 10;
+        int text_y = BAR_Y + 11;
         int TEXT_MAX = area_w - 8;
 
         if (text_width <= TEXT_MAX) {
@@ -187,7 +190,7 @@ void FaderWidget::drawFaderCompact() {
         int col_val_x  = col_pie_x + col_pie_w + GAP;
 
         // --- Left: param name, right-justified, 2 lines max ---
-        display.setFont(&Arial_Bold7pt7b);
+        display.setFont(&MiscFixed6x10pt7b);
         int textW = col_name_w - TPAD * 2;
         int maxChars = textW / 6;
         int len = strlen(paramName);
@@ -254,7 +257,7 @@ void FaderWidget::drawFaderCompact() {
         }
 
         // --- Right: param value, left-justified, 2 lines max ---
-        display.setFont(&Arial8pt7b);
+        display.setFont(&MiscFixed6x10pt7b);
         const char* valText = disabled ? "---" : title;
         int valCharW = 6;
         int valMaxChars = (col_val_w - TPAD * 2) / valCharW;
@@ -307,7 +310,7 @@ void FaderWidget::drawPresetButton(const char* line1, const char* line2, bool se
     int textColor = selected ? 0 : 15;
     bool twoLines = (line2 && line2[0] != '\0');
 
-    display.setFont(&Arial_Bold7pt7b);
+    display.setFont(&MiscFixed6x10pt7b);
     display.setTextColor(textColor);
     if (twoLines) {
         int tw1 = getStrWidth(display, line1);
@@ -347,7 +350,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
     }
     display.fillRect(clear_x, area_y, clear_w, area_h, 0);
 
-    display.setFont(NULL);
+    display.setFont(&MiscFixed5x8pt7b);
     int tw = getStrWidth(display, txt);
 
     int textColor;
@@ -360,7 +363,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
 
     if (tw <= btn_w - 4) {
         int text_x = btn_x + (btn_w - tw) / 2;
-        display.setCursor(text_x, area_y + 2);
+        display.setCursor(text_x, area_y + 8);
         display.setTextColor(textColor);
         display.print(txt);
     } else {
@@ -370,11 +373,12 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
         while (strlen(truncated) > 1 && getStrWidth(display, truncated) > btn_w - 4) {
             truncated[strlen(truncated)-1] = '\0';
         }
-        display.setCursor(btn_x + 2, area_y + 2);
+        display.setCursor(btn_x + 2, area_y + 8);
         display.setTextColor(textColor);
         display.print(truncated);
     }
 
+    display.setFont(NULL);
     display.drawRoundRect(btn_x, area_y, btn_w, area_h, BUTTON_CORNER, BUTTON_BORDER_COLOR);
     drawSeparators();
 }
