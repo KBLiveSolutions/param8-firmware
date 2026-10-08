@@ -123,7 +123,7 @@ void FaderWidget::drawFaderDynamic() {
     int BAR_W = 100;
     int BAR_H = 5;
     int BAR_X = area_x + (area_w - BAR_W) / 2;
-    int BAR_Y = area_y + 1;
+    int BAR_Y = area_y;
     int FADER_H = 5;
 
     const char* displayText = showingValue ? title : paramName;

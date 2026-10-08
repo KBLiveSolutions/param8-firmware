@@ -71,10 +71,7 @@ static void drawSettingsPage() {
     faders[0]->setValue(brightnessLevel * 63);
     faders[0]->setButtonName(layoutName);
     faders[0]->draw();
-    for (int i = 1; i < 8; ++i) {
-        faders[i]->setEmpty();
-        faders[i]->draw();
-    }
+    // fillScreen(0) already cleared faders 1-7; no draw needed
     flushDisplays();
 }
 
@@ -126,6 +123,8 @@ void onShiftRelease()
     shiftPressed = false;
     setLed(1, false);
     sendMidiMessage(0, 110, 0, 7);
+    updateFaderTitles();
+    updateFaderValues();
     showDisplay();
     for (int i = 0; i < 8; ++i)
         faders[i]->updateButtonName(faders[i]->buttonState);
