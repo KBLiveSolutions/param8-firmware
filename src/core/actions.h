@@ -2,6 +2,7 @@
 #include <Arduino.h>
 
 extern bool shiftPressed;
+extern bool settingsModeActive;
 extern bool latchPressed;
 extern bool latchHeld;
 extern bool revertMode;

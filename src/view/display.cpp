@@ -14,6 +14,7 @@ bool deviceLabelDirty = false;
 bool bankLabelDirty = false;
 bool trackLabelDirty = false;
 bool screenSaverActive = false;
+uint8_t brightnessLevel = 1;
 
 void setupDisplay() {
     display1.begin();
@@ -67,6 +68,8 @@ void setupDisplay() {
     display2.display();
     while (!display2.isTransferComplete()) {}
     display2.displayOn();
+
+    setBrightness(brightnessLevel);
 }
 
 static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {

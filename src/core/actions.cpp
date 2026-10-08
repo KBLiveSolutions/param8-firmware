@@ -6,8 +6,12 @@
 #include "../view/leds.h"
 
 #define MAX_LATCH_EVENTS 256
+#define SHIFT_DOUBLE_TAP_WINDOW_MS 300
+
 uint8_t presetTable = 0;
 bool shiftPressed = false;
+bool settingsModeActive = false;
+static unsigned long lastShiftReleaseTime = 0;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t latchEncoderEventCount[8] = {0};
@@ -53,8 +57,37 @@ static void drawPresetPage()
     flushDisplays();
 }
 
+static void drawSettingsPage() {
+    display1.fillScreen(0);
+    display2.fillScreen(0);
+    static const char* bnames[] = {"Low", "Medium", "High"};
+    const char* layoutName = (faderLayout == LAYOUT_DYNAMIC) ? "Dynamic" : "Compact";
+    faders[0]->drawPresetButton("Brightness", bnames[brightnessLevel], false);
+    faders[1]->drawPresetButton("Layout", layoutName, false);
+    for (int i = 2; i < 8; ++i) {
+        faders[i]->setEmpty();
+        faders[i]->draw();
+    }
+    flushDisplays();
+}
+
 void onShiftPress()
 {
+    unsigned long now = millis();
+
+    if (settingsModeActive) {
+        settingsModeActive = false;
+        setLed(1, false);
+        lastShiftReleaseTime = 0;
+        // fall through to normal shift press
+    } else if (lastShiftReleaseTime > 0 && now - lastShiftReleaseTime < SHIFT_DOUBLE_TAP_WINDOW_MS) {
+        settingsModeActive = true;
+        setLed(1, true);
+        lastShiftReleaseTime = 0;
+        drawSettingsPage();
+        return;
+    }
+
     shiftPressed = true;
     setLed(1, true);
     sendMidiMessage(0, 110, 127, 7);
@@ -77,6 +110,8 @@ void onShiftPress()
 
 void onShiftRelease()
 {
+    lastShiftReleaseTime = millis();
+    if (settingsModeActive) return;
     shiftPressed = false;
     setLed(1, false);
     sendMidiMessage(0, 110, 0, 7);
@@ -221,7 +256,15 @@ void onButtonPressed(uint8_t idx)
     if (screenSaverActive)
     {
         screenSaverActive = false;
-        showDisplay(); // réaffiche l'UI normale
+        if (settingsModeActive) drawSettingsPage();
+        else showDisplay();
+    }
+    if (settingsModeActive) {
+        if (idx == 0) {
+            faderLayout = (faderLayout == LAYOUT_DYNAMIC) ? LAYOUT_COMPACT : LAYOUT_DYNAMIC;
+            drawSettingsPage();
+        }
+        return;
     }
     if (shiftPressed)
     {
@@ -288,6 +331,7 @@ void onButtonPressed(uint8_t idx)
 
 void onButtonReleased(uint8_t idx)
 {
+    if (settingsModeActive) return;
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
@@ -318,8 +362,19 @@ void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel)
     }
 }
 
+static void handleSettingsBrightness(int delta) {
+    int newLevel = (int)brightnessLevel + (delta > 0 ? 1 : -1);
+    brightnessLevel = (uint8_t)constrain(newLevel, 0, 2);
+    setBrightness(brightnessLevel);
+    drawSettingsPage();
+}
+
 void onRelativeEncoderChange(uint8_t idx, int delta)
 {
+    if (settingsModeActive) {
+        if (idx == 0) handleSettingsBrightness(delta);
+        return;
+    }
     if (shiftPressed) {
         if (delta > 0 && presetTable < 3) presetTable++;
         else if (delta < 0 && presetTable > 0) presetTable--;
@@ -375,6 +430,10 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
 
 void onAbsoluteEncoderChange(uint8_t idx, int delta)
 {
+    if (settingsModeActive) {
+        if (idx == 0) handleSettingsBrightness(delta);
+        return;
+    }
     if (shiftPressed) {
         if (delta > 0 && presetTable < 3) presetTable++;
         else if (delta < 0 && presetTable > 0) presetTable--;

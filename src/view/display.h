@@ -36,4 +36,5 @@ void updateFader(int idx, int value);
 void updateDisplay();
 void drawDeviceBankLabels();
 void runScreenSaver();
+extern uint8_t brightnessLevel;
 void setBrightness(uint8_t value);
