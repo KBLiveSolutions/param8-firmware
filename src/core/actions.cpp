@@ -32,6 +32,9 @@ unsigned long namingConfirmTime = 0;
 uint8_t latchAbsoluteValue[8] = {0};
 bool latchAbsoluteChanged[8] = {false};
 
+// Valeurs au moment de l'activation du latch (pour annulation)
+static uint8_t latchOriginalValue[8] = {0};
+
 // Pour le revert en mode absolu : valeur d'origine au moment de l'entrée en revert
 uint8_t revertAbsoluteOriginal[8] = {0};
 bool revertAbsoluteChanged[8] = {false};
@@ -80,6 +83,7 @@ void onShiftPress()
     unsigned long now = millis();
 
     if (latchPressed) {
+        bool isUserPreset = (controls.getPreset() < 24);
         latchPressed = false;
         latchPendingActivation = false;
         latchHeld = false;
@@ -87,6 +91,16 @@ void onShiftPress()
         for (int i = 0; i < 8; ++i) {
             latchEncoderEventCount[i] = 0;
             latchAbsoluteChanged[i] = false;
+        }
+        if (isUserPreset) {
+            for (int i = 0; i < 8; ++i) {
+                controls.getEncoder(i).value = latchOriginalValue[i];
+            }
+            updateFaderValues();
+            showDisplay();
+            for (int i = 0; i < 8; ++i)
+                faders[i]->updateButtonName(faders[i]->buttonState);
+            flushDisplays();
         }
         return;
     }
@@ -132,6 +146,7 @@ void onShiftRelease()
     lastShiftReleaseTime = millis();
     shiftPendingPresetPage = false;
     if (settingsModeActive) return;
+    if (!shiftPressed) return;  // latch-cancel: shift was never activated, skip MIDI + redraw
     shiftPressed = false;
     setLed(1, false);
     sendMidiMessage(0, 110, 0, 7);
@@ -199,8 +214,10 @@ void checkLatchPending()
     latchPendingActivation = false;
     if (latchHeld)
     {
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < 8; ++i) {
             latchEncoderEventCount[i] = 0;
+            latchOriginalValue[i] = controls.getEncoder(i).value;
+        }
         latchPressed = true;
         setLed(0, true);
     }
