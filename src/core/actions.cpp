@@ -35,6 +35,14 @@ bool latchAbsoluteChanged[8] = {false};
 // Valeurs au moment de l'activation du latch (pour annulation)
 static uint8_t latchOriginalValue[8] = {0};
 
+// État du widget 0 sauvegardé avant d'entrer en mode settings
+static char settingsSavedParamName[20];
+static char settingsSavedTitle[20];
+static char settingsSavedButtonName[20];
+static char settingsSavedButtonText[20];
+static int  settingsSavedValue;
+static bool settingsSavedDisabled, settingsSavedDimmed, settingsSavedShowingValue, settingsSavedValueOnly;
+
 // Pour le revert en mode absolu : valeur d'origine au moment de l'entrée en revert
 uint8_t revertAbsoluteOriginal[8] = {0};
 bool revertAbsoluteChanged[8] = {false};
@@ -109,9 +117,29 @@ void onShiftPress()
         settingsModeActive = false;
         setLed(1, false);
         lastShiftReleaseTime = 0;
+        // Restore fader 0 widget state (settings modified it; avoid touching device labels)
+        strncpy(faders[0]->paramName, settingsSavedParamName, 20);
+        strncpy(faders[0]->title,     settingsSavedTitle,     20);
+        strncpy(faders[0]->buttonName,settingsSavedButtonName,20);
+        strncpy(faders[0]->buttonText,settingsSavedButtonText,20);
+        faders[0]->value        = settingsSavedValue;
+        faders[0]->disabled     = settingsSavedDisabled;
+        faders[0]->dimmed       = settingsSavedDimmed;
+        faders[0]->showingValue = settingsSavedShowingValue;
+        faders[0]->valueOnly    = settingsSavedValueOnly;
         // fall through to normal shift press
     } else if (lastShiftReleaseTime > 0 && now - lastShiftReleaseTime < SHIFT_DOUBLE_TAP_WINDOW_MS) {
         shiftPendingPresetPage = false;
+        // Save fader 0 widget state before settings overwrites it
+        strncpy(settingsSavedParamName, faders[0]->paramName, 20);
+        strncpy(settingsSavedTitle,     faders[0]->title,     20);
+        strncpy(settingsSavedButtonName,faders[0]->buttonName,20);
+        strncpy(settingsSavedButtonText,faders[0]->buttonText,20);
+        settingsSavedValue        = faders[0]->value;
+        settingsSavedDisabled     = faders[0]->disabled;
+        settingsSavedDimmed       = faders[0]->dimmed;
+        settingsSavedShowingValue = faders[0]->showingValue;
+        settingsSavedValueOnly    = faders[0]->valueOnly;
         settingsModeActive = true;
         setLed(1, true);
         lastShiftReleaseTime = 0;
@@ -150,8 +178,6 @@ void onShiftRelease()
     shiftPressed = false;
     setLed(1, false);
     sendMidiMessage(0, 110, 0, 7);
-    updateFaderTitles();
-    updateFaderValues();
     showDisplay();
     for (int i = 0; i < 8; ++i)
         faders[i]->updateButtonName(faders[i]->buttonState);
