@@ -79,6 +79,18 @@ void onShiftPress()
 {
     unsigned long now = millis();
 
+    if (latchPressed) {
+        latchPressed = false;
+        latchPendingActivation = false;
+        latchHeld = false;
+        setLed(0, false);
+        for (int i = 0; i < 8; ++i) {
+            latchEncoderEventCount[i] = 0;
+            latchAbsoluteChanged[i] = false;
+        }
+        return;
+    }
+
     if (settingsModeActive) {
         settingsModeActive = false;
         setLed(1, false);
