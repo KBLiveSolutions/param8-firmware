@@ -46,6 +46,7 @@ void setup() {
   screenSaverDelay = (unsigned long)savedSS * 1000UL;
   int savedBrightness = json.getDoc()["brightness"] | 1;
   setBrightness(savedBrightness);
+  initActionSettings();
   updateFaderTitles();
   updateFaderValues();
   Serial.println("[boot] encoders.setup");

@@ -2,7 +2,8 @@
 #include <Arduino.h>
 
 extern bool shiftPressed;
-extern bool settingsModeActive;
+extern uint8_t latchSlewLevel;
+extern uint8_t revertSlewLevel;
 extern bool latchPressed;
 extern bool latchHeld;
 extern bool revertMode;
@@ -28,5 +29,6 @@ void onLatchRelease();
 void releaseLatchAndSend();
 void sendRevertEvents();
 void setRevertModeLed(bool on);
+void initActionSettings();
 void onButtonPressed(uint8_t);
 void onButtonReleased(uint8_t);

@@ -6,14 +6,15 @@
 #include "../view/leds.h"
 
 #define MAX_LATCH_EVENTS 256
-#define SHIFT_DOUBLE_TAP_WINDOW_MS 400
+#define SHIFT_HOLD_MS     300
+#define SHIFT_DTAP_MS     400
+#define SHIFT_DTHOLD_MS   500
 
 uint8_t presetTable = 0;
 bool shiftPressed = false;
-bool settingsModeActive = false;
-static unsigned long lastShiftReleaseTime = 0;
-static unsigned long shiftFirstPressTime = 0;
-static bool shiftPendingPresetPage = false;
+enum ShiftState : uint8_t { SHIFT_IDLE, SHIFT_DOWN1, SHIFT_HOLD, SHIFT_UP1, SHIFT_DOWN2 };
+static ShiftState shiftState = SHIFT_IDLE;
+static unsigned long shiftStateTime = 0;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t latchEncoderEventCount[8] = {0};
@@ -28,24 +29,43 @@ bool latchHeld = false;
 bool namingPendingConfirm = false;
 unsigned long namingConfirmTime = 0;
 
-// Pour le mode absolu : on stocke juste la dernière valeur et si elle a changé
 uint8_t latchAbsoluteValue[8] = {0};
 bool latchAbsoluteChanged[8] = {false};
 
-// Valeurs au moment de l'activation du latch (pour annulation)
 static uint8_t latchOriginalValue[8] = {0};
 
-// État du widget 0 sauvegardé avant d'entrer en mode settings
-static char settingsSavedParamName[20];
-static char settingsSavedTitle[20];
-static char settingsSavedButtonName[20];
-static char settingsSavedButtonText[20];
-static int  settingsSavedValue;
-static bool settingsSavedDisabled, settingsSavedDimmed, settingsSavedShowingValue, settingsSavedValueOnly;
+static const int slewStepsMs[] = {0, 100, 200, 500, 1000, 2000};
+#define SLEW_STEPS 6
+uint8_t latchSlewLevel  = 0;
+uint8_t revertSlewLevel = 0;
 
-// Pour le revert en mode absolu : valeur d'origine au moment de l'entrée en revert
 uint8_t revertAbsoluteOriginal[8] = {0};
 bool revertAbsoluteChanged[8] = {false};
+
+static int latchRelAccum[8] = {0};
+
+static void sendAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
+    uint8_t  channel = controls.getEncoder(idx).channel;
+    ControlMidiType type = controls.getEncoder(idx).type;
+    uint8_t  number  = controls.getEncoder(idx).number;
+    int range = abs(toVal - fromVal);
+    if (range == 0) { sendMidiMessage(type, number, (uint8_t)toVal, channel); return; }
+    int totalMs = (slewMs * range + 63) / 127;
+    const int stepMs = 5;
+    int steps = max(1, totalMs / stepMs);
+    for (int s = 1; s <= steps; s++) {
+        int v = fromVal + ((toVal - fromVal) * s) / steps;
+        sendMidiMessage(type, number, (uint8_t)constrain(v, 0, 127), channel);
+        delay(stepMs);
+    }
+}
+
+void initActionSettings() {
+    int savedLS = json.getDoc()["latchSlew"]  | 0;
+    int savedRS = json.getDoc()["revertSlew"] | 0;
+    latchSlewLevel  = (uint8_t)constrain(savedLS, 0, SLEW_STEPS - 1);
+    revertSlewLevel = (uint8_t)constrain(savedRS, 0, SLEW_STEPS - 1);
+}
 
 static void drawPresetPage()
 {
@@ -70,93 +90,14 @@ static void drawPresetPage()
     flushDisplays();
 }
 
-static void drawSettingsPage() {
-    display1.fillScreen(0);
-    display2.fillScreen(0);
-    const char* layoutName = (faderLayout == LAYOUT_DYNAMIC) ? "Dynamic" : "Compact";
-    faders[0]->disabled   = false;
-    faders[0]->dimmed     = false;
-    faders[0]->valueOnly  = false;
-    faders[0]->showingValue = false;
-    faders[0]->setParamName("Brightness");
-    faders[0]->setValue(brightnessLevel * 63);
-    faders[0]->setButtonName(layoutName);
-    faders[0]->draw();
-    // fillScreen(0) already cleared faders 1-7; no draw needed
-    flushDisplays();
-}
-
-void onShiftPress()
-{
-    unsigned long now = millis();
-
-    if (latchPressed) {
-        bool isUserPreset = (controls.getPreset() < 24);
-        latchPressed = false;
-        latchPendingActivation = false;
-        latchHeld = false;
-        setLed(0, false);
-        for (int i = 0; i < 8; ++i) {
-            latchEncoderEventCount[i] = 0;
-            latchAbsoluteChanged[i] = false;
-        }
-        if (isUserPreset) {
-            for (int i = 0; i < 8; ++i) {
-                controls.getEncoder(i).value = latchOriginalValue[i];
-            }
-            updateFaderValues();
-            showDisplay();
-            for (int i = 0; i < 8; ++i)
-                faders[i]->updateButtonName(faders[i]->buttonState);
-            flushDisplays();
-        }
-        return;
-    }
-
-    if (settingsModeActive) {
-        settingsModeActive = false;
-        setLed(1, false);
-        lastShiftReleaseTime = 0;
-        // Restore fader 0 widget state (settings modified it; avoid touching device labels)
-        strncpy(faders[0]->paramName, settingsSavedParamName, 20);
-        strncpy(faders[0]->title,     settingsSavedTitle,     20);
-        strncpy(faders[0]->buttonName,settingsSavedButtonName,20);
-        strncpy(faders[0]->buttonText,settingsSavedButtonText,20);
-        faders[0]->value        = settingsSavedValue;
-        faders[0]->disabled     = settingsSavedDisabled;
-        faders[0]->dimmed       = settingsSavedDimmed;
-        faders[0]->showingValue = settingsSavedShowingValue;
-        faders[0]->valueOnly    = settingsSavedValueOnly;
-        // fall through to normal shift press
-    } else if (lastShiftReleaseTime > 0 && now - lastShiftReleaseTime < SHIFT_DOUBLE_TAP_WINDOW_MS) {
-        shiftPendingPresetPage = false;
-        // Save fader 0 widget state before settings overwrites it
-        strncpy(settingsSavedParamName, faders[0]->paramName, 20);
-        strncpy(settingsSavedTitle,     faders[0]->title,     20);
-        strncpy(settingsSavedButtonName,faders[0]->buttonName,20);
-        strncpy(settingsSavedButtonText,faders[0]->buttonText,20);
-        settingsSavedValue        = faders[0]->value;
-        settingsSavedDisabled     = faders[0]->disabled;
-        settingsSavedDimmed       = faders[0]->dimmed;
-        settingsSavedShowingValue = faders[0]->showingValue;
-        settingsSavedValueOnly    = faders[0]->valueOnly;
-        settingsModeActive = true;
-        setLed(1, true);
-        lastShiftReleaseTime = 0;
-        drawSettingsPage();
-        return;
-    }
-
-    shiftFirstPressTime = now;
-    shiftPendingPresetPage = true;
+static void startFirstPress(unsigned long now) {
+    shiftState = SHIFT_DOWN1;
+    shiftStateTime = now;
     shiftPressed = true;
     setLed(1, true);
     sendMidiMessage(0, 110, 127, 7);
-
-    if (revertMode)
-    {
-        if (controls.getPreset() > 23)
-        {
+    if (revertMode) {
+        if (controls.getPreset() > 23) {
             uint8_t pkt[5] = {240, 111, 0x1A, 2, 247};
             usb_midi.write(pkt, 5);
         }
@@ -166,22 +107,103 @@ void onShiftPress()
             revertAbsoluteChanged[i] = false;
     }
     if (controls.getPreset() < 24) presetTable = controls.getPreset() / 6;
-    // Preset page drawn by checkShiftPending() after double-tap window expires
+}
+
+void onShiftPress()
+{
+    unsigned long now = millis();
+    lastInputTime = now;
+
+    if (latchPressed) {
+        bool isUserPreset = (controls.getPreset() < 24);
+        latchPressed = false;
+        latchPendingActivation = false;
+        latchHeld = false;
+        setLed(0, false);
+        for (int i = 0; i < 8; ++i) {
+            latchEncoderEventCount[i] = 0;
+            latchRelAccum[i] = 0;
+            latchAbsoluteChanged[i] = false;
+        }
+        if (isUserPreset) {
+            for (int i = 0; i < 8; ++i)
+                controls.getEncoder(i).value = latchOriginalValue[i];
+            updateFaderValues();
+            showDisplay();
+            for (int i = 0; i < 8; ++i)
+                faders[i]->updateButtonName(faders[i]->buttonState);
+            flushDisplays();
+        } else {
+            sendPresetSysEx(controls.getPreset());
+        }
+        return;
+    }
+
+    switch (shiftState) {
+    case SHIFT_IDLE:
+        startFirstPress(now);
+        break;
+    case SHIFT_UP1:
+        if (now - shiftStateTime < SHIFT_DTAP_MS) {
+            shiftState = SHIFT_DOWN2;
+            shiftStateTime = now;
+            shiftPressed = true;
+        } else {
+            startFirstPress(now);
+        }
+        break;
+    case SHIFT_DOWN1:
+        if (now - shiftStateTime < SHIFT_HOLD_MS) {
+            shiftPressed = false;
+            setLed(1, false);
+            sendMidiMessage(0, 110, 0, 7);
+            shiftState = SHIFT_DOWN2;
+            shiftStateTime = now;
+        }
+        break;
+    case SHIFT_HOLD:
+    case SHIFT_DOWN2:
+        break;
+    }
 }
 
 void onShiftRelease()
 {
-    lastShiftReleaseTime = millis();
-    shiftPendingPresetPage = false;
-    if (settingsModeActive) return;
-    if (!shiftPressed) return;  // latch-cancel: shift was never activated, skip MIDI + redraw
-    shiftPressed = false;
-    setLed(1, false);
-    sendMidiMessage(0, 110, 0, 7);
-    showDisplay();
-    for (int i = 0; i < 8; ++i)
-        faders[i]->updateButtonName(faders[i]->buttonState);
-    flushDisplays();
+    unsigned long now = millis();
+
+    switch (shiftState) {
+    case SHIFT_DOWN1:
+        shiftPressed = false;
+        setLed(1, false);
+        sendMidiMessage(0, 110, 0, 7);
+        shiftState = SHIFT_IDLE;
+        showDisplay();
+        for (int i = 0; i < 8; ++i)
+            faders[i]->updateButtonName(faders[i]->buttonState);
+        flushDisplays();
+        break;
+
+    case SHIFT_HOLD:
+        shiftState = SHIFT_IDLE;
+        shiftPressed = false;
+        setLed(1, false);
+        sendMidiMessage(0, 110, 0, 7);
+        showDisplay();
+        for (int i = 0; i < 8; ++i)
+            faders[i]->updateButtonName(faders[i]->buttonState);
+        flushDisplays();
+        break;
+
+    case SHIFT_DOWN2:
+        shiftPressed = false;
+        shiftState = SHIFT_IDLE;
+        break;
+
+    default:
+        shiftPressed = false;
+        shiftState = SHIFT_IDLE;
+        break;
+    }
 }
 
 void sendNameRequest(uint8_t idx, uint8_t isButton)
@@ -225,10 +247,11 @@ void checkNamingPending()
 
 void checkShiftPending()
 {
-    if (!shiftPendingPresetPage) return;
-    if (millis() - shiftFirstPressTime < SHIFT_DOUBLE_TAP_WINDOW_MS) return;
-    shiftPendingPresetPage = false;
-    if (shiftPressed) drawPresetPage();
+    unsigned long now = millis();
+    if (shiftState == SHIFT_DOWN1 && now - shiftStateTime >= SHIFT_HOLD_MS) {
+        shiftState = SHIFT_HOLD;
+        drawPresetPage();
+    }
 }
 
 void checkLatchPending()
@@ -242,6 +265,7 @@ void checkLatchPending()
     {
         for (int i = 0; i < 8; ++i) {
             latchEncoderEventCount[i] = 0;
+            latchRelAccum[i] = 0;
             latchOriginalValue[i] = controls.getEncoder(i).value;
         }
         latchPressed = true;
@@ -329,17 +353,9 @@ void onButtonPressed(uint8_t idx)
     if (screenSaverActive)
     {
         screenSaverActive = false;
-        if (settingsModeActive) drawSettingsPage();
-        else showDisplay();
+        showDisplay();
     }
-    if (settingsModeActive) {
-        if (idx == 0) {
-            faderLayout = (faderLayout == LAYOUT_DYNAMIC) ? LAYOUT_COMPACT : LAYOUT_DYNAMIC;
-            drawSettingsPage();
-        }
-        return;
-    }
-    if (shiftPressed)
+    if (shiftState == SHIFT_HOLD)
     {
         uint8_t newPreset;
         char l1[20], l2[20] = {0};
@@ -404,7 +420,6 @@ void onButtonPressed(uint8_t idx)
 
 void onButtonReleased(uint8_t idx)
 {
-    if (settingsModeActive) return;
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
@@ -435,20 +450,9 @@ void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel)
     }
 }
 
-static void handleSettingsBrightness(int delta) {
-    int newLevel = (int)brightnessLevel + (delta > 0 ? 1 : -1);
-    brightnessLevel = (uint8_t)constrain(newLevel, 0, 2);
-    setBrightness(brightnessLevel);
-    drawSettingsPage();
-}
-
 void onRelativeEncoderChange(uint8_t idx, int delta)
 {
-    if (settingsModeActive) {
-        if (idx == 0) handleSettingsBrightness(delta);
-        return;
-    }
-    if (shiftPressed) {
+    if (shiftState == SHIFT_HOLD) {
         if (delta > 0 && presetTable < 3) presetTable++;
         else if (delta < 0 && presetTable > 0) presetTable--;
         drawPresetPage();
@@ -484,6 +488,7 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
     }
     else
     {
+        latchRelAccum[idx] += delta;
         uint8_t relValue = (uint8_t)(delta & 0x7F);
         if (latchEncoderEventCount[idx] < MAX_LATCH_EVENTS)
         {
@@ -503,11 +508,7 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
 
 void onAbsoluteEncoderChange(uint8_t idx, int delta)
 {
-    if (settingsModeActive) {
-        if (idx == 0) handleSettingsBrightness(delta);
-        return;
-    }
-    if (shiftPressed) {
+    if (shiftState == SHIFT_HOLD) {
         if (delta > 0 && presetTable < 3) presetTable++;
         else if (delta < 0 && presetTable > 0) presetTable--;
         drawPresetPage();
@@ -694,69 +695,96 @@ void sendPresetSysEx(uint8_t preset)
 
 void releaseLatchAndSend()
 {
-    // Envoyer les dernières valeurs absolues stockées
+    int slewMs = slewStepsMs[latchSlewLevel];
+
+    // Absolute encoders
     for (int i = 0; i < 8; ++i)
     {
         if (latchAbsoluteChanged[i])
         {
-            uint8_t channel = controls.getEncoder(i).channel;
             ControlMidiType type = controls.getEncoder(i).type;
-            uint8_t number = controls.getEncoder(i).number;
-            sendMidiMessage(type, number, latchAbsoluteValue[i], channel);
+            if (slewMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB) {
+                sendAbsoluteSlew(i, latchOriginalValue[i], latchAbsoluteValue[i], slewMs);
+            } else {
+                uint8_t channel = controls.getEncoder(i).channel;
+                uint8_t number  = controls.getEncoder(i).number;
+                sendMidiMessage(type, number, latchAbsoluteValue[i], channel);
+            }
             latchAbsoluteChanged[i] = false;
         }
     }
 
-    // Trouver le nombre maximum d'événements parmi tous les encodeurs (mode relatif)
-    uint8_t maxEvents = 0;
-    for (int i = 0; i < 8; ++i)
-    {
-        if (latchEncoderEventCount[i] > maxEvents)
-        {
-            maxEvents = latchEncoderEventCount[i];
-        }
-    }
-
-    // Envoyer les événements de manière entrelacée (mode relatif)
-    for (uint8_t eventIndex = 0; eventIndex < maxEvents; ++eventIndex)
-    {
+    // Relative encoders
+    if (slewMs > 0) {
+        int maxAcc = 0;
         for (int i = 0; i < 8; ++i)
-        {
-            if (eventIndex < latchEncoderEventCount[i])
-            {
-                uint8_t channel = controls.getEncoder(i).channel;
-                ControlMidiType type = controls.getEncoder(i).type;
-                uint8_t number = controls.getEncoder(i).number;
-
-                sendMidiMessage(type, number, latchEncoderEvents[i][eventIndex], channel);
-                delay(1);
+            if (abs(latchRelAccum[i]) > maxAcc) maxAcc = abs(latchRelAccum[i]);
+        if (maxAcc > 0) {
+            int totalMs = (slewMs * maxAcc + 63) / 127;
+            const int stepMs = 5;
+            int numSteps = max(1, totalMs / stepMs);
+            int sent[8] = {0};
+            for (int s = 1; s <= numSteps; ++s) {
+                for (int i = 0; i < 8; ++i) {
+                    if (latchRelAccum[i] == 0) continue;
+                    int target = (latchRelAccum[i] * s) / numSteps;
+                    int delta = target - sent[i];
+                    if (delta != 0) {
+                        uint8_t channel = controls.getEncoder(i).channel;
+                        ControlMidiType type = controls.getEncoder(i).type;
+                        uint8_t number = controls.getEncoder(i).number;
+                        sendRelativeCC(type, number, delta, channel);
+                        sent[i] = target;
+                    }
+                }
+                delay(stepMs);
+            }
+        }
+    } else {
+        uint8_t maxEvents = 0;
+        for (int i = 0; i < 8; ++i)
+            if (latchEncoderEventCount[i] > maxEvents) maxEvents = latchEncoderEventCount[i];
+        for (uint8_t eventIndex = 0; eventIndex < maxEvents; ++eventIndex) {
+            for (int i = 0; i < 8; ++i) {
+                if (eventIndex < latchEncoderEventCount[i]) {
+                    uint8_t channel = controls.getEncoder(i).channel;
+                    ControlMidiType type = controls.getEncoder(i).type;
+                    uint8_t number = controls.getEncoder(i).number;
+                    sendMidiMessage(type, number, latchEncoderEvents[i][eventIndex], channel);
+                    delay(1);
+                }
             }
         }
     }
 
-    // Réinitialiser les compteurs
     for (int i = 0; i < 8; ++i)
     {
         latchEncoderEventCount[i] = 0;
+        latchRelAccum[i] = 0;
     }
 }
 
 void sendRevertEvents()
 {
     bool isRelative = controls.getPreset() > 23;
+    int slewMs = slewStepsMs[revertSlewLevel];
     for (int i = 0; i < 8; ++i)
     {
         if (!revertAbsoluteChanged[i])
             continue;
-        uint8_t channel = controls.getEncoder(i).channel;
         ControlMidiType type = controls.getEncoder(i).type;
-        uint8_t number = controls.getEncoder(i).number;
+        uint8_t channel = controls.getEncoder(i).channel;
+        uint8_t number  = controls.getEncoder(i).number;
 
         if (isRelative)
         {
             int delta = (int)revertAbsoluteOriginal[i] - (int)controls.getEncoder(i).value;
             if (delta != 0)
                 sendRelativeCC(type, number, delta, channel);
+        }
+        else if (slewMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB)
+        {
+            sendAbsoluteSlew(i, controls.getEncoder(i).value, revertAbsoluteOriginal[i], slewMs);
         }
         else
         {
