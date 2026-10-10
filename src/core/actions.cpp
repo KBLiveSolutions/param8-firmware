@@ -422,11 +422,6 @@ void checkLatchPending()
     latchPendingActivation = false;
     if (latchHeld)
     {
-        for (int i = 0; i < 8; ++i) {
-            latchEncoderEventCount[i] = 0;
-            latchRelAccum[i] = 0;
-            latchOriginalValue[i] = controls.getEncoder(i).value;
-        }
         latchPressed = true;
         setLed(0, true);
     }
@@ -446,6 +441,12 @@ void onLatchPress()
     }
     lastLatchPressTime = now;
     latchPendingActivation = true;
+    for (int i = 0; i < 8; ++i) {
+        latchEncoderEventCount[i] = 0;
+        latchRelAccum[i] = 0;
+        latchAbsoluteChanged[i] = false;
+        latchOriginalValue[i] = controls.getEncoder(i).value;
+    }
 
     if (revertMode && !shiftPressed)
     {
@@ -697,11 +698,7 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
         revertAbsoluteChanged[idx] = true;
         sendRelativeCC(type, number, delta, channel);
     }
-    else if (!latchPressed)
-    {
-        sendRelativeCC(type, number, delta, channel);
-    }
-    else
+    else if (latchPressed || latchPendingActivation)
     {
         latchRelAccum[idx] += delta;
         uint8_t relValue = (uint8_t)(delta & 0x7F);
@@ -710,8 +707,12 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
             latchEncoderEvents[idx][latchEncoderEventCount[idx]++] = relValue;
         }
     }
+    else
+    {
+        sendRelativeCC(type, number, delta, channel);
+    }
 
-    if (latchPressed || controls.getPreset() < 24)
+    if (latchPressed || latchPendingActivation || controls.getPreset() < 24)
     {
         updateFader(idx, (uint8_t)estimated_display);
         char buffer[16];
@@ -761,12 +762,12 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
             revertAbsoluteChanged[idx] = true;
             if (type == MIDI_PB) sendMidiMessage(MIDI_PB, lsb, msb, channel);
             else { sendMidiMessage(MIDI_CC, number, msb, channel); sendMidiMessage(MIDI_CC, number + 32, lsb, channel); }
-        } else if (!latchPressed) {
-            if (type == MIDI_PB) sendMidiMessage(MIDI_PB, lsb, msb, channel);
-            else { sendMidiMessage(MIDI_CC, number, msb, channel); sendMidiMessage(MIDI_CC, number + 32, lsb, channel); }
-        } else {
+        } else if (latchPressed || latchPendingActivation) {
             latchAbsoluteValue[idx] = msb;
             latchAbsoluteChanged[idx] = true;
+        } else {
+            if (type == MIDI_PB) sendMidiMessage(MIDI_PB, lsb, msb, channel);
+            else { sendMidiMessage(MIDI_CC, number, msb, channel); sendMidiMessage(MIDI_CC, number + 32, lsb, channel); }
         }
         updateFader(idx, msb);
         char buffer[16];
@@ -789,14 +790,14 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
         revertAbsoluteChanged[idx] = true;
         sendMidiMessage(type, number, (uint8_t)newValue, channel);
     }
-    else if (!latchPressed)
-    {
-        sendMidiMessage(type, number, (uint8_t)newValue, channel);
-    }
-    else
+    else if (latchPressed || latchPendingActivation)
     {
         latchAbsoluteValue[idx] = (uint8_t)newValue;
         latchAbsoluteChanged[idx] = true;
+    }
+    else
+    {
+        sendMidiMessage(type, number, (uint8_t)newValue, channel);
     }
     updateFader(idx, (uint8_t)newValue);
     char buffer[16];
