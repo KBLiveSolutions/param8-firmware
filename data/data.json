@@ -1,6 +1,10 @@
 
 {
-  "mode": 25,
+  "brightness": 1,
+  "screensaver": 300,
+  "latchSlew": 0,
+  "revertSlew": 0,
+  "mode": 0,
   "0": {
     "buttons_short": {
       "0": [0, 20, 0], "1": [0, 21, 0], "2": [0, 22, 0], "3": [0, 23, 0],
