@@ -372,9 +372,8 @@ void onButtonPressed(uint8_t idx)
             const char* pname = controls.getPresetName(newPreset);
             if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
         }
-        faders[idx]->drawPresetButton(l1, l2, true);
-        flushDisplays();
         controls.setPreset(newPreset);
+        drawPresetPage();
         updateFaderTitles();
         updateFaderValues();
         showDisplay();
@@ -421,6 +420,7 @@ void onButtonPressed(uint8_t idx)
 
 void onButtonReleased(uint8_t idx)
 {
+    if (shiftState == SHIFT_HOLD) return;
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
