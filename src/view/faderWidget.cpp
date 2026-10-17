@@ -48,7 +48,9 @@ void FaderWidget::setParamName(const char* txt) {
             title[sizeof(title)-1] = '\0';
         }
     }
-    if (faderLayout == LAYOUT_DYNAMIC)
+    if (isQuantized && numQuantizedItems >= 2)
+        drawFader();
+    else if (faderLayout == LAYOUT_DYNAMIC)
         drawTitle();
     else
         drawFader();
@@ -103,10 +105,80 @@ void FaderWidget::drawTitle() {
 }
 
 void FaderWidget::drawFader() {
+    if (isQuantized && numQuantizedItems >= 2) {
+        drawFaderQuantized();
+        return;
+    }
     if(faderLayout == LAYOUT_COMPACT)
         drawFaderCompact();
     else
         drawFaderDynamic();
+}
+
+void FaderWidget::setQuantized(uint8_t numItems) {
+    isQuantized = (numItems >= 2);
+    numQuantizedItems = numItems;
+    drawFader();
+}
+
+void FaderWidget::drawFaderQuantized() {
+    int area_x = x_offset;
+    int area_y = y_offset + ((boutonNumber > 3) ? 0 : 10);
+    int area_w = 128;
+    int area_h = 22;
+
+    display.fillRect(area_x, area_y, area_w, area_h, 0);
+    if (strcmp(paramName, "---") == 0 || strcmp(paramName, "******") == 0)
+        return;
+
+    int color = dimmed ? 6 : 15;
+    uint8_t N = numQuantizedItems;
+    int item_idx = (int)roundf((float)value / 127.0f * (float)(N - 1));
+
+    if (faderLayout == LAYOUT_DYNAMIC) {
+        // Centered param name / value (same as drawFaderDynamic)
+        const char* displayText = showingValue ? title : paramName;
+        display.setFont(DYNAMIC_LAYOUT_BOLD ? &MiscFixed7x13Bpt7b : &MiscFixed7x13pt7b);
+        display.setTextColor(color);
+        int text_width = getStrWidth(display, displayText);
+        int TEXT_MAX = area_w - 8;
+        if (text_width <= TEXT_MAX) {
+            display.setCursor(area_x + (area_w - text_width) / 2, area_y + 11);
+            display.print(displayText);
+        } else {
+            char truncated[20];
+            strncpy(truncated, displayText, sizeof(truncated));
+            truncated[sizeof(truncated)-1] = '\0';
+            while (strlen(truncated) > 1 && getStrWidth(display, truncated) > TEXT_MAX)
+                truncated[strlen(truncated)-1] = '\0';
+            display.setCursor(area_x + 4, area_y + 11);
+            display.print(truncated);
+        }
+        display.setFont(NULL);
+
+        // Rectangles at bottom, replacing the fader bar
+        int MARGIN = 5;
+        int rects_w = area_w - 2 * MARGIN;
+        int rect_h = 6;
+        int rect_y = area_y + 15;
+        int gap = (N > 10) ? 1 : 2;
+        int rect_w = ((int)rects_w - (int)(N - 1) * gap) / (int)N;
+        if (rect_w < 2) rect_w = 2;
+        int total_w = (int)N * rect_w + (int)(N - 1) * gap;
+        int rx0 = area_x + MARGIN + (rects_w - total_w) / 2;
+
+        for (int i = 0; i < (int)N; i++) {
+            int rx = rx0 + i * (rect_w + gap);
+            if (i == item_idx)
+                display.fillRect(rx, rect_y, rect_w, rect_h, dimmed ? 8 : 15);
+            else
+                display.drawRect(rx, rect_y, rect_w, rect_h, 4);
+        }
+    } else {
+        drawFaderCompact();
+    }
+
+    drawSeparators();
 }
 
 void FaderWidget::drawFaderDynamic() {

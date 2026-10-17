@@ -45,6 +45,8 @@ struct FaderSaveState {
     char paramName[20], title[20], buttonName[20], buttonText[20];
     int  value;
     bool disabled, dimmed, showingValue, valueOnly;
+    bool isQuantized;
+    uint8_t numQuantizedItems;
 };
 static FaderSaveState settingsSaved[4];  // faders 0–3
 
@@ -125,11 +127,13 @@ static void enterSettingsMode() {
         strncpy(settingsSaved[i].title,      faders[i]->title,      20);
         strncpy(settingsSaved[i].buttonName, faders[i]->buttonName, 20);
         strncpy(settingsSaved[i].buttonText, faders[i]->buttonText, 20);
-        settingsSaved[i].value        = faders[i]->value;
-        settingsSaved[i].disabled     = faders[i]->disabled;
-        settingsSaved[i].dimmed       = faders[i]->dimmed;
-        settingsSaved[i].showingValue = faders[i]->showingValue;
-        settingsSaved[i].valueOnly    = faders[i]->valueOnly;
+        settingsSaved[i].value             = faders[i]->value;
+        settingsSaved[i].disabled          = faders[i]->disabled;
+        settingsSaved[i].dimmed            = faders[i]->dimmed;
+        settingsSaved[i].showingValue      = faders[i]->showingValue;
+        settingsSaved[i].valueOnly         = faders[i]->valueOnly;
+        settingsSaved[i].isQuantized       = faders[i]->isQuantized;
+        settingsSaved[i].numQuantizedItems = faders[i]->numQuantizedItems;
     }
     unsigned long sec = screenSaverDelay / 1000UL;
     screensaverLevel = 0;
@@ -238,11 +242,13 @@ void onShiftPress()
             strncpy(faders[i]->title,      settingsSaved[i].title,      20);
             strncpy(faders[i]->buttonName, settingsSaved[i].buttonName, 20);
             strncpy(faders[i]->buttonText, settingsSaved[i].buttonText, 20);
-            faders[i]->value        = settingsSaved[i].value;
-            faders[i]->disabled     = settingsSaved[i].disabled;
-            faders[i]->dimmed       = settingsSaved[i].dimmed;
-            faders[i]->showingValue = settingsSaved[i].showingValue;
-            faders[i]->valueOnly    = settingsSaved[i].valueOnly;
+            faders[i]->value             = settingsSaved[i].value;
+            faders[i]->disabled          = settingsSaved[i].disabled;
+            faders[i]->dimmed            = settingsSaved[i].dimmed;
+            faders[i]->showingValue      = settingsSaved[i].showingValue;
+            faders[i]->valueOnly         = settingsSaved[i].valueOnly;
+            faders[i]->isQuantized       = settingsSaved[i].isQuantized;
+            faders[i]->numQuantizedItems = settingsSaved[i].numQuantizedItems;
         }
         json.getDoc()["screensaver"] = (int)ssStepsSec[screensaverLevel];
         json.getDoc()["brightness"]  = (int)brightnessLevel;

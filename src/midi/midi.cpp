@@ -513,6 +513,14 @@ void onSysEx(const uint8_t *sysex, size_t len)
     serialEditorSend(reply, 7);
     break;
   }
+  case 0x1F:
+  {
+    // Quantized param: F0 6F 1F <fader_idx 0-7> <num_items> F7
+    // num_items=0 or 1 clears quantized mode; ≥2 activates it
+    if (param_number >= 8) break;
+    faders[param_number]->setQuantized(staticOverlay);
+    break;
+  }
   default:
     break;
   }
