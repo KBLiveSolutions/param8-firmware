@@ -15,6 +15,7 @@ bool shiftPressed = false;
 enum ShiftState : uint8_t { SHIFT_IDLE, SHIFT_DOWN1, SHIFT_HOLD, SHIFT_UP1, SHIFT_DOWN2 };
 static ShiftState shiftState = SHIFT_IDLE;
 static unsigned long shiftStateTime = 0;
+static bool presetJustSelected = false;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t latchEncoderEventCount[8] = {0};
@@ -184,6 +185,7 @@ void onShiftRelease()
         break;
 
     case SHIFT_HOLD:
+        presetJustSelected = false;
         shiftState = SHIFT_IDLE;
         shiftPressed = false;
         setLed(1, false);
@@ -356,7 +358,7 @@ void onButtonPressed(uint8_t idx)
         screenSaverActive = false;
         showDisplay();
     }
-    if (shiftState == SHIFT_HOLD)
+    if (shiftState == SHIFT_HOLD && !presetJustSelected)
     {
         uint8_t newPreset;
         char l1[20], l2[20] = {0};
@@ -372,12 +374,31 @@ void onButtonPressed(uint8_t idx)
             const char* pname = controls.getPresetName(newPreset);
             if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
         }
+        uint8_t oldPreset = controls.getPreset();
+        int oldIdx = -1;
+        if (oldPreset == 24) oldIdx = 6;
+        else if (oldPreset == 25) oldIdx = 7;
+        else { int rel = (int)oldPreset - (int)(presetTable * 6); if (rel >= 0 && rel < 6) oldIdx = rel; }
+        if (oldIdx >= 0 && oldIdx != idx) {
+            char ol1[20], ol2[20] = {0};
+            if (oldIdx == 6)      { strcpy(ol1, "Global"); strcpy(ol2, "Mode"); }
+            else if (oldIdx == 7) { strcpy(ol1, "Device"); strcpy(ol2, "Mode"); }
+            else {
+                uint8_t op = presetTable * 6 + oldIdx;
+                snprintf(ol1, sizeof(ol1), "Preset %d", op + 1);
+                const char* opn = controls.getPresetName(op);
+                if (opn[0] != '\0') strncpy(ol2, opn, sizeof(ol2) - 1);
+            }
+            faders[oldIdx]->drawPresetButton(ol1, ol2, false);
+        }
+        faders[idx]->drawPresetButton(l1, l2, true);
+        flushDisplays();
         controls.setPreset(newPreset);
-        drawPresetPage();
         updateFaderTitles();
         updateFaderValues();
         showDisplay();
         sendPresetSysEx(newPreset);
+        presetJustSelected = true;
         return;
     }
     else
