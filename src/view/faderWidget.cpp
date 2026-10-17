@@ -206,8 +206,8 @@ void FaderWidget::drawFaderDynamic() {
             int fillWidth = map(value, 0, 127, 0, BAR_W - 2);
             int fader_y = BAR_Y + BAR_H - FADER_H - 1 + 16;
             display.drawRoundRect(BAR_X, fader_y, BAR_W, FADER_H, BUTTON_CORNER, BUTTON_BORDER_COLOR);
-            if (!dimmed && fillWidth > 0)
-                display.fillRect(BAR_X + 1, fader_y + 1, fillWidth, FADER_H - 2, 15);
+            if (fillWidth > 0)
+                display.fillRect(BAR_X + 1, fader_y + 1, fillWidth, FADER_H - 2, dimmed ? 6 : 15);
         }
 
         display.setFont(DYNAMIC_LAYOUT_BOLD ? &MiscFixed7x13Bpt7b : &MiscFixed7x13pt7b);
@@ -319,7 +319,7 @@ void FaderWidget::drawFaderCompact() {
             }
         }
 
-        if(!inactive) {
+        if(!disabled) {
             // Needle: quantized to 48 positions
             int needle_step = (int)roundf(value * 48.0f / 127.0f);
             float q_rad = start_rad + (needle_step / 48.0f) * sweep;
@@ -330,7 +330,7 @@ void FaderWidget::drawFaderCompact() {
 
         // --- Right: param value, left-justified, 2 lines max ---
         display.setFont(&MiscFixed6x10pt7b);
-        const char* valText = disabled ? "---" : title;
+        const char* valText = title;
         int valCharW = 6;
         int valMaxChars = (col_val_w - TPAD * 2) / valCharW;
         int vlen = strlen(valText);

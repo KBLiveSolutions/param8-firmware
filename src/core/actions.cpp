@@ -16,6 +16,7 @@ bool settingsModeActive = false;
 enum ShiftState : uint8_t { SHIFT_IDLE, SHIFT_DOWN1, SHIFT_HOLD, SHIFT_UP1, SHIFT_DOWN2 };
 static ShiftState shiftState = SHIFT_IDLE;
 static unsigned long shiftStateTime = 0;
+static bool presetJustSelected = false;
 bool latchPressed = false;
 uint8_t latchEncoderEvents[8][MAX_LATCH_EVENTS] = {{0}};
 uint8_t latchEncoderEventCount[8] = {0};
@@ -30,17 +31,12 @@ bool latchHeld = false;
 bool namingPendingConfirm = false;
 unsigned long namingConfirmTime = 0;
 
-// Pour le mode absolu : on stocke juste la dernière valeur et si elle a changé
 uint8_t latchAbsoluteValue[8] = {0};
 bool latchAbsoluteChanged[8] = {false};
 
-// Pour le mode relatif : delta accumulé pendant le latch
 static int latchRelAccum[8] = {0};
-
-// Valeurs au moment de l'activation du latch (pour annulation)
 static uint8_t latchOriginalValue[8] = {0};
 
-// État des widgets 0–3 sauvegardé avant d'entrer en mode settings
 struct FaderSaveState {
     char paramName[20], title[20], buttonName[20], buttonText[20];
     int  value;
@@ -48,15 +44,13 @@ struct FaderSaveState {
     bool isQuantized;
     uint8_t numQuantizedItems;
 };
-static FaderSaveState settingsSaved[4];  // faders 0–3
+static FaderSaveState settingsSaved[4];
 
-// Screensaver level index (0–7) pour le menu settings
 static const unsigned long ssStepsSec[] = {0, 60, 120, 300, 600, 1800, 3600, 7200};
 static const char* const   ssStepLabels[] = {"Off", "1 min", "2 min", "5 min", "10 min", "30 min", "1 h", "2 h"};
 #define SS_STEPS 8
-static uint8_t screensaverLevel = 3;  // 5 min par défaut
+static uint8_t screensaverLevel = 3;
 
-// Slew level index (0–5) pour latch et revert
 static const int   slewStepsMs[] = {0, 100, 200, 500, 1000, 2000};
 static const char* const slewStepLabels[] = {"Off", "100ms", "200ms", "500ms", "1 s", "2 s"};
 #define SLEW_STEPS 6
@@ -64,11 +58,9 @@ uint8_t latchSlewLevel  = 0;
 uint8_t revertSlewLevel = 0;
 static bool settingsPendingSave = false;
 
-// Pour le revert en mode absolu : valeur d'origine au moment de l'entrée en revert
 uint8_t revertAbsoluteOriginal[8] = {0};
 bool revertAbsoluteChanged[8] = {false};
 
-// Envoie fromVal→toVal en glide (5 ms/step, durée proportionnelle au delta)
 static void sendAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
     uint8_t  channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
@@ -86,12 +78,10 @@ static void sendAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
 }
 
 void initActionSettings() {
-    // Screensaver level
     unsigned long sec = screenSaverDelay / 1000UL;
     screensaverLevel = 0;
     for (int i = SS_STEPS - 1; i > 0; --i)
         if (sec >= ssStepsSec[i]) { screensaverLevel = i; break; }
-    // Slew levels
     int savedLS = json.getDoc()["latchSlew"]  | 0;
     int savedRS = json.getDoc()["revertSlew"] | 0;
     latchSlewLevel  = (uint8_t)constrain(savedLS, 0, SLEW_STEPS - 1);
@@ -268,18 +258,15 @@ void onShiftPress()
 
     case SHIFT_UP1:
         if (now - shiftStateTime < SHIFT_DTAP_MS) {
-            // Double-tap: 2nd press within window
             shiftState = SHIFT_DOWN2;
             shiftStateTime = now;
-            shiftPressed = true;  // allow buttons.cpp to detect the release
+            shiftPressed = true;
         } else {
-            // Too slow — new first press
             startFirstPress(now);
         }
         break;
 
     case SHIFT_DOWN1:
-        // 2nd press before 1st release (fast double-tap)
         if (now - shiftStateTime < SHIFT_HOLD_MS) {
             shiftPressed = false;
             setLed(1, false);
@@ -291,7 +278,7 @@ void onShiftPress()
 
     case SHIFT_HOLD:
     case SHIFT_DOWN2:
-        break;  // ignore
+        break;
     }
 }
 
@@ -306,7 +293,6 @@ void onShiftRelease()
 
     switch (shiftState) {
     case SHIFT_DOWN1:
-        // Quick release before SHIFT_HOLD_MS → potential double-tap
         shiftPressed = false;
         setLed(1, false);
         sendMidiMessage(0, 110, 0, 7);
@@ -315,7 +301,7 @@ void onShiftRelease()
         break;
 
     case SHIFT_HOLD:
-        // Long hold release
+        presetJustSelected = false;
         shiftState = SHIFT_IDLE;
         shiftPressed = false;
         setLed(1, false);
@@ -329,11 +315,9 @@ void onShiftRelease()
     case SHIFT_DOWN2:
         shiftPressed = false;
         if (now - shiftStateTime < SHIFT_DTHOLD_MS) {
-            // Quick release of 2nd press → double-tap confirmed → settings
             enterSettingsMode();
             drawSettingsPage();
         }
-        // else: held ≥ SHIFT_DTHOLD_MS → double-tap-hold (timer already fired)
         shiftState = SHIFT_IDLE;
         break;
 
@@ -399,7 +383,6 @@ void checkShiftPending()
         break;
     case SHIFT_UP1:
         if (now - shiftStateTime >= SHIFT_DTAP_MS) {
-            // Single tap confirmed
             shiftState = SHIFT_IDLE;
             showDisplay();
             for (int i = 0; i < 8; ++i)
@@ -409,7 +392,6 @@ void checkShiftPending()
         break;
     case SHIFT_DOWN2:
         if (now - shiftStateTime >= SHIFT_DTHOLD_MS) {
-            // Double-tap-hold (placeholder — step sequencer branch)
             shiftPressed = false;
             shiftState = SHIFT_IDLE;
         }
@@ -519,8 +501,7 @@ void onButtonPressed(uint8_t idx)
     if (screenSaverActive)
     {
         screenSaverActive = false;
-        if (settingsModeActive) drawSettingsPage();
-        else showDisplay();
+        showDisplay();
     }
     if (settingsModeActive) {
         if (idx == 0) {
@@ -529,7 +510,7 @@ void onButtonPressed(uint8_t idx)
         }
         return;
     }
-    if (shiftState == SHIFT_HOLD)
+    if (shiftState == SHIFT_HOLD && !presetJustSelected)
     {
         uint8_t newPreset;
         char l1[20], l2[20] = {0};
@@ -545,6 +526,23 @@ void onButtonPressed(uint8_t idx)
             const char* pname = controls.getPresetName(newPreset);
             if (pname[0] != '\0') strncpy(l2, pname, sizeof(l2) - 1);
         }
+        uint8_t oldPreset = controls.getPreset();
+        int oldIdx = -1;
+        if (oldPreset == 24) oldIdx = 6;
+        else if (oldPreset == 25) oldIdx = 7;
+        else { int rel = (int)oldPreset - (int)(presetTable * 6); if (rel >= 0 && rel < 6) oldIdx = rel; }
+        if (oldIdx >= 0 && oldIdx != idx) {
+            char ol1[20], ol2[20] = {0};
+            if (oldIdx == 6)      { strcpy(ol1, "Global"); strcpy(ol2, "Mode"); }
+            else if (oldIdx == 7) { strcpy(ol1, "Device"); strcpy(ol2, "Mode"); }
+            else {
+                uint8_t op = presetTable * 6 + oldIdx;
+                snprintf(ol1, sizeof(ol1), "Preset %d", op + 1);
+                const char* opn = controls.getPresetName(op);
+                if (opn[0] != '\0') strncpy(ol2, opn, sizeof(ol2) - 1);
+            }
+            faders[oldIdx]->drawPresetButton(ol1, ol2, false);
+        }
         faders[idx]->drawPresetButton(l1, l2, true);
         flushDisplays();
         controls.setPreset(newPreset);
@@ -552,6 +550,7 @@ void onButtonPressed(uint8_t idx)
         updateFaderValues();
         showDisplay();
         sendPresetSysEx(newPreset);
+        presetJustSelected = true;
         return;
     }
     else
@@ -594,7 +593,7 @@ void onButtonPressed(uint8_t idx)
 
 void onButtonReleased(uint8_t idx)
 {
-    if (settingsModeActive) return;
+    if (shiftState == SHIFT_HOLD) return;
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
@@ -925,7 +924,7 @@ void sendPresetSysEx(uint8_t preset)
 void releaseLatchAndSend()
 {
     int slewMs = slewStepsMs[latchSlewLevel];
-    // Envoyer les dernières valeurs absolues stockées
+
     for (int i = 0; i < 8; ++i)
     {
         if (latchAbsoluteChanged[i])
@@ -942,9 +941,7 @@ void releaseLatchAndSend()
         }
     }
 
-    // Mode relatif
     if (slewMs > 0) {
-        // Étaler le delta accumulé sur slewMs (proportionnel comme le slew absolu)
         int maxAcc = 0;
         for (int i = 0; i < 8; ++i)
             if (abs(latchRelAccum[i]) > maxAcc) maxAcc = abs(latchRelAccum[i]);
@@ -970,7 +967,6 @@ void releaseLatchAndSend()
             }
         }
     } else {
-        // Rejouer les événements individuels de manière entrelacée
         uint8_t maxEvents = 0;
         for (int i = 0; i < 8; ++i)
             if (latchEncoderEventCount[i] > maxEvents) maxEvents = latchEncoderEventCount[i];
