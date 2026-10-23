@@ -119,8 +119,10 @@ void ControlsManager::setDefaults() {
                 _presets[_preset].buttons_short[i].minVal  = (data.value3 < 0) ? 0   : (uint8_t)data.value3;
                 _presets[_preset].buttons_short[i].maxVal  = (data.value4 < 0) ? 127 : (uint8_t)data.value4;
 
-                _presets[_preset].encoder[i].controlName[0] = '\0';
-                _presets[_preset].buttons_short[i].controlName[0] = '\0';
+                const char* encName = json.getDoc()[String(_preset)]["enc_names"][String(i)] | "";
+                strncpy(_presets[_preset].encoder[i].controlName, encName, sizeof(_presets[_preset].encoder[i].controlName) - 1);
+                const char* btnName = json.getDoc()[String(_preset)]["btn_names"][String(i)] | "";
+                strncpy(_presets[_preset].buttons_short[i].controlName, btnName, sizeof(_presets[_preset].buttons_short[i].controlName) - 1);
             }
 
             _presets[_preset].encoder[i].value = 64;

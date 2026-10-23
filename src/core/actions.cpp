@@ -77,6 +77,10 @@ static void sendAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
     }
 }
 
+bool isSelectingPreset() {
+    return shiftState == SHIFT_HOLD;
+}
+
 void initActionSettings() {
     unsigned long sec = screenSaverDelay / 1000UL;
     screensaverLevel = 0;
