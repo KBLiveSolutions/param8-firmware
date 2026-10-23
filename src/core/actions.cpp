@@ -51,9 +51,16 @@ static const char* const   ssStepLabels[] = {"Off", "1 min", "2 min", "5 min", "
 #define SS_STEPS 8
 static uint8_t screensaverLevel = 3;
 
-static const int   slewStepsMs[] = {0, 100, 200, 500, 1000, 2000};
-static const char* const slewStepLabels[] = {"Off", "100ms", "200ms", "500ms", "1 s", "2 s"};
-#define SLEW_STEPS 6
+static int slewLevelToMs(uint8_t level) {
+    if (level == 0) return 0;
+    return (int)roundf(10.0f * powf(300.0f, (level - 1) / 126.0f));
+}
+static void formatSlewLabel(uint8_t level, char* buf, size_t len) {
+    if (level == 0) { strncpy(buf, "Off", len); return; }
+    int ms = slewLevelToMs(level);
+    if (ms < 1000) snprintf(buf, len, "%dms", ms);
+    else           snprintf(buf, len, "%.1fs", ms / 1000.0f);
+}
 uint8_t latchSlewLevel  = 0;
 uint8_t revertSlewLevel = 0;
 static bool settingsPendingSave = false;
@@ -61,6 +68,47 @@ static bool settingsPendingSave = false;
 uint8_t revertAbsoluteOriginal[8] = {0};
 bool revertAbsoluteChanged[8] = {false};
 
+struct SlewOp {
+    bool     active   = false;
+    int      fromVal  = 0;
+    int      toVal    = 0;
+    int      lastSent = 0;
+    unsigned long startTime = 0;
+    unsigned long totalMs   = 0;
+    ControlMidiType type;
+    uint8_t  number  = 0;
+    uint8_t  channel = 0;
+};
+static SlewOp slewOps[8];
+
+struct RelSlewOp {
+    bool active = false;
+    int  target[8] = {0};
+    int  sent[8]   = {0};
+    unsigned long startTime = 0;
+    unsigned long totalMs   = 0;
+};
+static RelSlewOp relSlew;
+
+static void startAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
+    uint8_t channel = controls.getEncoder(idx).channel;
+    ControlMidiType type = controls.getEncoder(idx).type;
+    uint8_t number  = controls.getEncoder(idx).number;
+    int range = abs(toVal - fromVal);
+    unsigned long totalMs = range > 0 ? (unsigned long)slewMs * range / 127 : 0;
+    if (totalMs == 0) { sendMidiMessage(type, number, (uint8_t)toVal, channel); return; }
+    slewOps[idx].active    = true;
+    slewOps[idx].fromVal   = fromVal;
+    slewOps[idx].toVal     = toVal;
+    slewOps[idx].lastSent  = fromVal;
+    slewOps[idx].startTime = millis();
+    slewOps[idx].totalMs   = totalMs;
+    slewOps[idx].type      = type;
+    slewOps[idx].number    = number;
+    slewOps[idx].channel   = channel;
+}
+
+// kept only to avoid touching the old dead-code path below:
 static void sendAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
     uint8_t  channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
@@ -81,6 +129,49 @@ bool isSelectingPreset() {
     return shiftState == SHIFT_HOLD;
 }
 
+void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel);
+
+void checkSlewProgress() {
+    unsigned long now = millis();
+
+    for (int i = 0; i < 8; ++i) {
+        if (!slewOps[i].active) continue;
+        unsigned long elapsed = now - slewOps[i].startTime;
+        bool done = elapsed >= slewOps[i].totalMs;
+        int newVal = done
+            ? slewOps[i].toVal
+            : slewOps[i].fromVal + (int)((long)(slewOps[i].toVal - slewOps[i].fromVal) * (long)elapsed / (long)slewOps[i].totalMs);
+        newVal = constrain(newVal, 0, 127);
+        if (newVal != slewOps[i].lastSent) {
+            sendMidiMessage(slewOps[i].type, slewOps[i].number, (uint8_t)newVal, slewOps[i].channel);
+            controls.getEncoder(i).value = (uint8_t)newVal;
+            updateFader(i, newVal);
+            slewOps[i].lastSent = newVal;
+        }
+        if (done) slewOps[i].active = false;
+    }
+
+    if (relSlew.active) {
+        unsigned long elapsed = now - relSlew.startTime;
+        bool done = elapsed >= relSlew.totalMs;
+        for (int i = 0; i < 8; ++i) {
+            if (relSlew.target[i] == 0) continue;
+            int shouldHaveSent = done
+                ? relSlew.target[i]
+                : (int)((long)relSlew.target[i] * (long)elapsed / (long)relSlew.totalMs);
+            int delta = shouldHaveSent - relSlew.sent[i];
+            if (delta != 0) {
+                uint8_t ch  = controls.getEncoder(i).channel;
+                ControlMidiType t = controls.getEncoder(i).type;
+                uint8_t num = controls.getEncoder(i).number;
+                sendRelativeCC(t, num, delta, ch);
+                relSlew.sent[i] = shouldHaveSent;
+            }
+        }
+        if (done) relSlew.active = false;
+    }
+}
+
 void initActionSettings() {
     unsigned long sec = screenSaverDelay / 1000UL;
     screensaverLevel = 0;
@@ -88,8 +179,8 @@ void initActionSettings() {
         if (sec >= ssStepsSec[i]) { screensaverLevel = i; break; }
     int savedLS = json.getDoc()["latchSlew"]  | 0;
     int savedRS = json.getDoc()["revertSlew"] | 0;
-    latchSlewLevel  = (uint8_t)constrain(savedLS, 0, SLEW_STEPS - 1);
-    revertSlewLevel = (uint8_t)constrain(savedRS, 0, SLEW_STEPS - 1);
+    latchSlewLevel  = (uint8_t)constrain(savedLS, 0, 127);
+    revertSlewLevel = (uint8_t)constrain(savedRS, 0, 127);
 }
 
 static void drawPresetPage()
@@ -161,20 +252,22 @@ static void drawSettingsPage() {
     faders[2]->disabled   = false;
     faders[2]->dimmed     = false;
     faders[2]->valueOnly  = false;
-    faders[2]->showingValue = false;
     faders[2]->setParamName("Latch Slew");
-    faders[2]->value = latchSlewLevel * 25;
-    strncpy(faders[2]->buttonName, slewStepLabels[latchSlewLevel], 20);
-    strncpy(faders[2]->buttonText, slewStepLabels[latchSlewLevel], 20);
+    faders[2]->value = latchSlewLevel;
+    formatSlewLabel(latchSlewLevel, faders[2]->title, 20);
+    faders[2]->showingValue = true;
+    strncpy(faders[2]->buttonName, "Time", 20);
+    strncpy(faders[2]->buttonText, "Time", 20);
     faders[2]->draw();
     faders[3]->disabled   = false;
     faders[3]->dimmed     = false;
     faders[3]->valueOnly  = false;
-    faders[3]->showingValue = false;
     faders[3]->setParamName("Revert Slew");
-    faders[3]->value = revertSlewLevel * 25;
-    strncpy(faders[3]->buttonName, slewStepLabels[revertSlewLevel], 20);
-    strncpy(faders[3]->buttonText, slewStepLabels[revertSlewLevel], 20);
+    faders[3]->value = revertSlewLevel;
+    formatSlewLabel(revertSlewLevel, faders[3]->title, 20);
+    faders[3]->showingValue = true;
+    strncpy(faders[3]->buttonName, "Time", 20);
+    strncpy(faders[3]->buttonText, "Time", 20);
     faders[3]->draw();
     flushDisplays();
 }
@@ -649,21 +742,19 @@ static void handleSettingsScreensaver(int delta) {
 }
 
 static void handleSettingsLatchSlew(int delta) {
-    int newLevel = (int)latchSlewLevel + (delta > 0 ? 1 : -1);
-    latchSlewLevel = (uint8_t)constrain(newLevel, 0, SLEW_STEPS - 1);
-    faders[2]->value = latchSlewLevel * 25;
-    strncpy(faders[2]->buttonName, slewStepLabels[latchSlewLevel], 20);
-    strncpy(faders[2]->buttonText, slewStepLabels[latchSlewLevel], 20);
+    latchSlewLevel = (uint8_t)constrain((int)latchSlewLevel + delta, 0, 127);
+    faders[2]->value = latchSlewLevel;
+    formatSlewLabel(latchSlewLevel, faders[2]->title, 20);
+    faders[2]->showingValue = true;
     faders[2]->draw();
     flushDisplays();
 }
 
 static void handleSettingsRevertSlew(int delta) {
-    int newLevel = (int)revertSlewLevel + (delta > 0 ? 1 : -1);
-    revertSlewLevel = (uint8_t)constrain(newLevel, 0, SLEW_STEPS - 1);
-    faders[3]->value = revertSlewLevel * 25;
-    strncpy(faders[3]->buttonName, slewStepLabels[revertSlewLevel], 20);
-    strncpy(faders[3]->buttonText, slewStepLabels[revertSlewLevel], 20);
+    revertSlewLevel = (uint8_t)constrain((int)revertSlewLevel + delta, 0, 127);
+    faders[3]->value = revertSlewLevel;
+    formatSlewLabel(revertSlewLevel, faders[3]->title, 20);
+    faders[3]->showingValue = true;
     faders[3]->draw();
     flushDisplays();
 }
@@ -927,7 +1018,7 @@ void sendPresetSysEx(uint8_t preset)
 
 void releaseLatchAndSend()
 {
-    int slewMs = slewStepsMs[latchSlewLevel];
+    int slewMs = slewLevelToMs(latchSlewLevel);
 
     for (int i = 0; i < 8; ++i)
     {
@@ -935,7 +1026,7 @@ void releaseLatchAndSend()
         {
             ControlMidiType type = controls.getEncoder(i).type;
             if (slewMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB) {
-                sendAbsoluteSlew(i, latchOriginalValue[i], latchAbsoluteValue[i], slewMs);
+                startAbsoluteSlew(i, latchOriginalValue[i], latchAbsoluteValue[i], slewMs);
             } else {
                 uint8_t channel = controls.getEncoder(i).channel;
                 uint8_t number  = controls.getEncoder(i).number;
@@ -950,25 +1041,11 @@ void releaseLatchAndSend()
         for (int i = 0; i < 8; ++i)
             if (abs(latchRelAccum[i]) > maxAcc) maxAcc = abs(latchRelAccum[i]);
         if (maxAcc > 0) {
-            int totalMs = (slewMs * maxAcc + 63) / 127;
-            const int stepMs = 5;
-            int numSteps = max(1, totalMs / stepMs);
-            int sent[8] = {0};
-            for (int s = 1; s <= numSteps; ++s) {
-                for (int i = 0; i < 8; ++i) {
-                    if (latchRelAccum[i] == 0) continue;
-                    int target = (latchRelAccum[i] * s) / numSteps;
-                    int delta = target - sent[i];
-                    if (delta != 0) {
-                        uint8_t channel = controls.getEncoder(i).channel;
-                        ControlMidiType type = controls.getEncoder(i).type;
-                        uint8_t number = controls.getEncoder(i).number;
-                        sendRelativeCC(type, number, delta, channel);
-                        sent[i] = target;
-                    }
-                }
-                delay(stepMs);
-            }
+            unsigned long totalMs = (unsigned long)slewMs * maxAcc / 127;
+            relSlew.active    = true;
+            relSlew.startTime = millis();
+            relSlew.totalMs   = totalMs;
+            for (int i = 0; i < 8; ++i) { relSlew.target[i] = latchRelAccum[i]; relSlew.sent[i] = 0; }
         }
     } else {
         uint8_t maxEvents = 0;
@@ -997,7 +1074,7 @@ void releaseLatchAndSend()
 void sendRevertEvents()
 {
     bool isRelative = controls.getPreset() > 23;
-    int slewMs = slewStepsMs[revertSlewLevel];
+    int slewMs = slewLevelToMs(revertSlewLevel);
     for (int i = 0; i < 8; ++i)
     {
         if (!revertAbsoluteChanged[i])
@@ -1011,18 +1088,20 @@ void sendRevertEvents()
             int delta = (int)revertAbsoluteOriginal[i] - (int)controls.getEncoder(i).value;
             if (delta != 0)
                 sendRelativeCC(type, number, delta, channel);
+            controls.getEncoder(i).value = revertAbsoluteOriginal[i];
+            updateFader(i, revertAbsoluteOriginal[i]);
         }
         else if (slewMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB)
         {
-            sendAbsoluteSlew(i, controls.getEncoder(i).value, revertAbsoluteOriginal[i], slewMs);
+            startAbsoluteSlew(i, controls.getEncoder(i).value, revertAbsoluteOriginal[i], slewMs);
+            // value/fader updated incrementally by checkSlewProgress()
         }
         else
         {
             sendMidiMessage(type, number, revertAbsoluteOriginal[i], channel);
+            controls.getEncoder(i).value = revertAbsoluteOriginal[i];
+            updateFader(i, revertAbsoluteOriginal[i]);
         }
-
-        controls.getEncoder(i).value = revertAbsoluteOriginal[i];
-        updateFader(i, revertAbsoluteOriginal[i]);
         revertAbsoluteChanged[i] = false;
     }
 }

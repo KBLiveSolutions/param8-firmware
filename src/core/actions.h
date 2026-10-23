@@ -34,3 +34,4 @@ void initActionSettings();
 void onButtonPressed(uint8_t);
 void onButtonReleased(uint8_t);
 bool isSelectingPreset();
+void checkSlewProgress();
