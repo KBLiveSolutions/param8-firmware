@@ -1,0 +1,42 @@
+================================================================================
+  param8 Firmware Changelog
+================================================================================
+
+v1.0.2 — 2026-10-17
+--------------------
+
+  Preset page
+    - Selecting a preset now immediately deselects the previous one in a single
+      display flush, so there is no visual overlap between the old and new active
+      preset LEDs.
+    - Further preset selection is locked until Shift is released
+      (presetJustSelected flag), preventing accidental double-selection on a
+      quick press.
+
+  Utility device
+    - The Output parameter is now correctly labelled "Gain", matching the name
+      exposed by the Live API.
+
+  Dimmed parameters
+    - Parameters shown in a dimmed state now render the fader fill (grey) and
+      needle in the compact layout, keeping the display consistent with active
+      parameters.
+
+  Bug fixes
+    - Fixed: the active preset LED was not deselected immediately after a
+      shift long-press selection — it stayed lit until the next showDisplay()
+      cycle.
+    - Fixed: releasing a button after a shift long-press action was triggering
+      the button's normal MIDI message. The button is now silenced when
+      Shift was held.
+    - Fixed: while in preset selection mode (Shift held) coming from the Global
+      preset, Live's real-time Position updates were overwriting the preset page
+      display. Parameter title updates from Live are now ignored during preset
+      selection.
+    - Fixed: control names set in the editor were lost after disconnecting or
+      rebooting the device. Names are now persisted to flash and restored on
+      startup.
+
+--------------------------------------------------------------------------------
+
+v1.0.1 — initial tagged release

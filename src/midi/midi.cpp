@@ -292,7 +292,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     break;
 
   case 1:
-    faders[param_number]->updateTitle(ascii_string);
+    if (!isSelectingPreset())
+      faders[param_number]->updateTitle(ascii_string);
     break;
 
   case 2:
@@ -442,6 +443,10 @@ void onSysEx(const uint8_t *sysex, size_t len)
       ? controls.getButtonShortAt(preset, idx)
       : controls.getEncoderAt(preset, idx);
     strncpy(ctrl.controlName, name, sizeof(ctrl.controlName) - 1);
+
+    const char* jsonKey = isButton ? "btn_names" : "enc_names";
+    json.getDoc()[String(preset)][jsonKey][String(idx)] = name;
+    json.save();
 
     if (preset == controls.getPreset()) {
       updateFaderTitles();

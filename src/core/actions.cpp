@@ -61,6 +61,10 @@ static void sendAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
     }
 }
 
+bool isSelectingPreset() {
+    return shiftState == SHIFT_HOLD;
+}
+
 void initActionSettings() {
     int savedLS = json.getDoc()["latchSlew"]  | 0;
     int savedRS = json.getDoc()["revertSlew"] | 0;

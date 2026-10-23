@@ -32,3 +32,4 @@ void setRevertModeLed(bool on);
 void initActionSettings();
 void onButtonPressed(uint8_t);
 void onButtonReleased(uint8_t);
+bool isSelectingPreset();
