@@ -60,7 +60,7 @@ void setupMIDI()
 //     }
 // }
 
-void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel)
+void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel, uint8_t forceCable)
 {
   lastInputTime = millis();
   if (screenSaverActive)
@@ -69,7 +69,7 @@ void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channe
     showDisplay();
   }
   // cable 0 = DAW (global/device modes), cable 1 = User (user presets 0-23)
-  uint8_t cable = (controls.getPreset() >= 24) ? 0 : 1;
+  uint8_t cable = (forceCable != 255) ? forceCable : ((controls.getPreset() >= 24) ? 0 : 1);
   uint8_t packet[4] = {0};
   switch (type)
   {
@@ -358,11 +358,15 @@ void onSysEx(const uint8_t *sysex, size_t len)
         case 3: encType = MIDI_PB; break;
         default: encType = MIDI_CC; break;
     }
+    bool isFunction = (len >= 13) ? sysex[11] != 0 : false;
+    uint8_t fnId    = (len >= 14) ? sysex[12] : 0;
     controls.setEncoder(preset, param_number, encType, number, channel);
     controls.getEncoderAt(preset, param_number).hiRes = hiRes;
     controls.getEncoderAt(preset, param_number).minVal = encMin;
     controls.getEncoderAt(preset, param_number).maxVal = encMax;
-    json.setEncoder(preset, param_number, (int)encType, (int)number, (int)channel, hiRes ? 1 : 0, encMin, encMax);
+    controls.getEncoderAt(preset, param_number).isFunction = isFunction;
+    controls.getEncoderAt(preset, param_number).fnId = fnId;
+    json.setEncoder(preset, param_number, (int)encType, (int)number, (int)channel, hiRes ? 1 : 0, encMin, encMax, isFunction ? 1 : 0, (int)fnId);
     if (preset == controls.getPreset()) {
       updateFaderTitles();
       showDisplay();
@@ -386,17 +390,23 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t control = sysex[6];
     uint8_t channel = sysex[7];
     bool toggleMode = sysex[8] != 0;
-    uint8_t btnMin = (len >= 11) ? sysex[9]  : 0;
-    uint8_t btnMax = (len >= 12) ? sysex[10] : 127;
+    uint8_t btnMin   = (len >= 11) ? sysex[9]  : 0;
+    uint8_t btnMax   = (len >= 12) ? sysex[10] : 127;
+    bool isFunction  = (len >= 13) ? sysex[11] != 0 : false;
+    uint8_t fnId     = (len >= 14) ? sysex[12] : 0;
     controls.setButtonShort(preset, param_number, _type, control, channel, toggleMode);
     controls.getButtonShortAt(preset, param_number).minVal = btnMin;
     controls.getButtonShortAt(preset, param_number).maxVal = btnMax;
+    controls.getButtonShortAt(preset, param_number).isFunction = isFunction;
+    controls.getButtonShortAt(preset, param_number).fnId = fnId;
     JsonArray arr = json.getDoc()[String(preset)]["buttons_short"][String(param_number)].to<JsonArray>();
-    arr[0] = static_cast<int>(_type);
-    arr[1] = static_cast<int>(control);
-    arr[2] = static_cast<int>(channel);
-    arr[3] = (int)btnMin;
-    arr[4] = (int)btnMax;
+    arr.add(static_cast<int>(_type));
+    arr.add(static_cast<int>(control));
+    arr.add(static_cast<int>(channel));
+    arr.add((int)btnMin);
+    arr.add((int)btnMax);
+    arr.add(isFunction ? 1 : 0);
+    arr.add((int)fnId);
     json.setButtonToggleMode(preset, param_number, toggleMode ? 1 : 0);
     if (preset == controls.getPreset()) {
       updateFaderTitles();
@@ -516,6 +526,43 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t reply[7] = { 240, 111, 0x14, FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH, 247 };
     usb_midi.write(reply, 7);
     serialEditorSend(reply, 7);
+    break;
+  }
+  case 0x1C:
+  {
+    // Set global encoder fnId: F0 6F 1C <idx> <fnId> F7
+    uint8_t idx  = sysex[3];
+    uint8_t fnId = sysex[4];
+    if (idx >= 8) break;
+    controls.getEncoderAt(24, idx).fnId = fnId;
+    json.getDoc()["global"]["enc"][String(idx)] = fnId;
+    json.save();
+    break;
+  }
+  case 0x1D:
+  {
+    // Set global button fnId: F0 6F 1D <idx> <fnId> F7
+    uint8_t idx  = sysex[3];
+    uint8_t fnId = sysex[4];
+    if (idx >= 8) break;
+    controls.getButtonShortAt(24, idx).fnId = fnId;
+    json.getDoc()["global"]["btn"][String(idx)] = fnId;
+    json.save();
+    break;
+  }
+  case 0x1E:
+  {
+    // Request global fnIds → reply with 0x1C and 0x1D packets for each slot
+    for (int i = 0; i < 8; i++) {
+      uint8_t encPkt[6] = { 240, 111, 0x1C, (uint8_t)i, controls.getEncoderAt(24, i).fnId, 247 };
+      usb_midi.write(encPkt, 6);
+      serialEditorSend(encPkt, 6);
+      delay(2);
+      uint8_t btnPkt[6] = { 240, 111, 0x1D, (uint8_t)i, controls.getButtonShortAt(24, i).fnId, 247 };
+      usb_midi.write(btnPkt, 6);
+      serialEditorSend(btnPkt, 6);
+      delay(2);
+    }
     break;
   }
   case 0x1F:

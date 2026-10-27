@@ -17,7 +17,7 @@ extern size_t sysExBufferSize;
 extern uint8_t sysExBuffer[SYSEX_BUFFER_SIZE];
 
 void setupMIDI();
-void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel);
+void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel, uint8_t forceCable = 255);
 void midiRead();
 void handleMIDIDAWMessage(uint8_t *packet);
 void clearSysExBuffer();

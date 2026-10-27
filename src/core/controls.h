@@ -22,6 +22,8 @@ struct MidiControl {
     bool hiRes = false;
     uint8_t minVal = 0;
     uint8_t maxVal = 127;
+    bool isFunction = false;
+    uint8_t fnId = 0;
 };
 
 struct PresetControls {

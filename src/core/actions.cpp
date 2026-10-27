@@ -129,7 +129,77 @@ bool isSelectingPreset() {
     return shiftState == SHIFT_HOLD;
 }
 
-void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel);
+void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel, uint8_t cable = 255);
+
+// Returns display name for a given fnId (used in fader title display).
+static const char* fnIdName(uint8_t fnId) {
+    switch (fnId) {
+        case  1: return "Play";
+        case  2: return "Stop";
+        case  3: return "Loop Tgl.";
+        case  4: return "Continue";
+        case  5: return "Arr. Rec.";
+        case  6: return "Undo";
+        case  7: return "Redo";
+        case  8: return "Tempo +1";
+        case  9: return "Tempo -1";
+        case 14: return "Launch Sc.";
+        case 15: return "Prev Scene";
+        case 16: return "Next Scene";
+        case 17: return "Sess. Rec.";
+        case 18: return "Prev Cue";
+        case 19: return "Next Cue";
+        case 26: return "Restart";
+        case 27: return "Capture";
+        case 28: return "Re-En. Auto";
+        case 31: return "Metronome";
+        case 32: return "Bk to Arr.";
+        case 33: return "Skip Fwd";
+        case 34: return "Skip Bwd";
+        case 37: return "Groove";
+        case 40: return "Stop Clips";
+        case 43: return "Prev Track";
+        case 44: return "Next Track";
+        case 48: return "Prev Device";
+        case 49: return "Next Device";
+        case 51: return "Next Var.";
+        case 54: return "Randomize";
+        case 59: return "Send A";
+        case 60: return "Send B";
+        case 73: return "Sel. Param.";
+        case 83: return "Song Pos.";
+        case 84: return "Loop Pos.";
+        case 85: return "Loop Len.";
+        case 86: return "Scrl Scenes";
+        case 87: return "BPM";
+        case 88: return "Jump Mkr.";
+        case 89: return "Master Vol.";
+        case 90: return "Cue Vol.";
+        case 91: return "Track Vol.";
+        case 96: return "Track Pan";
+        case 99: return "H. Zoom";
+        case 112: return "Track Sel.";
+        default: return nullptr;
+    }
+}
+
+// Maps isFunction fnIds to their equivalent global-mode CC numbers.
+// Only maps cases where the fnId does NOT collide with an existing button fnId
+// (e.g. fnId 40=StopAllClips shares number with CC 40 — not remapped).
+static uint8_t fnIdToGlobalCC(uint8_t fnId) {
+    switch (fnId) {
+        case 90: return 41;  // Cue Volume
+        case 87: return 42;  // Tempo
+        case 96: return 45;  // Track Pan
+        case 83: return 46;  // Song Position
+        case 73: return 47;  // Selected Param
+        case  1: return 52;  // Play
+        case  3: return 56;  // Arr. Loop
+        case 14: return 53;  // Launch Scene
+        case 31: return 50;  // Metronome
+        default: return fnId;
+    }
+}
 
 void checkSlewProgress() {
     unsigned long now = millis();
@@ -670,7 +740,10 @@ void onButtonPressed(uint8_t idx)
             _value = (controls.getPreset() < 24) ? controls.getButtonShort(idx).maxVal : 127;
         }
         controls.getButtonShort(idx).value = _value;
-        sendMidiMessage(type, number, _value, channel);
+        if (controls.getButtonShort(idx).isFunction)
+            sendMidiMessage(MIDI_CC, fnIdToGlobalCC(controls.getButtonShort(idx).fnId), _value, 7, 0);
+        else
+            sendMidiMessage(type, number, _value, channel);
         if (controls.getPreset() == 24) {
             if (idx == 3 || idx == 7) {
                 faders[idx]->updateButtonName(true);
@@ -697,7 +770,10 @@ void onButtonReleased(uint8_t idx)
     bool isToggle = (controls.getPreset() < 24) && controls.getButtonShort(idx).toggleMode;
     if (!isToggle && type != MIDI_PC) {
         uint8_t releaseVal = (controls.getPreset() < 24) ? controls.getButtonShort(idx).minVal : 0;
-        sendMidiMessage(type, number, releaseVal, channel);
+        if (controls.getButtonShort(idx).isFunction)
+            sendMidiMessage(MIDI_CC, fnIdToGlobalCC(controls.getButtonShort(idx).fnId), releaseVal, 7, 0);
+        else
+            sendMidiMessage(type, number, releaseVal, channel);
         controls.getButtonShort(idx).value = releaseVal;
     }
     lastButtonReleaseTime[idx] = millis();
@@ -709,14 +785,14 @@ void onButtonReleased(uint8_t idx)
     }
 }
 
-void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel)
+void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel, uint8_t cable)
 {
     const int MAX_STEP = 63;
     int remaining = delta;
     while (remaining != 0) {
         int step = constrain(remaining, -MAX_STEP, MAX_STEP);
         uint8_t relValue = (uint8_t)(step & 0x7F);
-        sendMidiMessage(type, number, relValue, channel);
+        sendMidiMessage(type, number, relValue, channel, cable);
         remaining -= step;
     }
 }
@@ -793,10 +869,14 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
 
     controls.getEncoder(idx).value = estimated_display;
 
+    bool encIsFunction = controls.getEncoder(idx).isFunction;
     if (revertMode)
     {
         revertAbsoluteChanged[idx] = true;
-        sendRelativeCC(type, number, delta, channel);
+        if (encIsFunction)
+            sendRelativeCC(MIDI_CC, fnIdToGlobalCC(controls.getEncoder(idx).fnId), delta, 7, 0);
+        else
+            sendRelativeCC(type, number, delta, channel);
     }
     else if (latchPressed || latchPendingActivation)
     {
@@ -809,7 +889,10 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
     }
     else
     {
-        sendRelativeCC(type, number, delta, channel);
+        if (encIsFunction)
+            sendRelativeCC(MIDI_CC, fnIdToGlobalCC(controls.getEncoder(idx).fnId), delta, 7, 0);
+        else
+            sendRelativeCC(type, number, delta, channel);
     }
 
     if (latchPressed || latchPendingActivation || controls.getPreset() < 24)
@@ -885,10 +968,14 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     if (newValue > maxV) newValue = maxV;
     controls.getEncoder(idx).value = newValue;
 
+    bool encIsFunction = controls.getEncoder(idx).isFunction;
     if (revertMode)
     {
         revertAbsoluteChanged[idx] = true;
-        sendMidiMessage(type, number, (uint8_t)newValue, channel);
+        if (encIsFunction)
+            sendRelativeCC(MIDI_CC, fnIdToGlobalCC(controls.getEncoder(idx).fnId), delta, 7, 0);
+        else
+            sendMidiMessage(type, number, (uint8_t)newValue, channel);
     }
     else if (latchPressed || latchPendingActivation)
     {
@@ -897,7 +984,10 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     }
     else
     {
-        sendMidiMessage(type, number, (uint8_t)newValue, channel);
+        if (encIsFunction)
+            sendRelativeCC(MIDI_CC, fnIdToGlobalCC(controls.getEncoder(idx).fnId), delta, 7, 0);
+        else
+            sendMidiMessage(type, number, (uint8_t)newValue, channel);
     }
     updateFader(idx, (uint8_t)newValue);
     char buffer[16];
@@ -931,6 +1021,9 @@ void updateFaderTitles()
             faders[i]->setParamName(mixerParamNames[i]);
         } else if (preset == 25) {
             faders[i]->setParamName("---");
+        } else if (enc.isFunction) {
+            const char* name = fnIdName(enc.fnId);
+            faders[i]->setParamName(name ? name : "Function");
         } else {
             if (enc.type == MIDI_AT)
                 snprintf(buf, sizeof(buf), "AT/%d", enc.channel + 1);
@@ -958,6 +1051,9 @@ void updateFaderTitles()
         MidiControl& btn = controls.getButtonShort(i);
         if (btn.controlName[0] != '\0') {
             snprintf(buf, sizeof(buf), "%s", btn.controlName);
+        } else if (btn.isFunction) {
+            const char* name = fnIdName(btn.fnId);
+            snprintf(buf, sizeof(buf), "%s", name ? name : "Function");
         } else if (btn.type == MIDI_CC) {
             snprintf(buf, sizeof(buf), "CC%d/%d", btn.number, btn.channel + 1);
         } else if (btn.type == MIDI_PC) {
