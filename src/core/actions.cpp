@@ -726,18 +726,15 @@ void onButtonPressed(uint8_t idx)
         ControlMidiType type = controls.getButtonShort(idx).type;
         uint8_t number = controls.getButtonShort(idx).number;
         uint8_t _value;
-        bool isToggle = (controls.getPreset() < 24) && controls.getButtonShort(idx).toggleMode;
+        bool isFn = controls.getButtonShort(idx).isFunction;
+        bool isToggle = (controls.getPreset() < 24) && !isFn && controls.getButtonShort(idx).toggleMode;
         if (isToggle) {
             bool newState = !faders[idx]->buttonState;
             faders[idx]->buttonState = newState;
             faders[idx]->updateButtonName(newState);
-            if (controls.getPreset() < 24) {
-                _value = newState ? controls.getButtonShort(idx).maxVal : controls.getButtonShort(idx).minVal;
-            } else {
-                _value = newState ? 127 : 0;
-            }
+            _value = newState ? controls.getButtonShort(idx).maxVal : controls.getButtonShort(idx).minVal;
         } else {
-            _value = (controls.getPreset() < 24) ? controls.getButtonShort(idx).maxVal : 127;
+            _value = (controls.getPreset() < 24 && !isFn) ? controls.getButtonShort(idx).maxVal : 127;
         }
         controls.getButtonShort(idx).value = _value;
         if (controls.getButtonShort(idx).isFunction)
@@ -767,9 +764,10 @@ void onButtonReleased(uint8_t idx)
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
-    bool isToggle = (controls.getPreset() < 24) && controls.getButtonShort(idx).toggleMode;
+    bool isFn = controls.getButtonShort(idx).isFunction;
+    bool isToggle = (controls.getPreset() < 24) && !isFn && controls.getButtonShort(idx).toggleMode;
     if (!isToggle && type != MIDI_PC) {
-        uint8_t releaseVal = (controls.getPreset() < 24) ? controls.getButtonShort(idx).minVal : 0;
+        uint8_t releaseVal = (controls.getPreset() < 24 && !isFn) ? controls.getButtonShort(idx).minVal : 0;
         if (controls.getButtonShort(idx).isFunction)
             sendMidiMessage(MIDI_CC, fnIdToGlobalCC(controls.getButtonShort(idx).fnId), releaseVal, 7, 0);
         else
@@ -968,14 +966,10 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     if (newValue > maxV) newValue = maxV;
     controls.getEncoder(idx).value = newValue;
 
-    bool encIsFunction = controls.getEncoder(idx).isFunction;
     if (revertMode)
     {
         revertAbsoluteChanged[idx] = true;
-        if (encIsFunction)
-            sendRelativeCC(MIDI_CC, fnIdToGlobalCC(controls.getEncoder(idx).fnId), delta, 7, 0);
-        else
-            sendMidiMessage(type, number, (uint8_t)newValue, channel);
+        sendMidiMessage(type, number, (uint8_t)newValue, channel);
     }
     else if (latchPressed || latchPendingActivation)
     {
@@ -984,10 +978,7 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     }
     else
     {
-        if (encIsFunction)
-            sendRelativeCC(MIDI_CC, fnIdToGlobalCC(controls.getEncoder(idx).fnId), delta, 7, 0);
-        else
-            sendMidiMessage(type, number, (uint8_t)newValue, channel);
+        sendMidiMessage(type, number, (uint8_t)newValue, channel);
     }
     updateFader(idx, (uint8_t)newValue);
     char buffer[16];
@@ -1169,7 +1160,6 @@ void releaseLatchAndSend()
 
 void sendRevertEvents()
 {
-    bool isRelative = controls.getPreset() > 23;
     int slewMs = slewLevelToMs(revertSlewLevel);
     for (int i = 0; i < 8; ++i)
     {
@@ -1178,12 +1168,17 @@ void sendRevertEvents()
         ControlMidiType type = controls.getEncoder(i).type;
         uint8_t channel = controls.getEncoder(i).channel;
         uint8_t number  = controls.getEncoder(i).number;
+        bool encIsRelative = controls.getPreset() > 23 || controls.getEncoder(i).isFunction;
 
-        if (isRelative)
+        if (encIsRelative)
         {
             int delta = (int)revertAbsoluteOriginal[i] - (int)controls.getEncoder(i).value;
-            if (delta != 0)
-                sendRelativeCC(type, number, delta, channel);
+            if (delta != 0) {
+                if (controls.getEncoder(i).isFunction)
+                    sendRelativeCC(MIDI_CC, fnIdToGlobalCC(controls.getEncoder(i).fnId), delta, 7, 0);
+                else
+                    sendRelativeCC(type, number, delta, channel);
+            }
             controls.getEncoder(i).value = revertAbsoluteOriginal[i];
             updateFader(i, revertAbsoluteOriginal[i]);
         }

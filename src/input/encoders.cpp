@@ -43,7 +43,7 @@ void  Encoders::read(){
           continue;
       }
 
-      bool isRelative = controls.getPreset() > 23;
+      bool isRelative = controls.getPreset() > 23 || controls.getEncoder(i).isFunction;
       bool isHiRes = !isRelative && controls.getEncoder(i).hiRes;
       const int gain_min = 1;
       const int gain_max = isRelative ? 5 : (isHiRes ? 64 : 4);
