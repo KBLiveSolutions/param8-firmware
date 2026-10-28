@@ -107,12 +107,13 @@ void ControlsManager::setDefaults() {
 
         for(int i = 0; i < 8; ++i) {
             if (_preset == 24) {
-                // Mixer/Global: encoders CC 40-47, buttons CC 50-57, all on channel 7
-                // isFunction stays false — CC routing is hardcoded; fnId is stored for editor display only
+                // Mixer/Global: uses isFunction=true, fnIds drive routing via fnIdToGlobalCC
                 setEncoder(_preset, i, MIDI_CC, 40 + i, 7);
                 setButtonShort(_preset, i, MIDI_CC, 50 + i, 7, false);
                 _presets[24].encoder[i].fnId = json.getDoc()["global"]["enc"][String(i)] | 73;
+                _presets[24].encoder[i].isFunction = true;
                 _presets[24].buttons_short[i].fnId = json.getDoc()["global"]["btn"][String(i)] | 1;
+                _presets[24].buttons_short[i].isFunction = true;
             } else if (_preset == 25) {
                 // Device: encoders CC 10-17, buttons CC 20-27, all on channel 7
                 setEncoder(_preset, i, MIDI_CC, 10 + i, 7);

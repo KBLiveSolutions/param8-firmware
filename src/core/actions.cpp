@@ -1039,11 +1039,8 @@ void updateFaderTitles()
         if (enc.controlName[0] != '\0') {
             faders[i]->setParamName(enc.controlName);
         } else if (preset == 24) {
-            static const char* mixerParamNames[] = {
-                "Master Vol.", "Cue Vol.", "Tempo", "Scene",
-                "Volume", "Pan", "Position", "Sel. Param."
-            };
-            faders[i]->setParamName(mixerParamNames[i]);
+            const char* name = enc.isFunction ? fnIdName(enc.fnId) : nullptr;
+            faders[i]->setParamName(name ? name : "---");
         } else if (preset == 25) {
             faders[i]->setParamName("---");
         } else if (enc.isFunction) {
@@ -1065,14 +1062,12 @@ void updateFaderTitles()
             };
             snprintf(buf, sizeof(buf), buttonNames[i]);
         }
-        else if(controls.getPreset() == 24){
-            static const char* buttonNames[] = {
-                "Metronome", "Arm", "Play/Stop", "Launch",
-                "Mute", "Solo", "Arr. Loop", "-> Default"
-            };
-            snprintf(buf, sizeof(buf), buttonNames[i]);
+        else if (controls.getPreset() == 24) {
+            MidiControl& btn = controls.getButtonShort(i);
+            const char* name = btn.isFunction ? fnIdName(btn.fnId) : nullptr;
+            snprintf(buf, sizeof(buf), "%s", name ? name : "---");
         }
-        else{
+        else {
         MidiControl& btn = controls.getButtonShort(i);
         if (btn.controlName[0] != '\0') {
             snprintf(buf, sizeof(buf), "%s", btn.controlName);
