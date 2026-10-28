@@ -133,70 +133,104 @@ void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel, ui
 
 // Returns display name for a given fnId (used in fader title display).
 static const char* fnIdName(uint8_t fnId) {
+    // Device Params 1-32 (fn_ids 80-111)
+    if (fnId >= 80 && fnId <= 111) {
+        static char buf[10];
+        snprintf(buf, sizeof(buf), "Param %d", fnId - 79);
+        return buf;
+    }
     switch (fnId) {
+        // Global buttons 0x01-0x09
         case  1: return "Play";
         case  2: return "Stop";
-        case  3: return "Loop Tgl.";
-        case  4: return "Continue";
-        case  5: return "Arr. Rec.";
-        case  6: return "Undo";
-        case  7: return "Redo";
-        case  8: return "Tempo +1";
-        case  9: return "Tempo -1";
-        case 14: return "Launch Sc.";
-        case 15: return "Prev Scene";
-        case 16: return "Next Scene";
-        case 17: return "Sess. Rec.";
-        case 18: return "Prev Cue";
-        case 19: return "Next Cue";
-        case 26: return "Restart";
-        case 27: return "Capture";
-        case 28: return "Re-En. Auto";
-        case 31: return "Metronome";
-        case 32: return "Bk to Arr.";
-        case 33: return "Skip Fwd";
-        case 34: return "Skip Bwd";
-        case 37: return "Groove";
-        case 40: return "Stop Clips";
-        case 43: return "Prev Track";
-        case 44: return "Next Track";
-        case 48: return "Prev Device";
-        case 49: return "Next Device";
-        case 51: return "Next Var.";
-        case 54: return "Randomize";
-        case 59: return "Send A";
-        case 60: return "Send B";
-        case 73: return "Sel. Param.";
-        case 83: return "Song Pos.";
-        case 84: return "Loop Pos.";
-        case 85: return "Loop Len.";
-        case 86: return "Scrl Scenes";
-        case 87: return "BPM";
-        case 88: return "Jump Mkr.";
-        case 89: return "Master Vol.";
-        case 90: return "Cue Vol.";
-        case 91: return "Track Vol.";
-        case 96: return "Track Pan";
-        case 99: return "H. Zoom";
-        case 112: return "Track Sel.";
+        case  3: return "Undo";
+        case  4: return "Redo";
+        case  5: return "Tempo +1";
+        case  6: return "Tempo -1";
+        case  7: return "Capture";
+        case  8: return "Re-en. Auto";
+        case  9: return "Metronome";
+        // Arrangement buttons 0x0A-0x12
+        case 10: return "Arr. Loop";
+        case 11: return "Continue";
+        case 12: return "Restart";
+        case 13: return "Bk to Arr.";
+        case 14: return "Arr. Rec.";
+        case 15: return "Marker -";
+        case 16: return "Marker +";
+        case 17: return "Skip Fwd";
+        case 18: return "Skip Bwd";
+        // Session buttons 0x13-0x17
+        case 19: return "Launch Sc.";
+        case 20: return "Scene +";
+        case 21: return "Scene -";
+        case 22: return "Sess. Rec.";
+        case 23: return "Stop Clips";
+        // Navigation buttons 0x18-0x1F
+        case 24: return "Track -";
+        case 25: return "Track +";
+        case 26: return "Device -";
+        case 27: return "Device +";
+        case 28: return "Bank -";
+        case 29: return "Bank +";
+        case 30: return "Preset -";
+        case 31: return "Preset +";
+        // Track/Device buttons 0x20-0x28
+        case 32: return "Mute";
+        case 33: return "Solo";
+        case 34: return "Arm";
+        case 35: return "Ret. Deflt.";
+        case 36: return "Prev Var.";
+        case 37: return "Next Var.";
+        case 38: return "Laun. Var.";
+        case 39: return "Store Var.";
+        case 40: return "Randomize";
+        // Mixer/Global encoders 0x30-0x3E
+        case 48: return "Master Vol.";
+        case 49: return "Cue Vol.";
+        case 50: return "BPM";
+        case 51: return "Scrl Scenes";
+        case 52: return "Track Vol.";
+        case 53: return "Track Pan";
+        case 54: return "Song Pos.";
+        case 55: return "Sel. Param.";
+        case 56: return "Groove";
+        case 57: return "Track Sel.";
+        case 58: return "Sel. Preset";
+        case 59: return "Loop Pos.";
+        case 60: return "Loop Len.";
+        case 61: return "H. Zoom";
+        case 62: return "Jump Mkr.";
+        // Sends A-L 0x40-0x4B
+        case 64: return "Send A";
+        case 65: return "Send B";
+        case 66: return "Send C";
+        case 67: return "Send D";
+        case 68: return "Send E";
+        case 69: return "Send F";
+        case 70: return "Send G";
+        case 71: return "Send H";
+        case 72: return "Send I";
+        case 73: return "Send J";
+        case 74: return "Send K";
+        case 75: return "Send L";
         default: return nullptr;
     }
 }
 
-// Maps isFunction fnIds to their equivalent global-mode CC numbers.
-// Only maps cases where the fnId does NOT collide with an existing button fnId
-// (e.g. fnId 40=StopAllClips shares number with CC 40 — not remapped).
+// Maps isFunction fnIds to their channel-7 CC numbers.
+// Encoders 48-55 → CC 40-47 (offset -8). Buttons mapped explicitly.
 static uint8_t fnIdToGlobalCC(uint8_t fnId) {
+    if (fnId >= 48 && fnId <= 55) return fnId - 8;  // Master Vol..Sel. Param → CC 40-47
     switch (fnId) {
-        case 90: return 41;  // Cue Volume
-        case 87: return 42;  // Tempo
-        case 96: return 45;  // Track Pan
-        case 83: return 46;  // Song Position
-        case 73: return 47;  // Selected Param
         case  1: return 52;  // Play
-        case  3: return 56;  // Arr. Loop
-        case 14: return 53;  // Launch Scene
-        case 31: return 50;  // Metronome
+        case  9: return 50;  // Metronome
+        case 10: return 56;  // Arr. Loop
+        case 19: return 53;  // Launch Scene
+        case 32: return 54;  // Mute
+        case 33: return 55;  // Solo
+        case 34: return 51;  // Arm
+        case 35: return 57;  // Return to Default
         default: return fnId;
     }
 }
@@ -898,7 +932,7 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
         updateFader(idx, (uint8_t)estimated_display);
         char buffer[16];
         sprintf(buffer, "%d", estimated_display);
-        if (!controls.getEncoder(idx).hasWatcher)
+        if (!controls.getEncoder(idx).hasWatcher && !encIsFunction)
             faders[idx]->updateTitle(buffer);
     }
 }

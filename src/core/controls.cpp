@@ -89,6 +89,18 @@ void ControlsManager::setDefaults() {
     Serial.print("Preset actuel chargé: ");
     Serial.println(_currentPreset);
 
+    if (json.getDoc()["global"]["v"].isNull() || (int)json.getDoc()["global"]["v"] < 2) {
+        const uint8_t encDef[8] = {48, 49, 50, 51, 52, 53, 54, 55};
+        const uint8_t btnDef[8] = {9, 34, 1, 19, 32, 33, 10, 35};
+        for (int i = 0; i < 8; i++) {
+            json.getDoc()["global"]["enc"][String(i)] = encDef[i];
+            json.getDoc()["global"]["btn"][String(i)] = btnDef[i];
+        }
+        json.getDoc()["global"]["v"] = 2;
+        json.save();
+        Serial.println("Initialized global mode fnId defaults v2");
+    }
+
     for(int _preset = 0; _preset < 26; ++_preset){
         Serial.print("Chargement preset ");
         Serial.println(_preset);
@@ -166,6 +178,14 @@ void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_
                 char buf[16];
                 snprintf(buf, sizeof(buf), "%d", value);
                 faders[i]->updateTitle(buf);
+            }
+        } else if (channel == 7 && getEncoder(i).isFunction) {
+            uint8_t fnId = getEncoder(i).fnId;
+            uint8_t effectiveCC = (fnId >= 48 && fnId <= 55) ? fnId - 8 : fnId;
+            if (effectiveCC == control) {
+                getEncoder(i).value = value;
+                faders[i]->setValue(value);
+                encoders.positions[i] = value;
             }
         }
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {

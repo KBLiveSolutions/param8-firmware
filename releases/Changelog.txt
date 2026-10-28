@@ -2,6 +2,42 @@
   param8 Firmware Changelog
 ================================================================================
 
+v1.1.0 — 2026-10-28
+--------------------
+
+  Global mode (Ableton script)
+    - Entering Global mode now clears the top track-name label and displays
+      the selected track name in the bottom device label.
+    - The bottom label updates live when the selected track changes while
+      in Global mode.
+    - Global mode fnId assignments (encoder/button function mappings) are now
+      stored in data.json and restored on startup; previously they were
+      hardcoded in the script and lost on reboot.
+
+  isFunction button display (firmware)
+    - Buttons whose MIDI assignment uses the isFunction flag (remapped via
+      fnIdToGlobalCC) now correctly update their on-screen state when the
+      corresponding CC is received from the DAW.
+
+  Quantized fader display (firmware)
+    - Switching presets now always resets the quantized display mode for
+      every fader. A fader that was showing a quantized parameter in one
+      preset no longer renders as quantized in the next preset.
+    - Clearing the top track-name label now explicitly erases the pixel area
+      so stale text is not left on screen.
+
+  Custom-quantized parameters (Ableton script)
+    - Encoders assigned to custom-quantized parameters (defined in
+      defaults.json with a "quantized" count) now jump directly to the next
+      or previous discrete step on each encoder tick, instead of moving the
+      parameter continuously and then snapping.
+    - The current step index is tracked internally, avoiding floating-point
+      rounding errors between ticks.
+    - Absolute CC feedback sent back to the controller no longer interferes
+      with step direction for these parameters.
+
+--------------------------------------------------------------------------------
+
 v1.0.2 — 2026-10-17
 --------------------
 
