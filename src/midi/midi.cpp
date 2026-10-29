@@ -339,7 +339,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 13:
   {
-    Serial.println("Configuration des encoders reçue");
     // Chaque contrôle utilise 3 octets: type, number, channel
     uint8_t preset = sysex[3];
     if (preset >= 24) break;
@@ -370,13 +369,13 @@ void onSysEx(const uint8_t *sysex, size_t len)
     if (preset == controls.getPreset()) {
       updateFaderTitles();
       showDisplay();
+      if (isFunction) sendPresetSysEx(preset);
     }
     json.save();
     break;
   }
   case 12:
   {
-    Serial.println("Configuration des boutons courts reçue (nouveau format)");
     // Structure : F0, constructeur, preset, status, type, control_number, channel, toggle, F7
     uint8_t preset = sysex[3];
     if (preset >= 24) break;
@@ -411,6 +410,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     if (preset == controls.getPreset()) {
       updateFaderTitles();
       showDisplay();
+      if (isFunction) sendPresetSysEx(preset);
     }
     json.save();
     break;
@@ -440,7 +440,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = sysex[3];
     uint8_t idx = sysex[4];
     uint8_t isButton = sysex[5];
-    if (preset >= 24 || idx >= 8) break;
+    if (preset > 24 || idx >= 8) break;
 
     char name[12] = {0};
     size_t nameLen = 0;
@@ -476,7 +476,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
       name[nameLen++] = (char)sysex[j];
     }
     name[nameLen] = '\0';
-    Serial.printf("Preset name received: preset=%d name='%s'\n", preset, name);
     controls.setPresetName(preset, name);
     json.getDoc()[String(preset)]["preset_name"] = name;
     json.save();
@@ -492,10 +491,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = sysex[3];
     uint8_t idx = sysex[4];
     uint8_t on = sysex[5];
-    Serial.printf("SysEx18 watcher: preset=%d idx=%d on=%d\n", preset, idx, on);
     if (preset < 24 && idx < 8) {
       controls.getEncoderAt(preset, idx).hasWatcher = on != 0;
-      Serial.printf("  -> hasWatcher[%d][%d] = %d\n", preset, idx, controls.getEncoderAt(preset, idx).hasWatcher);
     }
     break;
   }
@@ -537,6 +534,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     controls.getEncoderAt(24, idx).fnId = fnId;
     json.getDoc()["global"]["enc"][String(idx)] = fnId;
     json.save();
+    if (controls.getPreset() == 24) { updateFaderTitles(); sendPresetSysEx(24); }
     break;
   }
   case 0x1D:
@@ -548,6 +546,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     controls.getButtonShortAt(24, idx).fnId = fnId;
     json.getDoc()["global"]["btn"][String(idx)] = fnId;
     json.save();
+    if (controls.getPreset() == 24) { updateFaderTitles(); sendPresetSysEx(24); }
     break;
   }
   case 0x1E:

@@ -89,16 +89,20 @@ void ControlsManager::setDefaults() {
     Serial.print("Preset actuel chargé: ");
     Serial.println(_currentPreset);
 
-    if (json.getDoc()["global"]["v"].isNull() || (int)json.getDoc()["global"]["v"] < 2) {
-        const uint8_t encDef[8] = {48, 49, 50, 51, 52, 53, 54, 55};
-        const uint8_t btnDef[8] = {9, 34, 1, 19, 32, 33, 10, 35};
+    if (json.getDoc()["global"]["v"].isNull() || (int)json.getDoc()["global"]["v"] < 3) {
+        const uint8_t encDef[8] = {40, 41, 42, 43, 44, 45, 46, 47};
+        const uint8_t btnDef[8] = {50, 51, 52, 53, 54, 55, 56, 57};
+        const char* encNames[8] = {"Master Vol.", "Cue Vol.", "BPM", "Scroll Scn.", "Track Vol.", "Track Pan", "Song Pos.", "Sel. Param"};
+        const char* btnNames[8] = {"Metronome", "Arm", "Play", "Laun. Scn.", "Mute", "Solo", "Arr. Loop", "Ret. Dflt."};
         for (int i = 0; i < 8; i++) {
             json.getDoc()["global"]["enc"][String(i)] = encDef[i];
             json.getDoc()["global"]["btn"][String(i)] = btnDef[i];
+            json.getDoc()["24"]["enc_names"][String(i)] = encNames[i];
+            json.getDoc()["24"]["btn_names"][String(i)] = btnNames[i];
         }
-        json.getDoc()["global"]["v"] = 2;
+        json.getDoc()["global"]["v"] = 3;
         json.save();
-        Serial.println("Initialized global mode fnId defaults v2");
+        Serial.println("Initialized global mode fnId defaults v3");
     }
 
     for(int _preset = 0; _preset < 26; ++_preset){
@@ -107,13 +111,17 @@ void ControlsManager::setDefaults() {
 
         for(int i = 0; i < 8; ++i) {
             if (_preset == 24) {
-                // Mixer/Global: uses isFunction=true, fnIds drive routing via fnIdToGlobalCC
+                // Mixer/Global: uses isFunction=true, fnId == CC (no mapping needed)
                 setEncoder(_preset, i, MIDI_CC, 40 + i, 7);
                 setButtonShort(_preset, i, MIDI_CC, 50 + i, 7, false);
                 _presets[24].encoder[i].fnId = json.getDoc()["global"]["enc"][String(i)] | 73;
                 _presets[24].encoder[i].isFunction = true;
                 _presets[24].buttons_short[i].fnId = json.getDoc()["global"]["btn"][String(i)] | 1;
                 _presets[24].buttons_short[i].isFunction = true;
+                const char* encName24 = json.getDoc()["24"]["enc_names"][String(i)] | "";
+                strncpy(_presets[24].encoder[i].controlName, encName24, sizeof(_presets[24].encoder[i].controlName) - 1);
+                const char* btnName24 = json.getDoc()["24"]["btn_names"][String(i)] | "";
+                strncpy(_presets[24].buttons_short[i].controlName, btnName24, sizeof(_presets[24].buttons_short[i].controlName) - 1);
             } else if (_preset == 25) {
                 // Device: encoders CC 10-17, buttons CC 20-27, all on channel 7
                 setEncoder(_preset, i, MIDI_CC, 10 + i, 7);
@@ -163,12 +171,6 @@ void ControlsManager::setDefaults() {
 }
 
 void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value) {
-    Serial.print("Control Change - Channel: ");
-    Serial.print(channel);
-    Serial.print(", Control: ");
-    Serial.print(control);
-    Serial.print(", Value: ");
-    Serial.println(value);
     
     for (int i = 0; i < 8; ++i) {
         if (getEncoder(i).channel == channel && getEncoder(i).number == control) {
@@ -193,6 +195,9 @@ void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_
             getButtonShort(i).value = value;
             bool on = (getButtonShort(i).type == MIDI_NOTE) ? (value == 127) : (value > 63);
             faders[i]->updateButtonName(on);
+        } else if (channel == 7 && getButtonShort(i).isFunction && getButtonShort(i).fnId == control) {
+            getButtonShort(i).value = value;
+            faders[i]->updateButtonName(value > 63);
         }
     }
 }
@@ -216,9 +221,6 @@ void ControlsManager::checkInactiveEncoders() {
 }
 
 void ControlsManager::getPresetControls(uint8_t preset) {
-    Serial.print("Envoi des contrôles du preset ");
-    Serial.println(preset);
-
     if (preset < 26) {
         for (int i = 0; i < 8; ++i) {
             MidiControl& encoder = _presets[preset].encoder[i];
