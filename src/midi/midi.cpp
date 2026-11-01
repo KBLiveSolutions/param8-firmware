@@ -176,6 +176,7 @@ void handleMIDIDAWMessage(uint8_t *packet)
     uint8_t program = packet[2] & 0x7F;
     if (program < 26) {
       controls.setPreset(program);
+      json.save();
       updateFaderTitles();
       updateFaderValues();
       sendPresetSysEx(program);
@@ -570,6 +571,48 @@ void onSysEx(const uint8_t *sysex, size_t len)
     // num_items=0 or 1 clears quantized mode; ≥2 activates it
     if (param_number >= 8) break;
     faders[param_number]->setQuantized(staticOverlay);
+    break;
+  }
+  case 0x20:
+  {
+    // Assign DAW function to all user presets: F0 6F 20 <isButton> <idx> <fnId> [name bytes] F7
+    uint8_t isButton = sysex[3];
+    uint8_t idx      = sysex[4];
+    uint8_t fnId     = sysex[5];
+    if (idx >= 8) break;
+    char name[12] = {0};
+    size_t nameLen = 0;
+    for (size_t j = 6; j < len - 1 && nameLen < 11; j++)
+      name[nameLen++] = (char)sysex[j];
+    const char* jsonNameKey = isButton ? "btn_names" : "enc_names";
+    for (uint8_t p = 0; p < 24; p++) {
+      if (isButton) {
+        MidiControl& btn = controls.getButtonShortAt(p, idx);
+        btn.isFunction = true;
+        btn.fnId = fnId;
+        if (nameLen > 0) strncpy(btn.controlName, name, sizeof(btn.controlName) - 1);
+        JsonArray arr = json.getDoc()[String(p)]["buttons_short"][String(idx)].to<JsonArray>();
+        arr.add(static_cast<int>(btn.type));
+        arr.add(static_cast<int>(btn.number));
+        arr.add(static_cast<int>(btn.channel));
+        arr.add((int)btn.minVal);
+        arr.add((int)btn.maxVal);
+        arr.add(1);
+        arr.add((int)fnId);
+        json.setButtonToggleMode(p, idx, btn.toggleMode ? 1 : 0);
+      } else {
+        MidiControl& enc = controls.getEncoderAt(p, idx);
+        enc.isFunction = true;
+        enc.fnId = fnId;
+        if (nameLen > 0) strncpy(enc.controlName, name, sizeof(enc.controlName) - 1);
+        json.setEncoder(p, idx, (int)enc.type, (int)enc.number, (int)enc.channel,
+                        enc.hiRes ? 1 : 0, enc.minVal, enc.maxVal, 1, (int)fnId);
+      }
+      if (nameLen > 0) json.getDoc()[String(p)][jsonNameKey][String(idx)] = name;
+    }
+    json.save();
+    uint8_t cur = controls.getPreset();
+    if (cur < 24) { updateFaderTitles(); showDisplay(); }
     break;
   }
   default:

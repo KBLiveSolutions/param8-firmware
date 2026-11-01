@@ -83,6 +83,7 @@ void loop() {
     checkShiftPending();
     checkLatchPending();
     checkNamingPending();
+    checkPendingPresetSave();
     checkSlewProgress();
     updateLeds();
     updateDisplay();

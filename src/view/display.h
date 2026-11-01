@@ -31,6 +31,7 @@ inline int getStrWidth(PicoGFX_SSD1322 &disp, const char* str) {
 void setupDisplay();
 
 void showDisplay();
+void drawAllWidgets();
 void flushDisplays();
 void updateFader(int idx, int value);
 void updateDisplay();

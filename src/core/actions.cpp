@@ -30,6 +30,10 @@ bool latchPendingActivation = false;
 bool latchHeld = false;
 bool namingPendingConfirm = false;
 unsigned long namingConfirmTime = 0;
+static bool pendingPresetSave = false;
+static bool pendingFullRedraw = false;
+static unsigned long lastPresetNavTime = 0;
+static uint8_t navPresetCursor = 0;
 
 uint8_t latchAbsoluteValue[8] = {0};
 bool latchAbsoluteChanged[8] = {false};
@@ -182,6 +186,8 @@ void initActionSettings() {
     int savedRS = json.getDoc()["revertSlew"] | 0;
     latchSlewLevel  = (uint8_t)constrain(savedLS, 0, 127);
     revertSlewLevel = (uint8_t)constrain(savedRS, 0, 127);
+    uint8_t p = controls.getPreset();
+    navPresetCursor = (p < 24) ? p : 0;
 }
 
 static void drawPresetPage()
@@ -465,6 +471,22 @@ void checkNamingPending()
     }
 }
 
+void checkPendingPresetSave()
+{
+    if (!pendingPresetSave && !pendingFullRedraw) return;
+    unsigned long elapsed = millis() - lastPresetNavTime;
+    if (pendingFullRedraw && elapsed >= 200) {
+        pendingFullRedraw = false;
+        updateFaderTitles();
+        updateFaderValues();
+        drawAllWidgets();
+    }
+    if (pendingPresetSave && elapsed >= 500) {
+        pendingPresetSave = false;
+        json.save();
+    }
+}
+
 void checkShiftPending()
 {
     if (settingsPendingSave) {
@@ -643,7 +665,9 @@ void onButtonPressed(uint8_t idx)
         }
         faders[idx]->drawPresetButton(l1, l2, true);
         flushDisplays();
+        if (newPreset < 24) navPresetCursor = newPreset;
         controls.setPreset(newPreset);
+        json.save();
         updateFaderTitles();
         updateFaderValues();
         showDisplay();
@@ -668,10 +692,38 @@ void onButtonPressed(uint8_t idx)
             _value = (controls.getPreset() < 24 && !isFn) ? controls.getButtonShort(idx).maxVal : 127;
         }
         controls.getButtonShort(idx).value = _value;
-        if (controls.getButtonShort(idx).isFunction)
-            sendMidiMessage(MIDI_CC, controls.getButtonShort(idx).fnId, _value, 7, 0);
-        else
+        if (controls.getButtonShort(idx).isFunction) {
+            uint8_t fnId = controls.getButtonShort(idx).fnId;
+            if (fnId == 30 || fnId == 31) {
+                uint8_t cur = controls.getPreset();
+                uint8_t newPreset = (fnId == 31) ? min((int)cur + 1, 24) : max((int)cur - 1, 0);
+                if (newPreset != cur) {
+                    if (newPreset < 24) navPresetCursor = newPreset;
+                    controls.setPreset(newPreset);
+                    pendingPresetSave = true;
+                    pendingFullRedraw = true;
+                    lastPresetNavTime = millis();
+                    if (newPreset == 24) {
+                        strncpy(deviceLabel, "Track", sizeof(deviceLabel));
+                        strncpy(bankLabel, "Global", sizeof(bankLabel));
+                    } else {
+                        snprintf(deviceLabel, sizeof(deviceLabel), "Preset %d", newPreset + 1);
+                        const char* pName = controls.getPresetName(newPreset);
+                        if (pName[0] != '\0')
+                            strncpy(bankLabel, pName, sizeof(bankLabel));
+                        else
+                            snprintf(bankLabel, sizeof(bankLabel), "Preset %d", newPreset + 1);
+                    }
+                    deviceLabelDirty = true;
+                    bankLabelDirty = true;
+                    sendPresetSysEx(newPreset);
+                }
+            } else {
+                sendMidiMessage(MIDI_CC, fnId, _value, 7, 0);
+            }
+        } else {
             sendMidiMessage(type, number, _value, channel);
+        }
         if (controls.getPreset() == 24) {
             if (idx == 3 || idx == 7) {
                 faders[idx]->updateButtonName(true);
@@ -764,6 +816,27 @@ static void handleSettingsRevertSlew(int delta) {
     flushDisplays();
 }
 
+static void navigatePresetByEncoder(uint8_t idx, int delta) {
+    int newCursor = (int)navPresetCursor + (delta > 0 ? 1 : -1);
+    newCursor = constrain(newCursor, 0, 23);
+    if ((uint8_t)newCursor == navPresetCursor) return;
+    navPresetCursor = (uint8_t)newCursor;
+    controls.setPreset(navPresetCursor);
+    pendingPresetSave = true;
+    pendingFullRedraw = true;
+    lastPresetNavTime = millis();
+    snprintf(deviceLabel, sizeof(deviceLabel), "Preset %d", navPresetCursor + 1);
+    const char* pName = controls.getPresetName(navPresetCursor);
+    if (pName[0] != '\0')
+        strncpy(bankLabel, pName, sizeof(bankLabel));
+    else
+        snprintf(bankLabel, sizeof(bankLabel), "Preset %d", navPresetCursor + 1);
+    deviceLabelDirty = true;
+    bankLabelDirty = true;
+    sendPresetSysEx(navPresetCursor);
+    faders[idx]->setValue((uint8_t)constrain((int)navPresetCursor * 127 / 23, 0, 127));
+}
+
 void onRelativeEncoderChange(uint8_t idx, int delta)
 {
     if (settingsModeActive) {
@@ -777,6 +850,11 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
         if (delta > 0 && presetTable < 3) presetTable++;
         else if (delta < 0 && presetTable > 0) presetTable--;
         drawPresetPage();
+        return;
+    }
+
+    if (controls.getEncoder(idx).isFunction && controls.getEncoder(idx).fnId == 58) {
+        navigatePresetByEncoder(idx, delta);
         return;
     }
 
@@ -847,6 +925,11 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
         if (delta > 0 && presetTable < 3) presetTable++;
         else if (delta < 0 && presetTable > 0) presetTable--;
         drawPresetPage();
+        return;
+    }
+
+    if (controls.getEncoder(idx).isFunction && controls.getEncoder(idx).fnId == 58) {
+        navigatePresetByEncoder(idx, delta);
         return;
     }
 
@@ -927,13 +1010,20 @@ void updateFaderTitles()
         MidiControl& enc = controls.getEncoder(i);
         faders[i]->buttonState = false;
         faders[i]->valueOnly = (preset == 24 && (i == 2 || i == 3 || i == 6));
+        bool isPresetSelector = enc.isFunction && enc.fnId == 58;
+        faders[i]->isQuantized = isPresetSelector;
+        faders[i]->numQuantizedItems = isPresetSelector ? 24 : 0;
+        if (isPresetSelector)
+            controls.getEncoder(i).value = (uint8_t)constrain((int)navPresetCursor * 127 / 23, 0, 127);
         if (faders[i]->valueOnly) {
             faders[i]->showingValue = true;
             faders[i]->updateTitle("---");
         } else {
             faders[i]->showingValue = false;
         }
-        if (enc.controlName[0] != '\0') {
+        if (isPresetSelector) {
+            faders[i]->setParamName("Sel. Preset");
+        } else if (enc.controlName[0] != '\0') {
             faders[i]->setParamName(enc.controlName);
         } else if (preset == 25 || enc.isFunction) {
             faders[i]->setParamName(enc.isFunction ? "" : "---");

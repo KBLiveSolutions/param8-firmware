@@ -23,6 +23,7 @@ void sendClearNaming(uint8_t idx, uint8_t isButton);
 void checkNamingPending();
 void checkShiftPending();
 void checkLatchPending();
+void checkPendingPresetSave();
 void onShiftPress();
 void onShiftRelease();
 void onLatchPress();

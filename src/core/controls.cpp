@@ -20,17 +20,10 @@ ControlsManager::ControlsManager() : _currentPreset(0) {
 void ControlsManager::setPreset(uint8_t preset) {
     if (preset < 26) {
         _currentPreset = preset;
-        
-        // Charger les données du nouveau preset depuis le JSON
         json.setMode(preset);
-        
-        // Synchroniser les positions des encodeurs avec les nouvelles valeurs
         for (int i = 0; i < 8; i++) {
             encoders.positions[i] = _presets[_currentPreset].encoder[i].value;
         }
-        
-        // Sauvegarder le changement de preset
-        json.save();
     }
 }
 
@@ -103,6 +96,13 @@ void ControlsManager::setDefaults() {
         json.getDoc()["global"]["v"] = 3;
         json.save();
         Serial.println("Initialized global mode fnId defaults v3");
+    }
+    if ((int)json.getDoc()["global"]["v"] < 5) {
+        json.getDoc()["global"]["enc"]["7"] = 47;
+        json.getDoc()["24"]["enc_names"]["7"] = "Sel. Param";
+        json.getDoc()["global"]["v"] = 5;
+        json.save();
+        Serial.println("Restored global enc7 to Sel. Param fnId=47 v5");
     }
 
     for(int _preset = 0; _preset < 26; ++_preset){
@@ -243,7 +243,7 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                                   static_cast<uint8_t>(_presets[preset].buttons_short[i].type),
                                   _presets[preset].buttons_short[i].number,
                                   _presets[preset].buttons_short[i].channel,
-                                  _presets[preset].buttons_short[i].toggleMode ? 1 : 0,
+                                  _presets[preset].buttons_short[i].toggleMode ? (uint8_t)1 : (uint8_t)0,
                                   _presets[preset].buttons_short[i].minVal,
                                   _presets[preset].buttons_short[i].maxVal,
                                   _presets[preset].buttons_short[i].isFunction ? (uint8_t)1 : (uint8_t)0,
