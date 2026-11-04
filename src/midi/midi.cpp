@@ -246,10 +246,9 @@ void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 
 void onSysEx(const uint8_t *sysex, size_t len)
 {
-  if (len < 5)
-    return; // Maintenant on a besoin d'au moins 5 octets
+  if (len < 5 || sysex[0] != 0xF0 || sysex[1] != 0x6F)
+    return;
 
-  uint8_t constructor_byte = sysex[1];
   uint8_t status_byte = sysex[2];
   uint8_t param_number = sysex[3];
   uint8_t staticOverlay = sysex[4];
