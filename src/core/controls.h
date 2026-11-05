@@ -17,7 +17,7 @@ struct MidiControl {
     uint8_t value = 0;
     bool toggleMode = false;
     unsigned long lastActivity = 0;
-    char controlName[12] = {0};
+    char controlName[20] = {0};
     bool hasWatcher = false;
     bool hiRes = false;
     uint8_t minVal = 0;

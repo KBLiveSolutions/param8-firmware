@@ -247,10 +247,9 @@ void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 
 void onSysEx(const uint8_t *sysex, size_t len)
 {
-  if (len < 5)
-    return; // Maintenant on a besoin d'au moins 5 octets
+  if (len < 5 || sysex[0] != 0xF0 || sysex[1] != 0x6F)
+    return;
 
-  uint8_t constructor_byte = sysex[1];
   uint8_t status_byte = sysex[2];
   uint8_t param_number = sysex[3];
   uint8_t staticOverlay = sysex[4];
@@ -443,9 +442,9 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t isButton = sysex[5];
     if (preset > 24 || idx >= 8) break;
 
-    char name[12] = {0};
+    char name[20] = {0};
     size_t nameLen = 0;
-    for (size_t j = 6; j < len - 1 && nameLen < 11; j++) {
+    for (size_t j = 6; j < len - 1 && nameLen < 19; j++) {
       name[nameLen++] = (char)sysex[j];
     }
     name[nameLen] = '\0';

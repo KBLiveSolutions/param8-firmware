@@ -141,7 +141,7 @@ void FaderWidget::drawFaderQuantized() {
         display.setFont(DYNAMIC_LAYOUT_BOLD ? &MiscFixed7x13Bpt7b : &MiscFixed7x13pt7b);
         display.setTextColor(color);
         int text_width = getStrWidth(display, displayText);
-        int TEXT_MAX = area_w - 8;
+        int TEXT_MAX = area_w;
         if (text_width <= TEXT_MAX) {
             display.setCursor(area_x + (area_w - text_width) / 2, area_y + 11);
             display.print(displayText);
@@ -213,7 +213,7 @@ void FaderWidget::drawFaderDynamic() {
         display.setFont(DYNAMIC_LAYOUT_BOLD ? &MiscFixed7x13Bpt7b : &MiscFixed7x13pt7b);
         int text_width = getStrWidth(display, displayText);
         int text_y = BAR_Y + 11;
-        int TEXT_MAX = area_w - 8;
+        int TEXT_MAX = area_w;
 
         if (text_width <= TEXT_MAX) {
             int text_x = area_x + (area_w - text_width) / 2;

@@ -254,9 +254,9 @@ void ControlsManager::getPresetControls(uint8_t preset) {
             delay(2);
 
             if (encoder.controlName[0] != '\0') {
-                uint8_t namePacket[20] = { 240, 111, 15, preset, (uint8_t)i, 0 };
+                uint8_t namePacket[28] = { 240, 111, 15, preset, (uint8_t)i, 0 };
                 size_t j = 6;
-                for (size_t c = 0; c < 11 && encoder.controlName[c] != '\0'; c++) {
+                for (size_t c = 0; c < sizeof(encoder.controlName) - 1 && encoder.controlName[c] != '\0'; c++) {
                     namePacket[j++] = (uint8_t)encoder.controlName[c];
                 }
                 namePacket[j++] = 247;
@@ -267,9 +267,9 @@ void ControlsManager::getPresetControls(uint8_t preset) {
 
             MidiControl& btn = _presets[preset].buttons_short[i];
             if (btn.controlName[0] != '\0') {
-                uint8_t namePacket[20] = { 240, 111, 15, preset, (uint8_t)i, 1 };
+                uint8_t namePacket[28] = { 240, 111, 15, preset, (uint8_t)i, 1 };
                 size_t j = 6;
-                for (size_t c = 0; c < 11 && btn.controlName[c] != '\0'; c++) {
+                for (size_t c = 0; c < sizeof(btn.controlName) - 1 && btn.controlName[c] != '\0'; c++) {
                     namePacket[j++] = (uint8_t)btn.controlName[c];
                 }
                 namePacket[j++] = 247;
