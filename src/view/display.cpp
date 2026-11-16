@@ -143,6 +143,17 @@ void updateFader(int idx, int value) {
 
 void updateDisplay() {
     if (screenSaverActive) return;
+    if (settingsModeActive || isSelectingPreset()) {
+        for (int i = 0; i < 8; i++) faders[i]->_dirty = false;
+        trackLabelDirty = bankLabelDirty = deviceLabelDirty = false;
+        return;
+    }
+    for (int i = 0; i < 8; i++) {
+        if (faders[i]->_dirty) {
+            faders[i]->drawFader();
+            faders[i]->_dirty = false;
+        }
+    }
     drawDeviceBankLabels();
     flushDisplays();
 }

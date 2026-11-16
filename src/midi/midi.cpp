@@ -242,6 +242,7 @@ void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 {
   if (value == 0 && liveConnectedTime > 0 && millis() - liveConnectedTime < 500)
     return;
+  if (isSelectingPreset()) return;
   controls.onMidiValueChange(channel, control, value);
 }
 
@@ -265,6 +266,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   switch (status_byte)
   {
   case 0:
+    if (isSelectingPreset()) break;
     if (param_number < 8)
       {
         if (strlen(ascii_string) > 0)
@@ -297,12 +299,14 @@ void onSysEx(const uint8_t *sysex, size_t len)
     break;
 
   case 2:
+    if (isSelectingPreset()) break;
     strncpy(bankLabel, ascii_string, sizeof(bankLabel));
     bankLabel[sizeof(bankLabel)-1] = '\0';
     bankLabelDirty = true;
     break;
 
   case 3:
+    if (isSelectingPreset()) break;
     strncpy(deviceLabel, ascii_string, sizeof(deviceLabel));
     deviceLabel[sizeof(deviceLabel)-1] = '\0';
     deviceLabelDirty = true;
@@ -325,11 +329,10 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 6:
   {
+    if (isSelectingPreset()) break;
     strncpy(trackLabel, ascii_string, sizeof(trackLabel));
     trackLabel[sizeof(trackLabel)-1] = '\0';
-    trackLabelDirty = true;
-    drawDeviceBankLabels();
-    flushDisplays();
+    trackLabelDirty = true;  // picked up by next timed updateDisplay()
     break;
   }
   case 7:
@@ -507,6 +510,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
       screenSaverActive = false;
       showDisplay();
     }
+    onSlewStateUpdatedFromEditor();  // redraws settings page if active
     break;
   }
   case 0x1B:
@@ -515,6 +519,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     setBrightness(val);
     json.getDoc()["brightness"] = val;
     json.save();
+    onSlewStateUpdatedFromEditor();  // redraws settings page if active
     break;
   }
   case 0x13:
@@ -523,6 +528,14 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t reply[7] = { 240, 111, 0x14, FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH, 247 };
     usb_midi.write(reply, 7);
     serialEditorSend(reply, 7);
+    // Send current display settings so editor reflects device state on connect
+    uint8_t brPkt[5] = {0xF0, 0x6F, 0x1B, brightnessLevel, 0xF7};
+    serialEditorSend(brPkt, 5);
+    uint16_t sec = (uint16_t)(screenSaverDelay / 1000UL);
+    uint8_t ssPkt[6] = {0xF0, 0x6F, 0x10, (uint8_t)((sec >> 7) & 0x7F), (uint8_t)(sec & 0x7F), 0xF7};
+    serialEditorSend(ssPkt, 6);
+    uint8_t layoutPkt[5] = {0xF0, 0x6F, 0x0E, (uint8_t)faderLayout, 0xF7};
+    serialEditorSend(layoutPkt, 5);
     break;
   }
   case 0x1C:
@@ -534,7 +547,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     controls.getEncoderAt(24, idx).fnId = fnId;
     json.getDoc()["global"]["enc"][String(idx)] = fnId;
     json.save();
-    if (controls.getPreset() == 24) { updateFaderTitles(); sendPresetSysEx(24); }
+    if (controls.getPreset() == 24) { updateFaderTitles(); showDisplay(); sendPresetSysEx(24); }
     break;
   }
   case 0x1D:
@@ -546,7 +559,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     controls.getButtonShortAt(24, idx).fnId = fnId;
     json.getDoc()["global"]["btn"][String(idx)] = fnId;
     json.save();
-    if (controls.getPreset() == 24) { updateFaderTitles(); sendPresetSysEx(24); }
+    if (controls.getPreset() == 24) { updateFaderTitles(); showDisplay(); sendPresetSysEx(24); }
     break;
   }
   case 0x1E:
@@ -612,6 +625,55 @@ void onSysEx(const uint8_t *sysex, size_t len)
     json.save();
     uint8_t cur = controls.getPreset();
     if (cur < 24) { updateFaderTitles(); showDisplay(); }
+    break;
+  }
+  case 0x23:
+  {
+    // BPM sync: F0 6F 23 <b2> <b1> <b0> F7  (BPM*100 as 21-bit, 7 bits each)
+    if (len < 7) break;
+    uint32_t cents = ((uint32_t)(sysex[3] & 0x7F) << 14)
+                   | ((uint32_t)(sysex[4] & 0x7F) << 7)
+                   |  (uint32_t)(sysex[5] & 0x7F);
+    if (cents > 0) liveBpmCents = cents;
+    break;
+  }
+  case 0x24:
+  {
+    // Set latch slew: F0 6F 24 <level> <syncMode 0/1> <syncStep 0-7> F7
+    if (len < 7) break;
+    latchSlewLevel    = sysex[3] & 0x7F;
+    latchSlewSync     = (sysex[4] & 0x7F) != 0;
+    latchSlewSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
+    json.getDoc()["latchSlew"]         = (int)latchSlewLevel;
+    json.getDoc()["latchSlewSync"]     = (bool)latchSlewSync;
+    json.getDoc()["latchSlewSyncStep"] = (int)latchSlewSyncStep;
+    json.save();
+    onSlewStateUpdatedFromEditor();
+    break;
+  }
+  case 0x25:
+  {
+    // Set revert slew: F0 6F 25 <level> <syncMode 0/1> <syncStep 0-7> F7
+    if (len < 7) break;
+    revertSlewLevel    = sysex[3] & 0x7F;
+    revertSlewSync     = (sysex[4] & 0x7F) != 0;
+    revertSlewSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
+    json.getDoc()["revertSlew"]         = (int)revertSlewLevel;
+    json.getDoc()["revertSlewSync"]     = (bool)revertSlewSync;
+    json.getDoc()["revertSlewSyncStep"] = (int)revertSlewSyncStep;
+    json.save();
+    onSlewStateUpdatedFromEditor();
+    break;
+  }
+  case 0x26:
+  {
+    // Request slew state → reply with 0x24 and 0x25
+    uint8_t lPkt[7] = {0xF0, 0x6F, 0x24, latchSlewLevel, (uint8_t)(latchSlewSync ? 1 : 0), latchSlewSyncStep, 0xF7};
+    usb_midi.write(lPkt, 7);
+    serialEditorSend(lPkt, 7);
+    uint8_t rPkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
+    usb_midi.write(rPkt, 7);
+    serialEditorSend(rPkt, 7);
     break;
   }
   default:

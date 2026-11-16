@@ -1,9 +1,14 @@
 #pragma once
 #include <Arduino.h>
 
-extern bool shiftPressed;
-extern uint8_t latchSlewLevel;
-extern uint8_t revertSlewLevel;
+extern bool     shiftPressed;
+extern uint8_t  latchSlewLevel;
+extern uint8_t  revertSlewLevel;
+extern bool     latchSlewSync;
+extern bool     revertSlewSync;
+extern uint8_t  latchSlewSyncStep;
+extern uint8_t  revertSlewSyncStep;
+extern uint32_t liveBpmCents;
 extern bool settingsModeActive;
 extern bool latchPressed;
 extern bool latchHeld;
@@ -36,3 +41,4 @@ void onButtonPressed(uint8_t);
 void onButtonReleased(uint8_t);
 bool isSelectingPreset();
 void checkSlewProgress();
+void onSlewStateUpdatedFromEditor();

@@ -64,13 +64,19 @@ void setup() {
 }
 
 unsigned long lastDisplay = 0;
-const unsigned long displayInterval = 100;  // 20 FPS
+const unsigned long displayInterval = 50;   // 20 FPS
 unsigned long lastInactivityCheck = 0;
 const unsigned long inactivityCheckInterval = 250;
 bool bootPresetSent = false;
 
 void loop() {
     watchdog_update();
+
+    // Input first — always, regardless of MIDI load
+    encoders.read();
+    readButtons();
+    checkShiftPending();
+
     midiRead();
 
     if (!bootPresetSent && millis() > 2000) {
@@ -78,17 +84,20 @@ void loop() {
         sendPresetSysEx(controls.getPreset());
     }
     serialEditorRead();
-    encoders.read();
-    readButtons();
-    checkShiftPending();
     checkLatchPending();
     checkNamingPending();
     checkPendingPresetSave();
     checkSlewProgress();
     updateLeds();
-    updateDisplay();
 
     unsigned long currentTime = millis();
+
+    // Rate-limit display flushes — the SPI blocking transfer is the main latency source
+    if (currentTime - lastDisplay >= displayInterval) {
+        lastDisplay = currentTime;
+        updateDisplay();
+    }
+
     if (currentTime - lastInactivityCheck >= inactivityCheckInterval) {
         controls.checkInactiveEncoders();
         lastInactivityCheck = currentTime;

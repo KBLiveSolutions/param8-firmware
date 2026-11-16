@@ -4,6 +4,7 @@
 #include "jsonManager.h"
 #include "../view/display.h"
 #include "../view/leds.h"
+#include "../usb/serial_editor.h"
 
 #define MAX_LATCH_EVENTS 256
 #define SHIFT_HOLD_MS     300   // hold to show preset page
@@ -55,11 +56,23 @@ static const char* const   ssStepLabels[] = {"Off", "1 min", "2 min", "5 min", "
 #define SS_STEPS 8
 static uint8_t screensaverLevel = 3;
 
+static const char* const syncStepLabels[] = {"1/16","1/8","1/4","1/2","1 bar","2 bar","4 bar","8 bar"};
+static const float       syncStepQuarters[] = {0.25f,0.5f,1.0f,2.0f,4.0f,8.0f,16.0f,32.0f};
+#define SYNC_STEPS 8
+
+uint32_t liveBpmCents = 12000; // default 120.00 BPM
+
 static int slewLevelToMs(uint8_t level) {
     if (level == 0) return 0;
-    return (int)roundf(10.0f * powf(300.0f, (level - 1) / 126.0f));
+    return (int)roundf(100.0f * powf(590.0f, (level - 1) / 126.0f));
 }
-static void formatSlewLabel(uint8_t level, char* buf, size_t len) {
+static int syncSlewToMs(uint8_t step) {
+    if (liveBpmCents == 0) return 0;
+    float msPerQuarter = 60000.0f / (liveBpmCents / 100.0f);
+    return (int)(msPerQuarter * syncStepQuarters[step]);
+}
+static void formatSlewLabel(uint8_t level, bool syncMode, uint8_t syncStep, char* buf, size_t len) {
+    if (syncMode) { strncpy(buf, syncStepLabels[syncStep], len); return; }
     if (level == 0) { strncpy(buf, "Off", len); return; }
     int ms = slewLevelToMs(level);
     if (ms < 1000) snprintf(buf, len, "%dms", ms);
@@ -67,6 +80,10 @@ static void formatSlewLabel(uint8_t level, char* buf, size_t len) {
 }
 uint8_t latchSlewLevel  = 0;
 uint8_t revertSlewLevel = 0;
+bool    latchSlewSync   = false;
+bool    revertSlewSync  = false;
+uint8_t latchSlewSyncStep  = 2; // 1/4 note default
+uint8_t revertSlewSyncStep = 2;
 static bool settingsPendingSave = false;
 
 uint8_t revertAbsoluteOriginal[8] = {0};
@@ -186,6 +203,10 @@ void initActionSettings() {
     int savedRS = json.getDoc()["revertSlew"] | 0;
     latchSlewLevel  = (uint8_t)constrain(savedLS, 0, 127);
     revertSlewLevel = (uint8_t)constrain(savedRS, 0, 127);
+    latchSlewSync      = json.getDoc()["latchSlewSync"]  | false;
+    revertSlewSync     = json.getDoc()["revertSlewSync"] | false;
+    latchSlewSyncStep  = (uint8_t)constrain((int)(json.getDoc()["latchSlewSyncStep"]  | 2), 0, SYNC_STEPS - 1);
+    revertSlewSyncStep = (uint8_t)constrain((int)(json.getDoc()["revertSlewSyncStep"] | 2), 0, SYNC_STEPS - 1);
     uint8_t p = controls.getPreset();
     navPresetCursor = (p < 24) ? p : 0;
 }
@@ -244,37 +265,55 @@ static void drawSettingsPage() {
     faders[0]->dimmed     = false;
     faders[0]->valueOnly  = false;
     faders[0]->showingValue = false;
+    faders[0]->setQuantized(3);
     faders[0]->setParamName("Brightness");
-    faders[0]->setValue(brightnessLevel * 63);
+    faders[0]->value = brightnessLevel * 63;
     faders[0]->setButtonName(layoutName);
     faders[0]->draw();
     faders[1]->disabled   = false;
     faders[1]->dimmed     = false;
     faders[1]->valueOnly  = false;
     faders[1]->showingValue = false;
+    faders[1]->setQuantized(SS_STEPS);
     faders[1]->setParamName("Screensaver");
-    faders[1]->setValue(screensaverLevel * 18);
+    faders[1]->value = screensaverLevel * 18;
     faders[1]->setButtonName(ssStepLabels[screensaverLevel]);
     faders[1]->draw();
     faders[2]->disabled   = false;
     faders[2]->dimmed     = false;
     faders[2]->valueOnly  = false;
+    faders[2]->showingValue = false;
     faders[2]->setParamName("Latch Slew");
-    faders[2]->value = latchSlewLevel;
-    formatSlewLabel(latchSlewLevel, faders[2]->title, 20);
-    faders[2]->showingValue = true;
-    strncpy(faders[2]->buttonName, "Time", 20);
-    strncpy(faders[2]->buttonText, "Time", 20);
+    faders[2]->setQuantized(latchSlewSync ? SYNC_STEPS : 0);
+    if (latchSlewSync) {
+        faders[2]->value = latchSlewSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[2]->title, syncStepLabels[latchSlewSyncStep], 20);
+        strncpy(faders[2]->buttonName, "Sync", 20);
+        strncpy(faders[2]->buttonText, "Sync", 20);
+    } else {
+        faders[2]->value = latchSlewLevel;
+        formatSlewLabel(latchSlewLevel, false, 0, faders[2]->title, 20);
+        strncpy(faders[2]->buttonName, "Time", 20);
+        strncpy(faders[2]->buttonText, "Time", 20);
+    }
     faders[2]->draw();
     faders[3]->disabled   = false;
     faders[3]->dimmed     = false;
     faders[3]->valueOnly  = false;
+    faders[3]->showingValue = false;
     faders[3]->setParamName("Revert Slew");
-    faders[3]->value = revertSlewLevel;
-    formatSlewLabel(revertSlewLevel, faders[3]->title, 20);
-    faders[3]->showingValue = true;
-    strncpy(faders[3]->buttonName, "Time", 20);
-    strncpy(faders[3]->buttonText, "Time", 20);
+    faders[3]->setQuantized(revertSlewSync ? SYNC_STEPS : 0);
+    if (revertSlewSync) {
+        faders[3]->value = revertSlewSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[3]->title, syncStepLabels[revertSlewSyncStep], 20);
+        strncpy(faders[3]->buttonName, "Sync", 20);
+        strncpy(faders[3]->buttonText, "Sync", 20);
+    } else {
+        faders[3]->value = revertSlewLevel;
+        formatSlewLabel(revertSlewLevel, false, 0, faders[3]->title, 20);
+        strncpy(faders[3]->buttonName, "Time", 20);
+        strncpy(faders[3]->buttonText, "Time", 20);
+    }
     faders[3]->draw();
     flushDisplays();
 }
@@ -346,8 +385,12 @@ void onShiftPress()
         }
         json.getDoc()["screensaver"] = (int)ssStepsSec[screensaverLevel];
         json.getDoc()["brightness"]  = (int)brightnessLevel;
-        json.getDoc()["latchSlew"]   = (int)latchSlewLevel;
-        json.getDoc()["revertSlew"]  = (int)revertSlewLevel;
+        json.getDoc()["latchSlew"]         = (int)latchSlewLevel;
+        json.getDoc()["revertSlew"]        = (int)revertSlewLevel;
+        json.getDoc()["latchSlewSync"]     = (bool)latchSlewSync;
+        json.getDoc()["revertSlewSync"]    = (bool)revertSlewSync;
+        json.getDoc()["latchSlewSyncStep"] = (int)latchSlewSyncStep;
+        json.getDoc()["revertSlewSyncStep"]= (int)revertSlewSyncStep;
         settingsPendingSave = true;
         showDisplay();
         shiftState = SHIFT_IDLE;
@@ -627,6 +670,20 @@ void onButtonPressed(uint8_t idx)
         if (idx == 0) {
             faderLayout = (faderLayout == LAYOUT_DYNAMIC) ? LAYOUT_COMPACT : LAYOUT_DYNAMIC;
             drawSettingsPage();
+            { uint8_t pkt[5] = {0xF0, 0x6F, 0x0E, (uint8_t)faderLayout, 0xF7};
+              serialEditorSend(pkt, 5); }
+        } else if (idx == 2) {
+            latchSlewSync = !latchSlewSync;
+            faders[2]->setQuantized(latchSlewSync ? SYNC_STEPS : 0);
+            drawSettingsPage();
+            { uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSlewLevel, (uint8_t)(latchSlewSync ? 1 : 0), latchSlewSyncStep, 0xF7};
+              serialEditorSend(pkt, 7); }
+        } else if (idx == 3) {
+            revertSlewSync = !revertSlewSync;
+            faders[3]->setQuantized(revertSlewSync ? SYNC_STEPS : 0);
+            drawSettingsPage();
+            { uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
+              serialEditorSend(pkt, 7); }
         }
         return;
     }
@@ -724,19 +781,10 @@ void onButtonPressed(uint8_t idx)
         } else {
             sendMidiMessage(type, number, _value, channel);
         }
-        if (controls.getPreset() == 24) {
-            if (idx == 3 || idx == 7) {
-                faders[idx]->updateButtonName(true);
-            } else {
-                bool on = !faders[idx]->buttonState;
-                faders[idx]->buttonState = on;
-                faders[idx]->updateButtonName(on);
-            }
-        }
-        if (controls.getPreset() == 25) {
-            if (idx != 2 && idx != 3) {
-                faders[idx]->updateButtonName(true);
-            }
+        if (controls.getPreset() >= 24 || isFn) {
+            faders[idx]->buttonHeld = true;
+            faders[idx]->updateButtonName(true);
+            flushDisplays();
         }
     }
 }
@@ -744,6 +792,7 @@ void onButtonPressed(uint8_t idx)
 void onButtonReleased(uint8_t idx)
 {
     if (shiftState == SHIFT_HOLD) return;
+    if (settingsModeActive) return;
     uint8_t channel = controls.getButtonShort(idx).channel;
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
@@ -758,11 +807,10 @@ void onButtonReleased(uint8_t idx)
         controls.getButtonShort(idx).value = releaseVal;
     }
     lastButtonReleaseTime[idx] = millis();
-    if (controls.getPreset() == 24 && (idx == 3 || idx == 7)) {
+    if (controls.getPreset() >= 24 || isFn) {
+        faders[idx]->buttonHeld = false;
         faders[idx]->updateButtonName(false);
-    }
-    if (controls.getPreset() == 25 && idx != 2 && idx != 3) {
-        faders[idx]->updateButtonName(false);
+        flushDisplays();
     }
 }
 
@@ -785,6 +833,8 @@ static void handleSettingsBrightness(int delta) {
     faders[0]->value = brightnessLevel * 63;
     faders[0]->draw();
     flushDisplays();
+    uint8_t pkt[5] = {0xF0, 0x6F, 0x1B, brightnessLevel, 0xF7};
+    serialEditorSend(pkt, 5);
 }
 
 static void handleSettingsScreensaver(int delta) {
@@ -796,24 +846,47 @@ static void handleSettingsScreensaver(int delta) {
     strncpy(faders[1]->buttonText, ssStepLabels[screensaverLevel], 20);
     faders[1]->draw();
     flushDisplays();
+    uint16_t sec = (uint16_t)ssStepsSec[screensaverLevel];
+    uint8_t pkt[6] = {0xF0, 0x6F, 0x10, (uint8_t)((sec >> 7) & 0x7F), (uint8_t)(sec & 0x7F), 0xF7};
+    serialEditorSend(pkt, 6);
 }
 
 static void handleSettingsLatchSlew(int delta) {
-    latchSlewLevel = (uint8_t)constrain((int)latchSlewLevel + delta, 0, 127);
-    faders[2]->value = latchSlewLevel;
-    formatSlewLabel(latchSlewLevel, faders[2]->title, 20);
+    if (latchSlewSync) {
+        int s = (int)latchSlewSyncStep + (delta > 0 ? 1 : -1);
+        latchSlewSyncStep = (uint8_t)constrain(s, 0, SYNC_STEPS - 1);
+        faders[2]->value = latchSlewSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[2]->title, syncStepLabels[latchSlewSyncStep], 20);
+    } else {
+        latchSlewLevel = (uint8_t)constrain((int)latchSlewLevel + delta, 0, 127);
+        faders[2]->value = latchSlewLevel;
+        formatSlewLabel(latchSlewLevel, false, 0, faders[2]->title, 20);
+    }
     faders[2]->showingValue = true;
+    controls.getEncoder(2).lastActivity = millis();
     faders[2]->draw();
     flushDisplays();
+    uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSlewLevel, (uint8_t)(latchSlewSync ? 1 : 0), latchSlewSyncStep, 0xF7};
+    serialEditorSend(pkt, 7);
 }
 
 static void handleSettingsRevertSlew(int delta) {
-    revertSlewLevel = (uint8_t)constrain((int)revertSlewLevel + delta, 0, 127);
-    faders[3]->value = revertSlewLevel;
-    formatSlewLabel(revertSlewLevel, faders[3]->title, 20);
+    if (revertSlewSync) {
+        int s = (int)revertSlewSyncStep + (delta > 0 ? 1 : -1);
+        revertSlewSyncStep = (uint8_t)constrain(s, 0, SYNC_STEPS - 1);
+        faders[3]->value = revertSlewSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[3]->title, syncStepLabels[revertSlewSyncStep], 20);
+    } else {
+        revertSlewLevel = (uint8_t)constrain((int)revertSlewLevel + delta, 0, 127);
+        faders[3]->value = revertSlewLevel;
+        formatSlewLabel(revertSlewLevel, false, 0, faders[3]->title, 20);
+    }
     faders[3]->showingValue = true;
+    controls.getEncoder(3).lastActivity = millis();
     faders[3]->draw();
     flushDisplays();
+    uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
+    serialEditorSend(pkt, 7);
 }
 
 static void navigatePresetByEncoder(uint8_t idx, int delta) {
@@ -1038,7 +1111,7 @@ void updateFaderTitles()
         }
         if(controls.getPreset() == 25){
             static const char* buttonNames[] = {
-                "Track -", "Track +", "Device On", "A/B",
+                "Track -", "Track +", "Device On", "Capture",
                 "Device -", "Device +", "Bank -", "Bank +"
             };
             snprintf(buf, sizeof(buf), buttonNames[i]);
@@ -1109,11 +1182,12 @@ void sendPresetSysEx(uint8_t preset)
     liveConnectedTime = millis();
     uint8_t packet[5] = {240, 111, 4, preset, 247};
     usb_midi.write(packet, 5);
+    serialEditorSend(packet, 5);
 }
 
 void releaseLatchAndSend()
 {
-    int slewMs = slewLevelToMs(latchSlewLevel);
+    int slewMs = latchSlewSync ? syncSlewToMs(latchSlewSyncStep) : slewLevelToMs(latchSlewLevel);
 
     for (int i = 0; i < 8; ++i)
     {
@@ -1168,7 +1242,7 @@ void releaseLatchAndSend()
 
 void sendRevertEvents()
 {
-    int slewMs = slewLevelToMs(revertSlewLevel);
+    int slewMs = revertSlewSync ? syncSlewToMs(revertSlewSyncStep) : slewLevelToMs(revertSlewLevel);
     for (int i = 0; i < 8; ++i)
     {
         if (!revertAbsoluteChanged[i])
@@ -1208,4 +1282,9 @@ void sendRevertEvents()
 void setRevertModeLed(bool on)
 {
     setLedBlink(0, on);
+}
+
+void onSlewStateUpdatedFromEditor()
+{
+    if (settingsModeActive) drawSettingsPage();
 }

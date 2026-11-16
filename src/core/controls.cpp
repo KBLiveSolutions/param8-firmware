@@ -123,9 +123,14 @@ void ControlsManager::setDefaults() {
                 const char* btnName24 = json.getDoc()["24"]["btn_names"][String(i)] | "";
                 strncpy(_presets[24].buttons_short[i].controlName, btnName24, sizeof(_presets[24].buttons_short[i].controlName) - 1);
             } else if (_preset == 25) {
-                // Device: encoders CC 10-17, buttons CC 20-27, all on channel 7
+                // Device: encoders CC 10-17, buttons CC 20-27 (button 3: CC 29 = Capture)
                 setEncoder(_preset, i, MIDI_CC, 10 + i, 7);
-                setButtonShort(_preset, i, MIDI_CC, 20 + i, 7, false);
+                if (i == 3) {
+                    // Capture: CC 29 → capture_midi() via Remote Script interception
+                    setButtonShort(_preset, i, MIDI_CC, 29, 7, false);
+                } else {
+                    setButtonShort(_preset, i, MIDI_CC, 20 + i, 7, false);
+                }
             } else {
                 ControlData data = json.getControlData("encoders", _preset, i);
                 _presets[_preset].encoder[i].type       = static_cast<ControlMidiType>(data.value0);

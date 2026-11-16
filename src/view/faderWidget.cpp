@@ -66,7 +66,7 @@ void FaderWidget::setButtonName(const char* txt) {
     strncpy(buttonName, txt, sizeof(buttonName));
     buttonName[sizeof(buttonName)-1] = '\0';
     strncpy(buttonText, txt, sizeof(buttonText));
-    drawButtonName(txt, false);
+    drawButtonName(txt, buttonHeld);
 }
 
 void FaderWidget::updateButtonName(bool state) {
@@ -105,6 +105,7 @@ void FaderWidget::drawTitle() {
 }
 
 void FaderWidget::drawFader() {
+    _dirty = false;
     if (isQuantized && numQuantizedItems >= 2) {
         drawFaderQuantized();
         return;
@@ -462,12 +463,12 @@ void FaderWidget::updateTitle(const char* txt) {
     title[sizeof(title)-1] = '\0';
     if (valueOnly)
         showingValue = true;
-    drawFader();
+    _dirty = true;
 }
 
 void FaderWidget::setValue(int val) {
     value = constrain(val, 0, 127);
-    drawFader();
+    _dirty = true;
 }
 
 void FaderWidget::setEmpty() {
@@ -483,7 +484,7 @@ void FaderWidget::draw() {
     display.fillRect(area_x, area_y, area_w, area_h, 0);
 
     drawFader();
-    updateButtonName(false);
+    updateButtonName(buttonHeld);
     drawSeparators();
 
 }
