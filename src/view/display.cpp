@@ -150,6 +150,10 @@ void updateFader(int idx, int value) {
 
 void updateDisplay() {
     if (screenSaverActive) return;
+    if (isSelectingPreset()) {
+        deviceLabelDirty = bankLabelDirty = trackLabelDirty = false;
+        return;
+    }
     drawDeviceBankLabels();
     flushDisplays();
 }
