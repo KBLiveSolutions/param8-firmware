@@ -385,6 +385,7 @@ void onShiftPress()
         }
         json.getDoc()["screensaver"] = (int)ssStepsSec[screensaverLevel];
         json.getDoc()["brightness"]  = (int)brightnessLevel;
+        json.getDoc()["layout"]            = (int)faderLayout;
         json.getDoc()["latchSlew"]         = (int)latchSlewLevel;
         json.getDoc()["revertSlew"]        = (int)revertSlewLevel;
         json.getDoc()["latchSlewSync"]     = (bool)latchSlewSync;
@@ -1142,23 +1143,32 @@ void updateFaderTitles()
         deviceLabel[0] = '\0';
         bankLabel[0] = '\0';
         trackLabel[0] = '\0';
+        strncpy(presetLabel, "Device", sizeof(presetLabel) - 1);
+        presetLabel[sizeof(presetLabel) - 1] = '\0';
+        presetLabelDirty = true;
     } else if (preset == 24) {
         strncpy(deviceLabel, "Track", sizeof(deviceLabel));
         strncpy(bankLabel, "Global", sizeof(bankLabel));
+        strncpy(presetLabel, "Global", sizeof(presetLabel) - 1);
+        presetLabel[sizeof(presetLabel) - 1] = '\0';
         deviceLabelDirty = true;
         bankLabelDirty = true;
+        presetLabelDirty = true;
     } else {
-        trackLabel[0] = '\0';
+        strncpy(trackLabel, "Track", sizeof(trackLabel));
         trackLabelDirty = true;
-        const char* pName = controls.getPresetName(preset);
-        if (pName[0] != '\0') {
-            strncpy(bankLabel, pName, sizeof(bankLabel));
-        } else {
-            snprintf(bankLabel, sizeof(bankLabel), "Preset %d", preset + 1);
-        }
-        snprintf(deviceLabel, sizeof(deviceLabel), "Preset %d", preset + 1);
+        strncpy(deviceLabel, "Device", sizeof(deviceLabel));
         deviceLabelDirty = true;
+        strncpy(bankLabel, "Bank", sizeof(bankLabel));
         bankLabelDirty = true;
+        const char* pName = controls.getPresetName(preset);
+        if (pName && pName[0] != '\0') {
+            strncpy(presetLabel, pName, sizeof(presetLabel) - 1);
+        } else {
+            snprintf(presetLabel, sizeof(presetLabel), "Preset %d", preset + 1);
+        }
+        presetLabel[sizeof(presetLabel) - 1] = '\0';
+        presetLabelDirty = true;
     }
 }
 

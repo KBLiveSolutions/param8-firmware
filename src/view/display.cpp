@@ -7,9 +7,9 @@
 FaderWidget* faders[8];
 
 
-char deviceLabel[20] = {0};
-char bankLabel[20] = {0};
-char trackLabel[20] = {0};
+char deviceLabel[20] = "Device";
+char bankLabel[20] = "Bank";
+char trackLabel[20] = "Track";
 char presetLabel[20] = {0};
 bool deviceLabelDirty = false;
 bool bankLabelDirty = false;

@@ -50,15 +50,21 @@ MidiControl& ControlsManager::getButtonShortAt(uint8_t preset, uint8_t idx) {
 // Surcharges avec paramètre de preset
 void ControlsManager::setEncoder(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
     if (preset < 26 && idx < 8) {
-        _presets[preset].encoder[idx] = {type, number, channel};
-        json.setEncoder(preset, idx, static_cast<int>(type), static_cast<int>(number), static_cast<int>(channel)); 
+        MidiControl& enc = _presets[preset].encoder[idx];
+        enc.type = type;
+        enc.number = number;
+        enc.channel = channel;
+        json.setEncoder(preset, idx, static_cast<int>(type), static_cast<int>(number), static_cast<int>(channel));
     }
 }
 
 void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, bool toggleMode) {
     if (preset < 26 && idx < 8) {
-        _presets[preset].buttons_short[idx] = {type, number, channel};
-        _presets[preset].buttons_short[idx].toggleMode = toggleMode;
+        MidiControl& btn = _presets[preset].buttons_short[idx];
+        btn.type = type;
+        btn.number = number;
+        btn.channel = channel;
+        btn.toggleMode = toggleMode;
     }
 }
 

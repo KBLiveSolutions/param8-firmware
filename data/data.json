@@ -2,6 +2,7 @@
 {
   "brightness": 1,
   "screensaver": 300,
+  "layout": 0,
   "latchSlew": 0,
   "revertSlew": 0,
   "mode": 0,
