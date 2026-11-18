@@ -319,7 +319,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     liveConnectedTime = millis();
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
-    if (!wasConnected) {
+    if (!wasConnected && !isSelectingPreset()) {
       if (preset == 25 || preset == 24) {
         updateFaderTitles();
       }
