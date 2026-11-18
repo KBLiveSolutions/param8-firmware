@@ -40,13 +40,20 @@ void setupDisplay() {
     display1.col_offset = 24;
     display2.col_offset = 24;
 
-    // Display timing (carried over from U8g2 setup)
-    display1.oled_command(SSD1322_PHASELEN);   display1.oled_data(0x22);
-    display1.oled_command(SSD1322_PRECHARGE);   display1.oled_data(0x17);
-    display1.oled_command(SSD1322_SETVCOM);     display1.oled_data(0x04);
-    display2.oled_command(SSD1322_PHASELEN);   display2.oled_data(0x22);
-    display2.oled_command(SSD1322_PRECHARGE);   display2.oled_data(0x17);
-    display2.oled_command(SSD1322_SETVCOM);     display2.oled_data(0x04);
+    // Display timing — anti-ghosting settings
+    display1.oled_command(SSD1322_PHASELEN);  display1.oled_data(0xF8); // phase2=15, phase1=8 DCLKs (long discharge)
+    display1.oled_command(SSD1322_PRECHARGE); display1.oled_data(0x17);
+    display1.oled_command(SSD1322_SETVCOM);   display1.oled_data(0x01); // very low VCOMH = less deselect leakage
+    // Internal VSL + second precharge (key for ghosting on ZJY panels)
+    display1.oled_command(0xB4); display1.oled_data(0xA2); display1.oled_data(0xFD);
+    display1.oled_command(0xB6); display1.oled_data(0x0F); // max second precharge period
+    display1.oled_command(0xB9);                            // linear gray scale — level 0 = truly dark
+    display2.oled_command(SSD1322_PHASELEN);  display2.oled_data(0xF8);
+    display2.oled_command(SSD1322_PRECHARGE); display2.oled_data(0x17);
+    display2.oled_command(SSD1322_SETVCOM);   display2.oled_data(0x01);
+    display2.oled_command(0xB4); display2.oled_data(0xA2); display2.oled_data(0xFD);
+    display2.oled_command(0xB6); display2.oled_data(0x0F);
+    display2.oled_command(0xB9);
 
     // display1: faders 1,2,5,6
     faders[0] = new FaderWidget(display1, "Fader 1",   0,   0, 0);
