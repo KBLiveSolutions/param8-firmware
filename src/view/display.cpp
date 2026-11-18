@@ -10,9 +10,11 @@ FaderWidget* faders[8];
 char deviceLabel[20] = {0};
 char bankLabel[20] = {0};
 char trackLabel[20] = {0};
+char presetLabel[20] = {0};
 bool deviceLabelDirty = false;
 bool bankLabelDirty = false;
 bool trackLabelDirty = false;
+bool presetLabelDirty = false;
 bool screenSaverActive = false;
 uint8_t brightnessLevel = 1;
 
@@ -72,6 +74,8 @@ void setupDisplay() {
     setBrightness(brightnessLevel);
 }
 
+static const uint8_t LABEL_BACKGROUND = 5;
+
 static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     int label_w = 64;
     int label_x = (256 - label_w) / 2;
@@ -79,7 +83,7 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     int area_h = 10;
 
     disp.fillRect(label_x, y, label_w, area_h, 0);
-    disp.fillRect(label_x + 2, y, inner_w, area_h, 15);
+    disp.fillRect(label_x + 2, y, inner_w, area_h, LABEL_BACKGROUND);
 
     disp.setFont(NULL);
     int tw = getStrWidth(disp, txt);
@@ -121,8 +125,23 @@ void drawAllWidgets() {
     for (int i : {2, 3, 6, 7}) {
         faders[i]->draw();
     }
+    uint8_t currentPreset = controls.getPreset();
+    const char* pName = controls.getPresetName(currentPreset);
+    if (pName && pName[0] != '\0') {
+        strncpy(presetLabel, pName, sizeof(presetLabel) - 1);
+    } else if (currentPreset == 24) {
+        strncpy(presetLabel, "Global", sizeof(presetLabel) - 1);
+    } else if (currentPreset == 25) {
+        strncpy(presetLabel, "Device", sizeof(presetLabel) - 1);
+    } else {
+        snprintf(presetLabel, sizeof(presetLabel), "Preset %d", currentPreset + 1);
+    }
+    presetLabel[sizeof(presetLabel) - 1] = '\0';
+
     if (trackLabel[0] != '\0')
         drawLabelOverButton(display1, trackLabel, 0);
+    if (presetLabel[0] != '\0')
+        drawLabelOverButton(display2, presetLabel, 0);
     if (deviceLabel[0] != '\0')
         drawLabelOverButton(display1, deviceLabel, 54);
     if (bankLabel[0] != '\0')
@@ -130,6 +149,7 @@ void drawAllWidgets() {
     deviceLabelDirty = false;
     bankLabelDirty = false;
     trackLabelDirty = false;
+    presetLabelDirty = false;
 }
 
 void showDisplay() {
@@ -145,7 +165,7 @@ void updateDisplay() {
     if (screenSaverActive) return;
     if (settingsModeActive || isSelectingPreset()) {
         for (int i = 0; i < 8; i++) faders[i]->_dirty = false;
-        trackLabelDirty = bankLabelDirty = deviceLabelDirty = false;
+        trackLabelDirty = bankLabelDirty = deviceLabelDirty = presetLabelDirty = false;
         return;
     }
     for (int i = 0; i < 8; i++) {
@@ -160,11 +180,16 @@ void updateDisplay() {
 
 void drawDeviceBankLabels() {
     if (screenSaverActive) return;
-    if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty) return;
+    if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty && !presetLabelDirty) return;
     if (trackLabelDirty) {
         trackLabelDirty = false;
         if (trackLabel[0] != '\0')
             drawLabelOverButton(display1, trackLabel, 0);
+    }
+    if (presetLabelDirty) {
+        presetLabelDirty = false;
+        if (presetLabel[0] != '\0')
+            drawLabelOverButton(display2, presetLabel, 0);
     }
     if (deviceLabelDirty) {
         deviceLabelDirty = false;
