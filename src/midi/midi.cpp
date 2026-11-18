@@ -248,6 +248,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
 {
   if (len < 5 || sysex[0] != 0xF0 || sysex[1] != 0x6F)
     return;
+  if (isSelectingPreset())
+    return;
 
   uint8_t status_byte = sysex[2];
   uint8_t param_number = sysex[3];
