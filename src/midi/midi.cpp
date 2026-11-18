@@ -540,7 +540,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 0x1C:
   {
-    // Set global encoder fnId: F0 6F 1C <idx> <fnId> F7
+    // Set global encoder fnId: F0 6F 1C <idx> <fnId> F7  (from editor via serial)
     uint8_t idx  = sysex[3];
     uint8_t fnId = sysex[4];
     if (idx >= 8) break;
@@ -552,7 +552,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 0x1D:
   {
-    // Set global button fnId: F0 6F 1D <idx> <fnId> F7
+    // Set global button fnId: F0 6F 1D <idx> <fnId> F7  (from editor via serial)
     uint8_t idx  = sysex[3];
     uint8_t fnId = sysex[4];
     if (idx >= 8) break;
@@ -564,16 +564,23 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 0x1E:
   {
-    // Request global fnIds → reply with 0x1C and 0x1D packets for each slot
-    for (int i = 0; i < 8; i++) {
-      uint8_t encPkt[6] = { 240, 111, 0x1C, (uint8_t)i, controls.getEncoderAt(24, i).fnId, 247 };
-      usb_midi.write(encPkt, 6);
-      serialEditorSend(encPkt, 6);
-      delay(2);
-      uint8_t btnPkt[6] = { 240, 111, 0x1D, (uint8_t)i, controls.getButtonShortAt(24, i).fnId, 247 };
-      usb_midi.write(btnPkt, 6);
-      serialEditorSend(btnPkt, 6);
-      delay(2);
+    if (len == 7) {
+      // BPM from Live: F0 6F 1E <b2> <b1> <b0> F7  (BPM*100 as 21-bit, 7 bits each)
+      uint32_t cents = ((uint32_t)(sysex[3] & 0x7F) << 14)
+                     | ((uint32_t)(sysex[4] & 0x7F) << 7)
+                     |  (uint32_t)(sysex[5] & 0x7F);
+      if (cents > 0) liveBpmCents = cents;
+    } else {
+      // Request global fnIds from editor: F0 6F 1E 00 F7
+      // Reply via serial only — never via USB MIDI to avoid triggering Live's song-position handler
+      for (int i = 0; i < 8; i++) {
+        uint8_t encPkt[6] = { 240, 111, 0x1C, (uint8_t)i, controls.getEncoderAt(24, i).fnId, 247 };
+        serialEditorSend(encPkt, 6);
+        delay(2);
+        uint8_t btnPkt[6] = { 240, 111, 0x1D, (uint8_t)i, controls.getButtonShortAt(24, i).fnId, 247 };
+        serialEditorSend(btnPkt, 6);
+        delay(2);
+      }
     }
     break;
   }
