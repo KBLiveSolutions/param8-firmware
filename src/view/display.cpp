@@ -151,7 +151,7 @@ void updateFader(int idx, int value) {
 void updateDisplay() {
     static unsigned long lastUpdate = 0;
     unsigned long now = millis();
-    if (now - lastUpdate < 50) return;
+    if (now - lastUpdate < 25) return;
     lastUpdate = now;
 
     if (screenSaverActive) return;

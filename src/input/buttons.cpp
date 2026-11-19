@@ -80,6 +80,7 @@ void readButtons() {
 void setupButtons() {
   Wire.setSDA(16);  // GP16
   Wire.setSCL(17);  // GP17
+  Wire.setClock(400000);  // 400kHz fast mode — reduces PCF8574 read time ~4x
   Wire.begin();
   pcf.begin(0x20); // Initialize PCF8574 at address 0x20 with Wire library
   for (uint8_t p=0; p<8; p++) {

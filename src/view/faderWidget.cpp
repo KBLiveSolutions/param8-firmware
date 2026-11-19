@@ -386,6 +386,7 @@ void FaderWidget::drawButtonName(const char* txt, bool state) {
 void FaderWidget::updateTitle(const char* txt) {
     if (strcmp(txt, "Disabled") == 0 || strcmp(txt, "---") == 0)
         disabled = true;
+    if (strncmp(txt, title, sizeof(title)) == 0) return;
     strncpy(title, txt, sizeof(title));
     title[sizeof(title)-1] = '\0';
     if (valueOnly)
@@ -394,7 +395,9 @@ void FaderWidget::updateTitle(const char* txt) {
 }
 
 void FaderWidget::setValue(int val) {
-    value = constrain(val, 0, 127);
+    int clamped = constrain(val, 0, 127);
+    if (clamped == value) return;
+    value = clamped;
     _dirty = true;
 }
 
