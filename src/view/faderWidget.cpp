@@ -390,12 +390,12 @@ void FaderWidget::updateTitle(const char* txt) {
     title[sizeof(title)-1] = '\0';
     if (valueOnly)
         showingValue = true;
-    drawFader();
+    _dirty = true;
 }
 
 void FaderWidget::setValue(int val) {
     value = constrain(val, 0, 127);
-    drawFader();
+    _dirty = true;
 }
 
 void FaderWidget::setEmpty() {
