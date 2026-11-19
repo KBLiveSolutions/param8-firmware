@@ -17,6 +17,7 @@ bool bankLabelDirty = false;
 bool trackLabelDirty = false;
 bool presetLabelDirty = false;
 bool screenSaverActive = false;
+bool screenSaverJustWoke = false;
 uint8_t brightnessLevel = 1;
 
 void setupDisplay() {
@@ -185,6 +186,11 @@ void updateDisplay() {
     if (now - lastUpdate < 25) return;
     lastUpdate = now;
     if (screenSaverActive) return;
+    if (screenSaverJustWoke) {
+        screenSaverJustWoke = false;
+        showDisplay();
+        return;
+    }
     if (settingsModeActive || isSelectingPreset()) {
         for (int i = 0; i < 8; i++) faders[i]->_dirty = false;
         trackLabelDirty = bankLabelDirty = deviceLabelDirty = presetLabelDirty = false;

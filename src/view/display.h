@@ -8,6 +8,7 @@ extern PicoGFX_SSD1322 display2;
 extern FaderWidget* faders[8];
 
 extern bool screenSaverActive;
+extern bool screenSaverJustWoke;
 extern unsigned long screenSaverDelay;
 extern char deviceLabel[20];
 extern char bankLabel[20];
