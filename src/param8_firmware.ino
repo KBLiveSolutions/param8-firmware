@@ -104,7 +104,7 @@ void loop() {
     }
 
     // Screen saver
-    if (screenSaverDelay > 0 && !screenSaverActive && currentTime - lastInputTime > screenSaverDelay) {
+    if (screenSaverDelay > 0 && !screenSaverActive && millis() - lastInputTime > screenSaverDelay) {
         screenSaverActive = true;
     }
     if (screenSaverActive) {
