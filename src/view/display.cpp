@@ -2,6 +2,7 @@
 #include "display.h"
 #include "../core/actions.h"
 #include "../core/controls.h"
+#include "../midi/midi.h"
 
 
 FaderWidget* faders[8];
@@ -152,6 +153,10 @@ void updateDisplay() {
     static unsigned long lastUpdate = 0;
     unsigned long now = millis();
     if (now - lastUpdate < 25) return;
+    // Postpone the flush if MIDI packets are still pending — keep the loop
+    // free for midiRead(). Cap at 50ms so the display doesn't freeze during
+    // continuous automation.
+    if (usb_midi.available() && now - lastUpdate < 50) return;
     lastUpdate = now;
 
     if (screenSaverActive) return;
