@@ -143,13 +143,6 @@ void ControlsManager::setDefaults() {
 }
 
 void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value) {
-    Serial.print("Control Change - Channel: ");
-    Serial.print(channel);
-    Serial.print(", Control: ");
-    Serial.print(control);
-    Serial.print(", Value: ");
-    Serial.println(value);
-    
     for (int i = 0; i < 8; ++i) {
         if (getEncoder(i).channel == channel && getEncoder(i).number == control) {
             getEncoder(i).value = value;

@@ -69,15 +69,11 @@ void readButtons() {
     //   onButtonShortPress(p);
     // }
   }
-  // Pour les 6 suivants sur le PCF
+  // Pour les 8 boutons sur le PCF — une seule lecture I2C pour les 8 pins
+  uint8_t allBits = pcf.digitalReadByte();
   for (uint8_t p = 0; p < 8; p++) {
-    bool reading = pcf.digitalRead(p);
-    uint8_t idx = p;
-    updateButton(idx, reading);
-    // if (wasShortPressed(idx)) {
-    //   Serial.print("Button "); Serial.print(idx - 1); Serial.println(" short pressed!");
-    //   onButtonShortPress(idx);
-    // }
+    bool reading = (allBits >> p) & 0x1;
+    updateButton(p, reading);
   }
 }
 
