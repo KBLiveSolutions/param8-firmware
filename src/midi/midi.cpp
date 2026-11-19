@@ -138,11 +138,6 @@ void midiRead()
       handleMIDIDAWMessage(packet);
     }
     lastInputTime = millis();
-    if (screenSaverActive)
-    {
-      screenSaverActive = false;
-      showDisplay();
-    }
   }
 }
 
