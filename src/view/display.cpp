@@ -149,6 +149,11 @@ void updateFader(int idx, int value) {
 }
 
 void updateDisplay() {
+    static unsigned long lastUpdate = 0;
+    unsigned long now = millis();
+    if (now - lastUpdate < 50) return;
+    lastUpdate = now;
+
     if (screenSaverActive) return;
     if (isSelectingPreset()) {
         for (int i = 0; i < 8; i++) faders[i]->_dirty = false;
