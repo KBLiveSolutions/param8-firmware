@@ -111,12 +111,22 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
 }
 
 void flushDisplays() {
+    static bool flushing = false;
+    if (flushing) return;
+    flushing = true;
     if (display1.isDirty()) {
-        display1.displayBlocking();
+        display1.display();
+        while (!display1.isTransferComplete()) {
+            midiRead();
+        }
     }
     if (display2.isDirty()) {
-        display2.displayBlocking();
+        display2.display();
+        while (!display2.isTransferComplete()) {
+            midiRead();
+        }
     }
+    flushing = false;
 }
 
 void drawAllWidgets() {
@@ -153,10 +163,6 @@ void updateDisplay() {
     static unsigned long lastUpdate = 0;
     unsigned long now = millis();
     if (now - lastUpdate < 25) return;
-    // Postpone the flush if MIDI packets are still pending — keep the loop
-    // free for midiRead(). Cap at 50ms so the display doesn't freeze during
-    // continuous automation.
-    if (usb_midi.available() && now - lastUpdate < 50) return;
     lastUpdate = now;
 
     if (screenSaverActive) return;
