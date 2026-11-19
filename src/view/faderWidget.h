@@ -25,6 +25,7 @@ public:
     bool disabled = false;
     bool dimmed = false;
     bool buttonState = false;
+    bool _dirty = false;
     int x_offset, y_offset;
     int boutonNumber;
 

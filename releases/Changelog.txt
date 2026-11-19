@@ -8,6 +8,9 @@ v1.0.3 — 2026-11-18
   Display
     - Improved display sharpness: dark pixels are now truly dark, with no
       milky halo around lit areas.
+    - Fixed: with 8 automated parameters, faders kept moving for several
+      seconds after automation stopped. Rendering is now capped at 20 fps
+      regardless of how fast Live sends updates.
 
   Preset selection
     - All incoming SysEx messages (song position, automations, label updates)
