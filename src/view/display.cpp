@@ -2,6 +2,7 @@
 #include "display.h"
 #include "../core/actions.h"
 #include "../core/controls.h"
+#include "../midi/midi.h"
 
 
 FaderWidget* faders[8];
@@ -114,12 +115,22 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
 }
 
 void flushDisplays() {
+    static bool flushing = false;
+    if (flushing) return;
+    flushing = true;
     if (display1.isDirty()) {
-        display1.displayBlocking();
+        display1.display();
+        while (!display1.isTransferComplete()) {
+            midiRead();
+        }
     }
     if (display2.isDirty()) {
-        display2.displayBlocking();
+        display2.display();
+        while (!display2.isTransferComplete()) {
+            midiRead();
+        }
     }
+    flushing = false;
 }
 
 void drawAllWidgets() {
@@ -169,6 +180,10 @@ void updateFader(int idx, int value) {
 }
 
 void updateDisplay() {
+    static unsigned long lastUpdate = 0;
+    unsigned long now = millis();
+    if (now - lastUpdate < 25) return;
+    lastUpdate = now;
     if (screenSaverActive) return;
     if (settingsModeActive || isSelectingPreset()) {
         for (int i = 0; i < 8; i++) faders[i]->_dirty = false;
