@@ -26,6 +26,7 @@ void FaderWidget::setTitle(const char* txt) {
     strncpy(title, txt, sizeof(title));
     title[sizeof(title)-1] = '\0';
     drawFader();
+    _dirty = true;
 }
 
 void FaderWidget::setParamName(const char* txt) {
@@ -42,6 +43,10 @@ void FaderWidget::setParamName(const char* txt) {
     strncpy(paramName, name, sizeof(paramName));
     paramName[sizeof(paramName)-1] = '\0';
     disabled = (strcmp(name, "---") == 0);
+    if (disabled && controls.getPreset() == 25) {
+        dimmed = true;
+        value = 63;
+    }
     if (!valueOnly && !showingValue) {
         if(faderLayout == LAYOUT_DYNAMIC) {
             strncpy(title, name, sizeof(title));
@@ -54,6 +59,7 @@ void FaderWidget::setParamName(const char* txt) {
         drawTitle();
     else
         drawFader();
+    _dirty = true;
 }
 
 void FaderWidget::setButtonName(const char* txt) {
@@ -120,6 +126,7 @@ void FaderWidget::setQuantized(uint8_t numItems) {
     isQuantized = (numItems >= 2);
     numQuantizedItems = numItems;
     drawFader();
+    _dirty = true;
 }
 
 void FaderWidget::drawFaderQuantized() {
@@ -189,9 +196,7 @@ void FaderWidget::drawFaderDynamic() {
     int area_h = 22;
 
     display.fillRect(area_x, area_y, area_w, area_h, 0);
-    if (strcmp(paramName, "---") == 0) {
-            return;
-    }
+    if (disabled && !dimmed) return;
 
     int BAR_W = 100;
     int BAR_H = 5;
@@ -199,7 +204,7 @@ void FaderWidget::drawFaderDynamic() {
     int BAR_Y = area_y;
     int FADER_H = 5;
 
-    const char* displayText = showingValue ? title : paramName;
+    const char* displayText = (showingValue && !disabled) ? title : paramName;
     int color = dimmed ? 6 : 15;
 
     if(strcmp(paramName, "******") != 0){
@@ -244,9 +249,7 @@ void FaderWidget::drawFaderCompact() {
     int area_h = 22;
 
     display.fillRect(area_x, area_y, area_w, area_h, 0);
-    if (strcmp(paramName, "---") == 0) {
-            return;
-    }
+    if (disabled && !dimmed) return;
 
     bool inactive = disabled || dimmed;
     int color = inactive ? 6 : 15;
@@ -331,7 +334,7 @@ void FaderWidget::drawFaderCompact() {
 
         // --- Right: param value, left-justified, 2 lines max ---
         display.setFont(&MiscFixed6x10pt7b);
-        const char* valText = title;
+        const char* valText = disabled ? "---" : title;
         int valCharW = 6;
         int valMaxChars = (col_val_w - TPAD * 2) / valCharW;
         int vlen = strlen(valText);
@@ -467,6 +470,7 @@ void FaderWidget::updateTitle(const char* txt) {
 }
 
 void FaderWidget::setValue(int val) {
+    if (disabled && dimmed) return;
     value = constrain(val, 0, 127);
     _dirty = true;
 }
@@ -484,7 +488,7 @@ void FaderWidget::draw() {
     display.fillRect(area_x, area_y, area_w, area_h, 0);
 
     drawFader();
-    updateButtonName(buttonHeld);
+    drawButtonName(buttonText, buttonState || buttonHeld);
     drawSeparators();
 
 }

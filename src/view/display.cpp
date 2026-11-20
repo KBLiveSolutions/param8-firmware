@@ -99,7 +99,7 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
 
     if (tw <= inner_w) {
         int text_x = label_x + (label_w - tw) / 2;
-        disp.setCursor(text_x, y + 2);
+        disp.setCursor(text_x, y + 1);
         disp.setTextColor(0);
         disp.print(txt);
     } else {
@@ -109,7 +109,7 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
         while (strlen(truncated) > 1 && getStrWidth(disp, truncated) > inner_w - 4) {
             truncated[strlen(truncated)-1] = '\0';
         }
-        disp.setCursor(label_x + 5, y + 2);
+        disp.setCursor(label_x + 5, y + 1);
         disp.setTextColor(0);
         disp.print(truncated);
     }

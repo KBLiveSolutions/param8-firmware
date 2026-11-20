@@ -458,6 +458,7 @@ void onShiftRelease()
         for (int i = 0; i < 8; ++i)
             faders[i]->updateButtonName(faders[i]->buttonState);
         flushDisplays();
+        sendPresetSysEx(controls.getPreset());
         break;
 
     case SHIFT_DOWN2:
@@ -519,7 +520,7 @@ void checkPendingPresetSave()
 {
     if (!pendingPresetSave && !pendingFullRedraw) return;
     unsigned long elapsed = millis() - lastPresetNavTime;
-    if (pendingFullRedraw && elapsed >= 200) {
+    if (pendingFullRedraw && elapsed >= 80) {
         pendingFullRedraw = false;
         updateFaderTitles();
         updateFaderValues();
@@ -1083,6 +1084,7 @@ void updateFaderTitles()
         char buf[24];
         MidiControl& enc = controls.getEncoder(i);
         faders[i]->buttonState = false;
+        faders[i]->buttonHeld = false;
         faders[i]->valueOnly = (preset == 24 && (i == 2 || i == 3 || i == 6));
         bool isPresetSelector = enc.isFunction && enc.fnId == 58;
         faders[i]->isQuantized = isPresetSelector;

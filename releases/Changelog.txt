@@ -2,39 +2,43 @@
   param8 Firmware Changelog
 ================================================================================
 
-v1.1.0 — 2026-10-28
+v1.1.0 — 2026-11-20
 --------------------
+ 
+    DAW actions:
 
-  Global mode (Ableton script)
-    - Entering Global mode now clears the top track-name label and displays
-      the selected track name in the bottom device label.
-    - The bottom label updates live when the selected track changes while
-      in Global mode.
-    - Global mode fnId assignments (encoder/button function mappings) are now
-      stored in data.json and restored on startup; previously they were
-      hardcoded in the script and lost on reboot.
+    - Global mode is now customizable from the editor. Actions cover global functions (transport, Undo/Redo etc),
+    Session or Arrangement functions, per track /device functions, and Preset navigation functions.
 
-  isFunction button display (firmware)
-    - Buttons whose MIDI assignment uses the isFunction flag (remapped via
-      fnIdToGlobalCC) now correctly update their on-screen state when the
-      corresponding CC is received from the DAW.
+    - DAW actions can be assigned to any control in a User preset, without
+      leaving that preset.
 
-  Quantized fader display (firmware)
-    - Switching presets now always resets the quantized display mode for
-      every fader. A fader that was showing a quantized parameter in one
-      preset no longer renders as quantized in the next preset.
-    - Clearing the top track-name label now explicitly erases the pixel area
-      so stale text is not left on screen.
+    Slew / settings :
 
-  Custom-quantized parameters (Ableton script)
-    - Encoders assigned to custom-quantized parameters (defined in
-      defaults.json with a "quantized" count) now jump directly to the next
-      or previous discrete step on each encoder tick, instead of moving the
-      parameter continuously and then snapping.
-    - The current step index is tracked internally, avoiding floating-point
-      rounding errors between ticks.
-    - Absolute CC feedback sent back to the controller no longer interferes
-      with step direction for these parameters.
+    - Slew: smooth transition times for Latch and Revert, configurable in the
+      Settings page. Available in time (ms) or beat-synced mode.
+
+    - Settings (brightness, screen saver, slew) are accessible directly on the
+      device with a double press on Shift.
+
+    Display :
+
+    - Quantized parameters: controls mapped to stepped or on/off parameters
+      now display as rectangular blocks in the Dynamic layout.
+
+    - Labels now appear on all Preset pages: 
+
+      ◎  [Track Name] ◎ | ◎ [Preset Name] ◎
+
+      ◎ [Device Name] ◎ | ◎  [Bank Name]  ◎ 
+
+    Editor :
+
+    - Trigger press mode: a third button mode alongside Toggle and Momentary.
+      Sends the maximum value on press only, nothing on release.
+
+    - Editor: changes are no longer sent automatically — press Send
+      (or Cmd/Ctrl+U) to upload to param8.
 
 --------------------------------------------------------------------------------
 

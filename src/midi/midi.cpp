@@ -239,9 +239,22 @@ void handleSysExContinuation(uint8_t *packet)
 
 void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 {
-  if (value == 0 && liveConnectedTime > 0 && millis() - liveConnectedTime < 500)
+  if (value == 0 && channel != 7 && liveConnectedTime > 0 && millis() - liveConnectedTime < 500)
     return;
-  if (isSelectingPreset()) return;
+  if (isSelectingPreset()) {
+    // During SHIFT_HOLD: silently capture function-button states on ch7 into
+    // buttonState (no draw) so showDisplay() on shift release sees them.
+    if (channel == 7) {
+      for (int i = 0; i < 8; ++i) {
+        MidiControl& btn = controls.getButtonShort(i);
+        if (btn.isFunction && btn.fnId == control) {
+          btn.value = value;
+          faders[i]->buttonState = (value > 63);
+        }
+      }
+    }
+    return;
+  }
   controls.onMidiValueChange(channel, control, value);
 }
 
@@ -373,7 +386,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
       showDisplay();
       if (isFunction) sendPresetSysEx(preset);
     }
-    json.save();
     break;
   }
   case 12:
@@ -414,7 +426,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
       showDisplay();
       if (isFunction) sendPresetSysEx(preset);
     }
-    json.save();
     break;
   }
   case 14:
@@ -458,7 +469,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
 
     const char* jsonKey = isButton ? "btn_names" : "enc_names";
     json.getDoc()[String(preset)][jsonKey][String(idx)] = name;
-    json.save();
 
     if (preset == controls.getPreset()) {
       updateFaderTitles();
@@ -480,7 +490,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     name[nameLen] = '\0';
     controls.setPresetName(preset, name);
     json.getDoc()[String(preset)]["preset_name"] = name;
-    json.save();
     if (preset == controls.getPreset()) {
       updateFaderTitles();
       showDisplay();
@@ -680,6 +689,12 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t rPkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
     usb_midi.write(rPkt, 7);
     serialEditorSend(rPkt, 7);
+    break;
+  }
+  case 0x27:
+  {
+    // Explicit save-to-flash from editor (sent after a full preset Send)
+    json.save();
     break;
   }
   default:
