@@ -390,12 +390,12 @@ void onSysEx(const uint8_t *sysex, size_t len)
     }
     uint8_t control = sysex[6];
     uint8_t channel = sysex[7];
-    bool toggleMode = sysex[8] != 0;
+    uint8_t pressMode = sysex[8] < 3 ? sysex[8] : 0;
     uint8_t btnMin   = (len >= 11) ? sysex[9]  : 0;
     uint8_t btnMax   = (len >= 12) ? sysex[10] : 127;
     bool isFunction  = (len >= 13) ? sysex[11] != 0 : false;
     uint8_t fnId     = (len >= 14) ? sysex[12] : 0;
-    controls.setButtonShort(preset, param_number, _type, control, channel, toggleMode);
+    controls.setButtonShort(preset, param_number, _type, control, channel, pressMode);
     controls.getButtonShortAt(preset, param_number).minVal = btnMin;
     controls.getButtonShortAt(preset, param_number).maxVal = btnMax;
     controls.getButtonShortAt(preset, param_number).isFunction = isFunction;
@@ -408,7 +408,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     arr.add((int)btnMax);
     arr.add(isFunction ? 1 : 0);
     arr.add((int)fnId);
-    json.setButtonToggleMode(preset, param_number, toggleMode ? 1 : 0);
+    json.setButtonToggleMode(preset, param_number, (int)pressMode);
     if (preset == controls.getPreset()) {
       updateFaderTitles();
       showDisplay();
@@ -617,7 +617,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
         arr.add((int)btn.maxVal);
         arr.add(1);
         arr.add((int)fnId);
-        json.setButtonToggleMode(p, idx, btn.toggleMode ? 1 : 0);
+        json.setButtonToggleMode(p, idx, (int)btn.pressMode);
       } else {
         MidiControl& enc = controls.getEncoderAt(p, idx);
         enc.isFunction = true;

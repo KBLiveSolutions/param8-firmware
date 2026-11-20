@@ -740,13 +740,13 @@ void onButtonPressed(uint8_t idx)
         uint8_t number = controls.getButtonShort(idx).number;
         uint8_t _value;
         bool isFn = controls.getButtonShort(idx).isFunction;
-        bool isToggle = (controls.getPreset() < 24) && !isFn && controls.getButtonShort(idx).toggleMode;
-        if (isToggle) {
+        uint8_t pm = (controls.getPreset() < 24 && !isFn) ? controls.getButtonShort(idx).pressMode : 0;
+        if (pm == 1) { // Toggle
             bool newState = !faders[idx]->buttonState;
             faders[idx]->buttonState = newState;
             faders[idx]->updateButtonName(newState);
             _value = newState ? controls.getButtonShort(idx).maxVal : controls.getButtonShort(idx).minVal;
-        } else {
+        } else { // Momentary or Trigger: send max on press
             _value = (controls.getPreset() < 24 && !isFn) ? controls.getButtonShort(idx).maxVal : 127;
         }
         controls.getButtonShort(idx).value = _value;
@@ -798,8 +798,8 @@ void onButtonReleased(uint8_t idx)
     ControlMidiType type = controls.getButtonShort(idx).type;
     uint8_t number = controls.getButtonShort(idx).number;
     bool isFn = controls.getButtonShort(idx).isFunction;
-    bool isToggle = (controls.getPreset() < 24) && !isFn && controls.getButtonShort(idx).toggleMode;
-    if (!isToggle && type != MIDI_PC) {
+    uint8_t pm = (controls.getPreset() < 24 && !isFn) ? controls.getButtonShort(idx).pressMode : 0;
+    if (pm == 0 && type != MIDI_PC) { // Momentary only: send min on release
         uint8_t releaseVal = (controls.getPreset() < 24 && !isFn) ? controls.getButtonShort(idx).minVal : 0;
         if (controls.getButtonShort(idx).isFunction)
             sendMidiMessage(MIDI_CC, controls.getButtonShort(idx).fnId, releaseVal, 7, 0);

@@ -15,7 +15,7 @@ struct MidiControl {
     uint8_t number;
     uint8_t channel;
     uint8_t value = 0;
-    bool toggleMode = false;
+    uint8_t pressMode = 0; // 0=Momentary, 1=Toggle, 2=Trigger
     unsigned long lastActivity = 0;
     char controlName[20] = {0};
     bool hasWatcher = false;
@@ -46,7 +46,7 @@ public:
     MidiControl& getButtonShortAt(uint8_t preset, uint8_t idx);
    
     void setEncoder(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel);
-    void setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, bool toggleMode);
+    void setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, uint8_t pressMode);
 
     const char* getPresetName(uint8_t preset);
     void setPresetName(uint8_t preset, const char* name);

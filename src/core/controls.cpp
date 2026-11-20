@@ -58,13 +58,13 @@ void ControlsManager::setEncoder(uint8_t preset, uint8_t idx, ControlMidiType ty
     }
 }
 
-void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, bool toggleMode) {
+void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, uint8_t pressMode) {
     if (preset < 26 && idx < 8) {
         MidiControl& btn = _presets[preset].buttons_short[idx];
         btn.type = type;
         btn.number = number;
         btn.channel = channel;
-        btn.toggleMode = toggleMode;
+        btn.pressMode = pressMode;
     }
 }
 
@@ -152,7 +152,7 @@ void ControlsManager::setDefaults() {
                 _presets[_preset].buttons_short[i].type       = static_cast<ControlMidiType>(data.value0);
                 _presets[_preset].buttons_short[i].number     = static_cast<uint8_t>(data.value1);
                 _presets[_preset].buttons_short[i].channel    = static_cast<uint8_t>(data.value2);
-                _presets[_preset].buttons_short[i].toggleMode = json.getButtonToggleMode(_preset, i) > 0;
+                _presets[_preset].buttons_short[i].pressMode  = (uint8_t)json.getButtonToggleMode(_preset, i);
                 _presets[_preset].buttons_short[i].minVal     = (data.value3 < 0) ? 0   : (uint8_t)data.value3;
                 _presets[_preset].buttons_short[i].maxVal     = (data.value4 < 0) ? 127 : (uint8_t)data.value4;
                 _presets[_preset].buttons_short[i].isFunction = (data.value5 > 0);
@@ -254,7 +254,7 @@ void ControlsManager::getPresetControls(uint8_t preset) {
                                   static_cast<uint8_t>(_presets[preset].buttons_short[i].type),
                                   _presets[preset].buttons_short[i].number,
                                   _presets[preset].buttons_short[i].channel,
-                                  _presets[preset].buttons_short[i].toggleMode ? (uint8_t)1 : (uint8_t)0,
+                                  _presets[preset].buttons_short[i].pressMode,
                                   _presets[preset].buttons_short[i].minVal,
                                   _presets[preset].buttons_short[i].maxVal,
                                   _presets[preset].buttons_short[i].isFunction ? (uint8_t)1 : (uint8_t)0,
