@@ -17,6 +17,7 @@ extern bool bankLabelDirty;
 extern char trackLabel[20];
 extern bool trackLabelDirty;
 extern char presetLabel[20];
+extern char presetNumberLabel[20];
 extern bool presetLabelDirty;
 extern uint8_t currentLabelConfig[4];
 

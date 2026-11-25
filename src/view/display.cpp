@@ -13,6 +13,7 @@ char deviceLabel[20] = "Device";
 char bankLabel[20] = "Bank";
 char trackLabel[20] = "Track";
 char presetLabel[20] = {0};
+char presetNumberLabel[20] = {0};
 bool deviceLabelDirty = false;
 bool bankLabelDirty = false;
 bool trackLabelDirty = false;
@@ -124,7 +125,7 @@ static const char* getLabelByType(uint8_t type) {
         case 2: return deviceLabel;
         case 3: return bankLabel;
         case 4: return presetLabel;
-        case 5: return presetLabel; // number form set elsewhere
+        case 5: return presetNumberLabel;
         default: return nullptr;
     }
 }
@@ -191,6 +192,10 @@ void drawAllWidgets() {
         snprintf(presetLabel, sizeof(presetLabel), "Preset %d", currentPreset + 1);
     }
     presetLabel[sizeof(presetLabel) - 1] = '\0';
+    if (currentPreset < 24)
+        snprintf(presetNumberLabel, sizeof(presetNumberLabel), "Preset %d", currentPreset + 1);
+    else
+        presetNumberLabel[0] = '\0';
 
     for (int i = 0; i < 4; i++) drawOrClearSlot(i);
     deviceLabelDirty = false;
