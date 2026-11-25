@@ -503,7 +503,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
       screenSaverActive = false;
       showDisplay();
     }
-    onSlewStateUpdatedFromEditor();  // redraws settings page if active
+    onSmoothStateUpdatedFromEditor();  // redraws settings page if active
     break;
   }
   case 0x1B:
@@ -512,7 +512,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     setBrightness(val);
     json.getDoc()["brightness"] = val;
     json.save();
-    onSlewStateUpdatedFromEditor();  // redraws settings page if active
+    onSmoothStateUpdatedFromEditor();  // redraws settings page if active
     break;
   }
   case 0x13:
@@ -643,39 +643,39 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 0x24:
   {
-    // Set latch slew: F0 6F 24 <level> <syncMode 0/1> <syncStep 0-7> F7
+    // Set latch smooth: F0 6F 24 <level> <syncMode 0/1> <syncStep 0-7> F7
     if (len < 7) break;
-    latchSlewLevel    = sysex[3] & 0x7F;
-    latchSlewSync     = (sysex[4] & 0x7F) != 0;
-    latchSlewSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
-    json.getDoc()["latchSlew"]         = (int)latchSlewLevel;
-    json.getDoc()["latchSlewSync"]     = (bool)latchSlewSync;
-    json.getDoc()["latchSlewSyncStep"] = (int)latchSlewSyncStep;
+    latchSmoothLevel    = sysex[3] & 0x7F;
+    latchSmoothSync     = (sysex[4] & 0x7F) != 0;
+    latchSmoothSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
+    json.getDoc()["latchSmooth"]         = (int)latchSmoothLevel;
+    json.getDoc()["latchSmoothSync"]     = (bool)latchSmoothSync;
+    json.getDoc()["latchSmoothSyncStep"] = (int)latchSmoothSyncStep;
     json.save();
-    onSlewStateUpdatedFromEditor();
+    onSmoothStateUpdatedFromEditor();
     break;
   }
   case 0x25:
   {
-    // Set revert slew: F0 6F 25 <level> <syncMode 0/1> <syncStep 0-7> F7
+    // Set revert smooth: F0 6F 25 <level> <syncMode 0/1> <syncStep 0-7> F7
     if (len < 7) break;
-    revertSlewLevel    = sysex[3] & 0x7F;
-    revertSlewSync     = (sysex[4] & 0x7F) != 0;
-    revertSlewSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
-    json.getDoc()["revertSlew"]         = (int)revertSlewLevel;
-    json.getDoc()["revertSlewSync"]     = (bool)revertSlewSync;
-    json.getDoc()["revertSlewSyncStep"] = (int)revertSlewSyncStep;
+    revertSmoothLevel    = sysex[3] & 0x7F;
+    revertSmoothSync     = (sysex[4] & 0x7F) != 0;
+    revertSmoothSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
+    json.getDoc()["revertSmooth"]         = (int)revertSmoothLevel;
+    json.getDoc()["revertSmoothSync"]     = (bool)revertSmoothSync;
+    json.getDoc()["revertSmoothSyncStep"] = (int)revertSmoothSyncStep;
     json.save();
-    onSlewStateUpdatedFromEditor();
+    onSmoothStateUpdatedFromEditor();
     break;
   }
   case 0x26:
   {
-    // Request slew state → reply with 0x24 and 0x25
-    uint8_t lPkt[7] = {0xF0, 0x6F, 0x24, latchSlewLevel, (uint8_t)(latchSlewSync ? 1 : 0), latchSlewSyncStep, 0xF7};
+    // Request smooth state → reply with 0x24 and 0x25
+    uint8_t lPkt[7] = {0xF0, 0x6F, 0x24, latchSmoothLevel, (uint8_t)(latchSmoothSync ? 1 : 0), latchSmoothSyncStep, 0xF7};
     usb_midi.write(lPkt, 7);
     serialEditorSend(lPkt, 7);
-    uint8_t rPkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
+    uint8_t rPkt[7] = {0xF0, 0x6F, 0x25, revertSmoothLevel, (uint8_t)(revertSmoothSync ? 1 : 0), revertSmoothSyncStep, 0xF7};
     usb_midi.write(rPkt, 7);
     serialEditorSend(rPkt, 7);
     break;

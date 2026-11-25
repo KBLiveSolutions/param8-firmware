@@ -2,12 +2,12 @@
 #include <Arduino.h>
 
 extern bool     shiftPressed;
-extern uint8_t  latchSlewLevel;
-extern uint8_t  revertSlewLevel;
-extern bool     latchSlewSync;
-extern bool     revertSlewSync;
-extern uint8_t  latchSlewSyncStep;
-extern uint8_t  revertSlewSyncStep;
+extern uint8_t  latchSmoothLevel;
+extern uint8_t  revertSmoothLevel;
+extern bool     latchSmoothSync;
+extern bool     revertSmoothSync;
+extern uint8_t  latchSmoothSyncStep;
+extern uint8_t  revertSmoothSyncStep;
 extern uint32_t liveBpmCents;
 extern bool settingsModeActive;
 extern bool latchPressed;
@@ -40,5 +40,5 @@ void initActionSettings();
 void onButtonPressed(uint8_t);
 void onButtonReleased(uint8_t);
 bool isSelectingPreset();
-void checkSlewProgress();
-void onSlewStateUpdatedFromEditor();
+void checkSmoothProgress();
+void onSmoothStateUpdatedFromEditor();

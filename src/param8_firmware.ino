@@ -88,7 +88,7 @@ void loop() {
     checkLatchPending();
     checkNamingPending();
     checkPendingPresetSave();
-    checkSlewProgress();
+    checkSmoothProgress();
     updateLeds();
 
     unsigned long currentTime = millis();

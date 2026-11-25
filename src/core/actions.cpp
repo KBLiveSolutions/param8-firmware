@@ -62,34 +62,34 @@ static const float       syncStepQuarters[] = {0.25f,0.5f,1.0f,2.0f,4.0f,8.0f,16
 
 uint32_t liveBpmCents = 12000; // default 120.00 BPM
 
-static int slewLevelToMs(uint8_t level) {
+static int smoothLevelToMs(uint8_t level) {
     if (level == 0) return 0;
     return (int)roundf(100.0f * powf(590.0f, (level - 1) / 126.0f));
 }
-static int syncSlewToMs(uint8_t step) {
+static int syncSmoothToMs(uint8_t step) {
     if (liveBpmCents == 0) return 0;
     float msPerQuarter = 60000.0f / (liveBpmCents / 100.0f);
     return (int)(msPerQuarter * syncStepQuarters[step]);
 }
-static void formatSlewLabel(uint8_t level, bool syncMode, uint8_t syncStep, char* buf, size_t len) {
+static void formatSmoothLabel(uint8_t level, bool syncMode, uint8_t syncStep, char* buf, size_t len) {
     if (syncMode) { strncpy(buf, syncStepLabels[syncStep], len); return; }
     if (level == 0) { strncpy(buf, "Off", len); return; }
-    int ms = slewLevelToMs(level);
+    int ms = smoothLevelToMs(level);
     if (ms < 1000) snprintf(buf, len, "%dms", ms);
     else           snprintf(buf, len, "%.1fs", ms / 1000.0f);
 }
-uint8_t latchSlewLevel  = 0;
-uint8_t revertSlewLevel = 0;
-bool    latchSlewSync   = false;
-bool    revertSlewSync  = false;
-uint8_t latchSlewSyncStep  = 2; // 1/4 note default
-uint8_t revertSlewSyncStep = 2;
+uint8_t latchSmoothLevel  = 0;
+uint8_t revertSmoothLevel = 0;
+bool    latchSmoothSync   = false;
+bool    revertSmoothSync  = false;
+uint8_t latchSmoothSyncStep  = 2; // 1/4 note default
+uint8_t revertSmoothSyncStep = 2;
 static bool settingsPendingSave = false;
 
 uint8_t revertAbsoluteOriginal[8] = {0};
 bool revertAbsoluteChanged[8] = {false};
 
-struct SlewOp {
+struct SmoothOp {
     bool     active   = false;
     int      fromVal  = 0;
     int      toVal    = 0;
@@ -100,43 +100,43 @@ struct SlewOp {
     uint8_t  number  = 0;
     uint8_t  channel = 0;
 };
-static SlewOp slewOps[8];
+static SmoothOp smoothOps[8];
 
-struct RelSlewOp {
+struct RelSmoothOp {
     bool active = false;
     int  target[8] = {0};
     int  sent[8]   = {0};
     unsigned long startTime = 0;
     unsigned long totalMs   = 0;
 };
-static RelSlewOp relSlew;
+static RelSmoothOp relSmooth;
 
-static void startAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
+static void startAbsoluteSmooth(uint8_t idx, int fromVal, int toVal, int smoothMs) {
     uint8_t channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
     uint8_t number  = controls.getEncoder(idx).number;
     int range = abs(toVal - fromVal);
-    unsigned long totalMs = range > 0 ? (unsigned long)slewMs * range / 127 : 0;
+    unsigned long totalMs = range > 0 ? (unsigned long)smoothMs * range / 127 : 0;
     if (totalMs == 0) { sendMidiMessage(type, number, (uint8_t)toVal, channel); return; }
-    slewOps[idx].active    = true;
-    slewOps[idx].fromVal   = fromVal;
-    slewOps[idx].toVal     = toVal;
-    slewOps[idx].lastSent  = fromVal;
-    slewOps[idx].startTime = millis();
-    slewOps[idx].totalMs   = totalMs;
-    slewOps[idx].type      = type;
-    slewOps[idx].number    = number;
-    slewOps[idx].channel   = channel;
+    smoothOps[idx].active    = true;
+    smoothOps[idx].fromVal   = fromVal;
+    smoothOps[idx].toVal     = toVal;
+    smoothOps[idx].lastSent  = fromVal;
+    smoothOps[idx].startTime = millis();
+    smoothOps[idx].totalMs   = totalMs;
+    smoothOps[idx].type      = type;
+    smoothOps[idx].number    = number;
+    smoothOps[idx].channel   = channel;
 }
 
 // kept only to avoid touching the old dead-code path below:
-static void sendAbsoluteSlew(uint8_t idx, int fromVal, int toVal, int slewMs) {
+static void sendAbsoluteSmooth(uint8_t idx, int fromVal, int toVal, int smoothMs) {
     uint8_t  channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
     uint8_t  number  = controls.getEncoder(idx).number;
     int range = abs(toVal - fromVal);
     if (range == 0) { sendMidiMessage(type, number, (uint8_t)toVal, channel); return; }
-    int totalMs = (slewMs * range + 63) / 127;
+    int totalMs = (smoothMs * range + 63) / 127;
     const int stepMs = 5;
     int steps = max(1, totalMs / stepMs);
     for (int s = 1; s <= steps; s++) {
@@ -153,44 +153,44 @@ bool isSelectingPreset() {
 void sendRelativeCC(uint8_t type, uint8_t number, int delta, uint8_t channel, uint8_t cable = 255);
 
 
-void checkSlewProgress() {
+void checkSmoothProgress() {
     unsigned long now = millis();
 
     for (int i = 0; i < 8; ++i) {
-        if (!slewOps[i].active) continue;
-        unsigned long elapsed = now - slewOps[i].startTime;
-        bool done = elapsed >= slewOps[i].totalMs;
+        if (!smoothOps[i].active) continue;
+        unsigned long elapsed = now - smoothOps[i].startTime;
+        bool done = elapsed >= smoothOps[i].totalMs;
         int newVal = done
-            ? slewOps[i].toVal
-            : slewOps[i].fromVal + (int)((long)(slewOps[i].toVal - slewOps[i].fromVal) * (long)elapsed / (long)slewOps[i].totalMs);
+            ? smoothOps[i].toVal
+            : smoothOps[i].fromVal + (int)((long)(smoothOps[i].toVal - smoothOps[i].fromVal) * (long)elapsed / (long)smoothOps[i].totalMs);
         newVal = constrain(newVal, 0, 127);
-        if (newVal != slewOps[i].lastSent) {
-            sendMidiMessage(slewOps[i].type, slewOps[i].number, (uint8_t)newVal, slewOps[i].channel);
+        if (newVal != smoothOps[i].lastSent) {
+            sendMidiMessage(smoothOps[i].type, smoothOps[i].number, (uint8_t)newVal, smoothOps[i].channel);
             controls.getEncoder(i).value = (uint8_t)newVal;
             updateFader(i, newVal);
-            slewOps[i].lastSent = newVal;
+            smoothOps[i].lastSent = newVal;
         }
-        if (done) slewOps[i].active = false;
+        if (done) smoothOps[i].active = false;
     }
 
-    if (relSlew.active) {
-        unsigned long elapsed = now - relSlew.startTime;
-        bool done = elapsed >= relSlew.totalMs;
+    if (relSmooth.active) {
+        unsigned long elapsed = now - relSmooth.startTime;
+        bool done = elapsed >= relSmooth.totalMs;
         for (int i = 0; i < 8; ++i) {
-            if (relSlew.target[i] == 0) continue;
+            if (relSmooth.target[i] == 0) continue;
             int shouldHaveSent = done
-                ? relSlew.target[i]
-                : (int)((long)relSlew.target[i] * (long)elapsed / (long)relSlew.totalMs);
-            int delta = shouldHaveSent - relSlew.sent[i];
+                ? relSmooth.target[i]
+                : (int)((long)relSmooth.target[i] * (long)elapsed / (long)relSmooth.totalMs);
+            int delta = shouldHaveSent - relSmooth.sent[i];
             if (delta != 0) {
                 uint8_t ch  = controls.getEncoder(i).channel;
                 ControlMidiType t = controls.getEncoder(i).type;
                 uint8_t num = controls.getEncoder(i).number;
                 sendRelativeCC(t, num, delta, ch);
-                relSlew.sent[i] = shouldHaveSent;
+                relSmooth.sent[i] = shouldHaveSent;
             }
         }
-        if (done) relSlew.active = false;
+        if (done) relSmooth.active = false;
     }
 }
 
@@ -199,14 +199,14 @@ void initActionSettings() {
     screensaverLevel = 0;
     for (int i = SS_STEPS - 1; i > 0; --i)
         if (sec >= ssStepsSec[i]) { screensaverLevel = i; break; }
-    int savedLS = json.getDoc()["latchSlew"]  | 0;
-    int savedRS = json.getDoc()["revertSlew"] | 0;
-    latchSlewLevel  = (uint8_t)constrain(savedLS, 0, 127);
-    revertSlewLevel = (uint8_t)constrain(savedRS, 0, 127);
-    latchSlewSync      = json.getDoc()["latchSlewSync"]  | false;
-    revertSlewSync     = json.getDoc()["revertSlewSync"] | false;
-    latchSlewSyncStep  = (uint8_t)constrain((int)(json.getDoc()["latchSlewSyncStep"]  | 2), 0, SYNC_STEPS - 1);
-    revertSlewSyncStep = (uint8_t)constrain((int)(json.getDoc()["revertSlewSyncStep"] | 2), 0, SYNC_STEPS - 1);
+    int savedLS = json.getDoc()["latchSmooth"]  | 0;
+    int savedRS = json.getDoc()["revertSmooth"] | 0;
+    latchSmoothLevel  = (uint8_t)constrain(savedLS, 0, 127);
+    revertSmoothLevel = (uint8_t)constrain(savedRS, 0, 127);
+    latchSmoothSync      = json.getDoc()["latchSmoothSync"]  | false;
+    revertSmoothSync     = json.getDoc()["revertSmoothSync"] | false;
+    latchSmoothSyncStep  = (uint8_t)constrain((int)(json.getDoc()["latchSmoothSyncStep"]  | 2), 0, SYNC_STEPS - 1);
+    revertSmoothSyncStep = (uint8_t)constrain((int)(json.getDoc()["revertSmoothSyncStep"] | 2), 0, SYNC_STEPS - 1);
     uint8_t p = controls.getPreset();
     navPresetCursor = (p < 24) ? p : 0;
 }
@@ -283,16 +283,16 @@ static void drawSettingsPage() {
     faders[2]->dimmed     = false;
     faders[2]->valueOnly  = false;
     faders[2]->showingValue = false;
-    faders[2]->setParamName("Latch Slew");
-    faders[2]->setQuantized(latchSlewSync ? SYNC_STEPS : 0);
-    if (latchSlewSync) {
-        faders[2]->value = latchSlewSyncStep * 127 / (SYNC_STEPS - 1);
-        strncpy(faders[2]->title, syncStepLabels[latchSlewSyncStep], 20);
+    faders[2]->setParamName("Latch Smooth");
+    faders[2]->setQuantized(latchSmoothSync ? SYNC_STEPS : 0);
+    if (latchSmoothSync) {
+        faders[2]->value = latchSmoothSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[2]->title, syncStepLabels[latchSmoothSyncStep], 20);
         strncpy(faders[2]->buttonName, "Sync", 20);
         strncpy(faders[2]->buttonText, "Sync", 20);
     } else {
-        faders[2]->value = latchSlewLevel;
-        formatSlewLabel(latchSlewLevel, false, 0, faders[2]->title, 20);
+        faders[2]->value = latchSmoothLevel;
+        formatSmoothLabel(latchSmoothLevel, false, 0, faders[2]->title, 20);
         strncpy(faders[2]->buttonName, "Time", 20);
         strncpy(faders[2]->buttonText, "Time", 20);
     }
@@ -301,16 +301,16 @@ static void drawSettingsPage() {
     faders[3]->dimmed     = false;
     faders[3]->valueOnly  = false;
     faders[3]->showingValue = false;
-    faders[3]->setParamName("Revert Slew");
-    faders[3]->setQuantized(revertSlewSync ? SYNC_STEPS : 0);
-    if (revertSlewSync) {
-        faders[3]->value = revertSlewSyncStep * 127 / (SYNC_STEPS - 1);
-        strncpy(faders[3]->title, syncStepLabels[revertSlewSyncStep], 20);
+    faders[3]->setParamName("Revert Smooth");
+    faders[3]->setQuantized(revertSmoothSync ? SYNC_STEPS : 0);
+    if (revertSmoothSync) {
+        faders[3]->value = revertSmoothSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[3]->title, syncStepLabels[revertSmoothSyncStep], 20);
         strncpy(faders[3]->buttonName, "Sync", 20);
         strncpy(faders[3]->buttonText, "Sync", 20);
     } else {
-        faders[3]->value = revertSlewLevel;
-        formatSlewLabel(revertSlewLevel, false, 0, faders[3]->title, 20);
+        faders[3]->value = revertSmoothLevel;
+        formatSmoothLabel(revertSmoothLevel, false, 0, faders[3]->title, 20);
         strncpy(faders[3]->buttonName, "Time", 20);
         strncpy(faders[3]->buttonText, "Time", 20);
     }
@@ -395,12 +395,12 @@ void onShiftPress()
         json.getDoc()["screensaver"] = (int)ssStepsSec[screensaverLevel];
         json.getDoc()["brightness"]  = (int)brightnessLevel;
         json.getDoc()["layout"]            = (int)faderLayout;
-        json.getDoc()["latchSlew"]         = (int)latchSlewLevel;
-        json.getDoc()["revertSlew"]        = (int)revertSlewLevel;
-        json.getDoc()["latchSlewSync"]     = (bool)latchSlewSync;
-        json.getDoc()["revertSlewSync"]    = (bool)revertSlewSync;
-        json.getDoc()["latchSlewSyncStep"] = (int)latchSlewSyncStep;
-        json.getDoc()["revertSlewSyncStep"]= (int)revertSlewSyncStep;
+        json.getDoc()["latchSmooth"]         = (int)latchSmoothLevel;
+        json.getDoc()["revertSmooth"]        = (int)revertSmoothLevel;
+        json.getDoc()["latchSmoothSync"]     = (bool)latchSmoothSync;
+        json.getDoc()["revertSmoothSync"]    = (bool)revertSmoothSync;
+        json.getDoc()["latchSmoothSyncStep"] = (int)latchSmoothSyncStep;
+        json.getDoc()["revertSmoothSyncStep"]= (int)revertSmoothSyncStep;
         json.getDoc()["ledsDimOff"]        = (bool)ledsDimOff;
         settingsPendingSave = true;
         showDisplay();
@@ -685,16 +685,16 @@ void onButtonPressed(uint8_t idx)
             { uint8_t pkt[5] = {0xF0, 0x6F, 0x0E, (uint8_t)faderLayout, 0xF7};
               serialEditorSend(pkt, 5); }
         } else if (idx == 2) {
-            latchSlewSync = !latchSlewSync;
-            faders[2]->setQuantized(latchSlewSync ? SYNC_STEPS : 0);
+            latchSmoothSync = !latchSmoothSync;
+            faders[2]->setQuantized(latchSmoothSync ? SYNC_STEPS : 0);
             drawSettingsPage();
-            { uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSlewLevel, (uint8_t)(latchSlewSync ? 1 : 0), latchSlewSyncStep, 0xF7};
+            { uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSmoothLevel, (uint8_t)(latchSmoothSync ? 1 : 0), latchSmoothSyncStep, 0xF7};
               serialEditorSend(pkt, 7); }
         } else if (idx == 3) {
-            revertSlewSync = !revertSlewSync;
-            faders[3]->setQuantized(revertSlewSync ? SYNC_STEPS : 0);
+            revertSmoothSync = !revertSmoothSync;
+            faders[3]->setQuantized(revertSmoothSync ? SYNC_STEPS : 0);
             drawSettingsPage();
-            { uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
+            { uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSmoothLevel, (uint8_t)(revertSmoothSync ? 1 : 0), revertSmoothSyncStep, 0xF7};
               serialEditorSend(pkt, 7); }
         } else if (idx == 4) {
             ledsDimOff = !ledsDimOff;
@@ -871,41 +871,41 @@ static void handleSettingsScreensaver(int delta) {
     serialEditorSend(pkt, 6);
 }
 
-static void handleSettingsLatchSlew(int delta) {
-    if (latchSlewSync) {
-        int s = (int)latchSlewSyncStep + (delta > 0 ? 1 : -1);
-        latchSlewSyncStep = (uint8_t)constrain(s, 0, SYNC_STEPS - 1);
-        faders[2]->value = latchSlewSyncStep * 127 / (SYNC_STEPS - 1);
-        strncpy(faders[2]->title, syncStepLabels[latchSlewSyncStep], 20);
+static void handleSettingsLatchSmooth(int delta) {
+    if (latchSmoothSync) {
+        int s = (int)latchSmoothSyncStep + (delta > 0 ? 1 : -1);
+        latchSmoothSyncStep = (uint8_t)constrain(s, 0, SYNC_STEPS - 1);
+        faders[2]->value = latchSmoothSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[2]->title, syncStepLabels[latchSmoothSyncStep], 20);
     } else {
-        latchSlewLevel = (uint8_t)constrain((int)latchSlewLevel + delta, 0, 127);
-        faders[2]->value = latchSlewLevel;
-        formatSlewLabel(latchSlewLevel, false, 0, faders[2]->title, 20);
+        latchSmoothLevel = (uint8_t)constrain((int)latchSmoothLevel + delta, 0, 127);
+        faders[2]->value = latchSmoothLevel;
+        formatSmoothLabel(latchSmoothLevel, false, 0, faders[2]->title, 20);
     }
     faders[2]->showingValue = true;
     controls.getEncoder(2).lastActivity = millis();
     faders[2]->draw();
     flushDisplays();
-    uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSlewLevel, (uint8_t)(latchSlewSync ? 1 : 0), latchSlewSyncStep, 0xF7};
+    uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSmoothLevel, (uint8_t)(latchSmoothSync ? 1 : 0), latchSmoothSyncStep, 0xF7};
     serialEditorSend(pkt, 7);
 }
 
-static void handleSettingsRevertSlew(int delta) {
-    if (revertSlewSync) {
-        int s = (int)revertSlewSyncStep + (delta > 0 ? 1 : -1);
-        revertSlewSyncStep = (uint8_t)constrain(s, 0, SYNC_STEPS - 1);
-        faders[3]->value = revertSlewSyncStep * 127 / (SYNC_STEPS - 1);
-        strncpy(faders[3]->title, syncStepLabels[revertSlewSyncStep], 20);
+static void handleSettingsRevertSmooth(int delta) {
+    if (revertSmoothSync) {
+        int s = (int)revertSmoothSyncStep + (delta > 0 ? 1 : -1);
+        revertSmoothSyncStep = (uint8_t)constrain(s, 0, SYNC_STEPS - 1);
+        faders[3]->value = revertSmoothSyncStep * 127 / (SYNC_STEPS - 1);
+        strncpy(faders[3]->title, syncStepLabels[revertSmoothSyncStep], 20);
     } else {
-        revertSlewLevel = (uint8_t)constrain((int)revertSlewLevel + delta, 0, 127);
-        faders[3]->value = revertSlewLevel;
-        formatSlewLabel(revertSlewLevel, false, 0, faders[3]->title, 20);
+        revertSmoothLevel = (uint8_t)constrain((int)revertSmoothLevel + delta, 0, 127);
+        faders[3]->value = revertSmoothLevel;
+        formatSmoothLabel(revertSmoothLevel, false, 0, faders[3]->title, 20);
     }
     faders[3]->showingValue = true;
     controls.getEncoder(3).lastActivity = millis();
     faders[3]->draw();
     flushDisplays();
-    uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
+    uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSmoothLevel, (uint8_t)(revertSmoothSync ? 1 : 0), revertSmoothSyncStep, 0xF7};
     serialEditorSend(pkt, 7);
 }
 
@@ -935,8 +935,8 @@ void onRelativeEncoderChange(uint8_t idx, int delta)
     if (settingsModeActive) {
         if      (idx == 0) handleSettingsBrightness(delta);
         else if (idx == 1) handleSettingsScreensaver(delta);
-        else if (idx == 2) handleSettingsLatchSlew(delta);
-        else if (idx == 3) handleSettingsRevertSlew(delta);
+        else if (idx == 2) handleSettingsLatchSmooth(delta);
+        else if (idx == 3) handleSettingsRevertSmooth(delta);
         return;
     }
     if (shiftState == SHIFT_HOLD) {
@@ -1010,8 +1010,8 @@ void onAbsoluteEncoderChange(uint8_t idx, int delta)
     if (settingsModeActive) {
         if      (idx == 0) handleSettingsBrightness(delta);
         else if (idx == 1) handleSettingsScreensaver(delta);
-        else if (idx == 2) handleSettingsLatchSlew(delta);
-        else if (idx == 3) handleSettingsRevertSlew(delta);
+        else if (idx == 2) handleSettingsLatchSmooth(delta);
+        else if (idx == 3) handleSettingsRevertSmooth(delta);
         return;
     }
     if (shiftState == SHIFT_HOLD) {
@@ -1222,15 +1222,15 @@ void sendPresetSysEx(uint8_t preset)
 
 void releaseLatchAndSend()
 {
-    int slewMs = latchSlewSync ? syncSlewToMs(latchSlewSyncStep) : slewLevelToMs(latchSlewLevel);
+    int smoothMs = latchSmoothSync ? syncSmoothToMs(latchSmoothSyncStep) : smoothLevelToMs(latchSmoothLevel);
 
     for (int i = 0; i < 8; ++i)
     {
         if (latchAbsoluteChanged[i])
         {
             ControlMidiType type = controls.getEncoder(i).type;
-            if (slewMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB) {
-                startAbsoluteSlew(i, latchOriginalValue[i], latchAbsoluteValue[i], slewMs);
+            if (smoothMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB) {
+                startAbsoluteSmooth(i, latchOriginalValue[i], latchAbsoluteValue[i], smoothMs);
             } else {
                 uint8_t channel = controls.getEncoder(i).channel;
                 uint8_t number  = controls.getEncoder(i).number;
@@ -1240,16 +1240,16 @@ void releaseLatchAndSend()
         }
     }
 
-    if (slewMs > 0) {
+    if (smoothMs > 0) {
         int maxAcc = 0;
         for (int i = 0; i < 8; ++i)
             if (abs(latchRelAccum[i]) > maxAcc) maxAcc = abs(latchRelAccum[i]);
         if (maxAcc > 0) {
-            unsigned long totalMs = (unsigned long)slewMs * maxAcc / 127;
-            relSlew.active    = true;
-            relSlew.startTime = millis();
-            relSlew.totalMs   = totalMs;
-            for (int i = 0; i < 8; ++i) { relSlew.target[i] = latchRelAccum[i]; relSlew.sent[i] = 0; }
+            unsigned long totalMs = (unsigned long)smoothMs * maxAcc / 127;
+            relSmooth.active    = true;
+            relSmooth.startTime = millis();
+            relSmooth.totalMs   = totalMs;
+            for (int i = 0; i < 8; ++i) { relSmooth.target[i] = latchRelAccum[i]; relSmooth.sent[i] = 0; }
         }
     } else {
         uint8_t maxEvents = 0;
@@ -1277,7 +1277,7 @@ void releaseLatchAndSend()
 
 void sendRevertEvents()
 {
-    int slewMs = revertSlewSync ? syncSlewToMs(revertSlewSyncStep) : slewLevelToMs(revertSlewLevel);
+    int smoothMs = revertSmoothSync ? syncSmoothToMs(revertSmoothSyncStep) : smoothLevelToMs(revertSmoothLevel);
     for (int i = 0; i < 8; ++i)
     {
         if (!revertAbsoluteChanged[i])
@@ -1299,10 +1299,10 @@ void sendRevertEvents()
             controls.getEncoder(i).value = revertAbsoluteOriginal[i];
             updateFader(i, revertAbsoluteOriginal[i]);
         }
-        else if (slewMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB)
+        else if (smoothMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB)
         {
-            startAbsoluteSlew(i, controls.getEncoder(i).value, revertAbsoluteOriginal[i], slewMs);
-            // value/fader updated incrementally by checkSlewProgress()
+            startAbsoluteSmooth(i, controls.getEncoder(i).value, revertAbsoluteOriginal[i], smoothMs);
+            // value/fader updated incrementally by checkSmoothProgress()
         }
         else
         {
@@ -1319,7 +1319,7 @@ void setRevertModeLed(bool on)
     setLedBlink(0, on);
 }
 
-void onSlewStateUpdatedFromEditor()
+void onSmoothStateUpdatedFromEditor()
 {
     if (settingsModeActive) drawSettingsPage();
 }
