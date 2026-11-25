@@ -117,9 +117,8 @@ static void startAbsoluteSmooth(uint8_t idx, int fromVal, int toVal, int smoothM
     uint8_t channel = controls.getEncoder(idx).channel;
     ControlMidiType type = controls.getEncoder(idx).type;
     uint8_t number  = controls.getEncoder(idx).number;
-    int range = abs(toVal - fromVal);
-    unsigned long totalMs = range > 0 ? (unsigned long)smoothMs * range / 127 : 0;
-    if (totalMs == 0) { sendMidiMessage(type, number, (uint8_t)toVal, channel); return; }
+    if (fromVal == toVal || smoothMs == 0) { sendMidiMessage(type, number, (uint8_t)toVal, channel); return; }
+    unsigned long totalMs = (unsigned long)smoothMs;
     smoothOps[idx].active    = true;
     smoothOps[idx].fromVal   = fromVal;
     smoothOps[idx].toVal     = toVal;
@@ -1288,10 +1287,9 @@ void releaseLatchAndSend()
         for (int i = 0; i < 8; ++i)
             if (abs(latchRelAccum[i]) > maxAcc) maxAcc = abs(latchRelAccum[i]);
         if (maxAcc > 0) {
-            unsigned long totalMs = (unsigned long)smoothMs * maxAcc / 127;
             relSmooth.active    = true;
             relSmooth.startTime = millis();
-            relSmooth.totalMs   = totalMs;
+            relSmooth.totalMs   = (unsigned long)smoothMs;
             for (int i = 0; i < 8; ++i) { relSmooth.target[i] = latchRelAccum[i]; relSmooth.sent[i] = 0; }
         }
     } else {
