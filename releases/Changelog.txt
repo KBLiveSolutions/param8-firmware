@@ -38,9 +38,11 @@ v1.1.0 — 2026-11-20
     Various :
 
     - PB speed has been improved
-    
+
     - Trigger press mode: a third button mode alongside Toggle and Momentary.
       Sends the maximum value on press only, nothing on release.
+    
+    - In Device Mode, A/B has been replaced by Capture to make way for Live 13
 
 
 --------------------------------------------------------------------------------

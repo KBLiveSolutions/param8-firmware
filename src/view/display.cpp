@@ -3,6 +3,7 @@
 #include "../core/actions.h"
 #include "../core/controls.h"
 #include "../midi/midi.h"
+#include "fonts/MiscFixed7x13Bpt7b.h"
 
 
 FaderWidget* faders[8];
@@ -247,27 +248,49 @@ void drawDeviceBankLabels() {
 
 void runScreenSaver() {
     static unsigned long lastUpdate = 0;
-    static int pixelCount = 0;
-    const int pixelsPerFrame = 20;
+    static float x1 = 30.0f,  y1 = 10.0f, dx1 =  1.3f, dy1 = 0.7f;
+    static float x2 = 140.0f, y2 = 40.0f, dx2 = -1.1f, dy2 = 0.9f;
+    static int textW = 0, textH = 0, cursorYOff = 0;
     const unsigned long frameInterval = 50;
 
-    unsigned long now = millis();
-    if (now - lastUpdate >= frameInterval) {
-        lastUpdate = now;
-        pixelCount = 0;
-        display1.fillScreen(0);
-        display2.fillScreen(0);
-        while (pixelCount < pixelsPerFrame) {
-            int x = random(0, 256);
-            int y = random(0, 64);
-            display1.drawPixel(x, y, 15);
-            display2.drawPixel(x, y, 15);
-            pixelCount++;
-        }
-        display1.displayBlocking();
-        // display1 DMA complete; SPI is free for display2
-        display2.displayBlocking();
+    if (textW == 0) {
+        display1.setFont(&MiscFixed7x13Bpt7b);
+        int16_t bx, by; uint16_t bw, bh;
+        display1.getTextBounds("param8", 0, 0, &bx, &by, &bw, &bh);
+        textW = (int)bw;
+        textH = (int)bh;
+        cursorYOff = -by;   // cursor_y = iy + cursorYOff → text top aligns with iy
+        display1.setFont(NULL);
     }
+
+    unsigned long now = millis();
+    if (now - lastUpdate < frameInterval) return;
+    lastUpdate = now;
+
+    int maxX = 256 - textW, maxY = 64 - textH;
+
+    auto bounce = [](float &p, float &v, int hi) {
+        p += v;
+        if (p <= 0.0f)       { p = 0.0f;       v = -v; }
+        if (p >= (float)hi)  { p = (float)hi;   v = -v; }
+    };
+    bounce(x1, dx1, maxX);  bounce(y1, dy1, maxY);
+    bounce(x2, dx2, maxX);  bounce(y2, dy2, maxY);
+
+    display1.fillScreen(0);
+    display1.setFont(&MiscFixed7x13Bpt7b);
+    display1.setTextColor(15);
+    display1.setCursor((int)x1, (int)y1 + cursorYOff);
+    display1.print("param8");
+
+    display2.fillScreen(0);
+    display2.setFont(&MiscFixed7x13Bpt7b);
+    display2.setTextColor(15);
+    display2.setCursor((int)x2, (int)y2 + cursorYOff);
+    display2.print("param8");
+
+    display1.displayBlocking();
+    display2.displayBlocking();
 }
 
 void setBrightness(uint8_t level) {

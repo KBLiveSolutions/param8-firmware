@@ -34,6 +34,8 @@ unsigned long namingConfirmTime = 0;
 static bool pendingPresetSave = false;
 static bool pendingFullRedraw = false;
 static unsigned long lastPresetNavTime = 0;
+static bool pendingSmoothSave = false;
+static unsigned long pendingSmoothSaveTime = 0;
 static uint8_t navPresetCursor = 0;
 
 uint8_t latchAbsoluteValue[8] = {0};
@@ -296,6 +298,7 @@ static void drawSettingsPage() {
         strncpy(faders[2]->buttonName, "Time", 20);
         strncpy(faders[2]->buttonText, "Time", 20);
     }
+    faders[2]->buttonState = latchSmoothSync;
     faders[2]->draw();
     faders[3]->disabled   = false;
     faders[3]->dimmed     = false;
@@ -314,6 +317,7 @@ static void drawSettingsPage() {
         strncpy(faders[3]->buttonName, "Time", 20);
         strncpy(faders[3]->buttonText, "Time", 20);
     }
+    faders[3]->buttonState = revertSmoothSync;
     faders[3]->draw();
     faders[4]->disabled    = true;
     faders[4]->dimmed      = false;
@@ -544,6 +548,10 @@ void checkPendingPresetSave()
 
 void checkShiftPending()
 {
+    if (pendingSmoothSave && millis() - pendingSmoothSaveTime >= 500) {
+        pendingSmoothSave = false;
+        json.save();
+    }
     if (settingsPendingSave) {
         settingsPendingSave = false;
         json.save();
@@ -688,12 +696,18 @@ void onButtonPressed(uint8_t idx)
             latchSmoothSync = !latchSmoothSync;
             faders[2]->setQuantized(latchSmoothSync ? SYNC_STEPS : 0);
             drawSettingsPage();
+            json.getDoc()["latchSmoothSync"]     = (bool)latchSmoothSync;
+            json.getDoc()["latchSmoothSyncStep"] = (int)latchSmoothSyncStep;
+            settingsPendingSave = true;
             { uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSmoothLevel, (uint8_t)(latchSmoothSync ? 1 : 0), latchSmoothSyncStep, 0xF7};
               serialEditorSend(pkt, 7); }
         } else if (idx == 3) {
             revertSmoothSync = !revertSmoothSync;
             faders[3]->setQuantized(revertSmoothSync ? SYNC_STEPS : 0);
             drawSettingsPage();
+            json.getDoc()["revertSmoothSync"]     = (bool)revertSmoothSync;
+            json.getDoc()["revertSmoothSyncStep"] = (int)revertSmoothSyncStep;
+            settingsPendingSave = true;
             { uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSmoothLevel, (uint8_t)(revertSmoothSync ? 1 : 0), revertSmoothSyncStep, 0xF7};
               serialEditorSend(pkt, 7); }
         } else if (idx == 4) {
@@ -795,6 +809,25 @@ void onButtonPressed(uint8_t idx)
                     bankLabelDirty = true;
                     sendPresetSysEx(newPreset);
                 }
+            } else if (fnId >= 120 && fnId <= 143) {
+                uint8_t targetPreset = fnId - 120;
+                uint8_t cur = controls.getPreset();
+                if (targetPreset != cur) {
+                    navPresetCursor = targetPreset;
+                    controls.setPreset(targetPreset);
+                    pendingPresetSave = true;
+                    pendingFullRedraw = true;
+                    lastPresetNavTime = millis();
+                    snprintf(deviceLabel, sizeof(deviceLabel), "Preset %d", targetPreset + 1);
+                    const char* pName = controls.getPresetName(targetPreset);
+                    if (pName[0] != '\0')
+                        strncpy(bankLabel, pName, sizeof(bankLabel));
+                    else
+                        snprintf(bankLabel, sizeof(bankLabel), "Preset %d", targetPreset + 1);
+                    deviceLabelDirty = true;
+                    bankLabelDirty = true;
+                    sendPresetSysEx(targetPreset);
+                }
             } else {
                 sendMidiMessage(MIDI_CC, fnId, _value, 7, 0);
             }
@@ -886,6 +919,11 @@ static void handleSettingsLatchSmooth(int delta) {
     controls.getEncoder(2).lastActivity = millis();
     faders[2]->draw();
     flushDisplays();
+    json.getDoc()["latchSmooth"]         = (int)latchSmoothLevel;
+    json.getDoc()["latchSmoothSync"]     = (bool)latchSmoothSync;
+    json.getDoc()["latchSmoothSyncStep"] = (int)latchSmoothSyncStep;
+    pendingSmoothSave = true;
+    pendingSmoothSaveTime = millis();
     uint8_t pkt[7] = {0xF0, 0x6F, 0x24, latchSmoothLevel, (uint8_t)(latchSmoothSync ? 1 : 0), latchSmoothSyncStep, 0xF7};
     serialEditorSend(pkt, 7);
 }
@@ -905,6 +943,11 @@ static void handleSettingsRevertSmooth(int delta) {
     controls.getEncoder(3).lastActivity = millis();
     faders[3]->draw();
     flushDisplays();
+    json.getDoc()["revertSmooth"]         = (int)revertSmoothLevel;
+    json.getDoc()["revertSmoothSync"]     = (bool)revertSmoothSync;
+    json.getDoc()["revertSmoothSyncStep"] = (int)revertSmoothSyncStep;
+    pendingSmoothSave = true;
+    pendingSmoothSaveTime = millis();
     uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSmoothLevel, (uint8_t)(revertSmoothSync ? 1 : 0), revertSmoothSyncStep, 0xF7};
     serialEditorSend(pkt, 7);
 }
