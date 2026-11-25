@@ -5,6 +5,7 @@
 #include "../core/actions.h"
 #include "../core/version.h"
 #include "../view/display.h"
+#include "../view/leds.h"
 #include "../core/jsonManager.h"
 #include "../usb/serial_editor.h"
 
@@ -381,11 +382,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     controls.getEncoderAt(preset, param_number).isFunction = isFunction;
     controls.getEncoderAt(preset, param_number).fnId = fnId;
     json.setEncoder(preset, param_number, (int)encType, (int)number, (int)channel, hiRes ? 1 : 0, encMin, encMax, isFunction ? 1 : 0, (int)fnId);
-    if (preset == controls.getPreset()) {
-      updateFaderTitles();
-      showDisplay();
-      if (isFunction) sendPresetSysEx(preset);
-    }
     break;
   }
   case 12:
@@ -421,11 +417,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     arr.add(isFunction ? 1 : 0);
     arr.add((int)fnId);
     json.setButtonToggleMode(preset, param_number, (int)pressMode);
-    if (preset == controls.getPreset()) {
-      updateFaderTitles();
-      showDisplay();
-      if (isFunction) sendPresetSysEx(preset);
-    }
     break;
   }
   case 14:
@@ -470,10 +461,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     const char* jsonKey = isButton ? "btn_names" : "enc_names";
     json.getDoc()[String(preset)][jsonKey][String(idx)] = name;
 
-    if (preset == controls.getPreset()) {
+    if (preset == controls.getPreset() && !isSelectingPreset()) {
       updateFaderTitles();
-      // setParamName() only updates the string; the fader area needs an
-      // explicit redraw for the new name to show up right away.
       showDisplay();
     }
     break;
@@ -490,10 +479,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     name[nameLen] = '\0';
     controls.setPresetName(preset, name);
     json.getDoc()[String(preset)]["preset_name"] = name;
-    if (preset == controls.getPreset()) {
-      updateFaderTitles();
-      showDisplay();
-    }
     break;
   }
   case 18:
@@ -544,6 +529,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     serialEditorSend(ssPkt, 6);
     uint8_t layoutPkt[5] = {0xF0, 0x6F, 0x0E, (uint8_t)faderLayout, 0xF7};
     serialEditorSend(layoutPkt, 5);
+    uint8_t ledPkt[5] = {0xF0, 0x6F, 0x29, ledsDimOff ? 1u : 0u, 0xF7};
+    serialEditorSend(ledPkt, 5);
     break;
   }
   case 0x1C:
@@ -554,8 +541,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     if (idx >= 8) break;
     controls.getEncoderAt(24, idx).fnId = fnId;
     json.getDoc()["global"]["enc"][String(idx)] = fnId;
-    json.save();
-    if (controls.getPreset() == 24) { updateFaderTitles(); showDisplay(); sendPresetSysEx(24); }
     break;
   }
   case 0x1D:
@@ -566,8 +551,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
     if (idx >= 8) break;
     controls.getButtonShortAt(24, idx).fnId = fnId;
     json.getDoc()["global"]["btn"][String(idx)] = fnId;
-    json.save();
-    if (controls.getPreset() == 24) { updateFaderTitles(); showDisplay(); sendPresetSysEx(24); }
     break;
   }
   case 0x1E:
@@ -588,6 +571,12 @@ void onSysEx(const uint8_t *sysex, size_t len)
         uint8_t btnPkt[6] = { 240, 111, 0x1D, (uint8_t)i, controls.getButtonShortAt(24, i).fnId, 247 };
         serialEditorSend(btnPkt, 6);
         delay(2);
+      }
+      {
+        uint8_t labPkt[9] = { 240, 111, 0x28, 24,
+          controls.getLabelConfig(24, 0), controls.getLabelConfig(24, 1),
+          controls.getLabelConfig(24, 2), controls.getLabelConfig(24, 3), 247 };
+        serialEditorSend(labPkt, 9);
       }
     }
     break;
@@ -695,6 +684,37 @@ void onSysEx(const uint8_t *sysex, size_t len)
   {
     // Explicit save-to-flash from editor (sent after a full preset Send)
     json.save();
+    if (!isSelectingPreset()) { updateFaderTitles(); showDisplay(); }
+    break;
+  }
+  case 0x29:
+  {
+    // LED dim-off: F0 6F 29 <0|1> F7
+    ledsDimOff = sysex[3] != 0;
+    json.getDoc()["ledsDimOff"] = (bool)ledsDimOff;
+    json.save();
+    applyLedDimOff();
+    break;
+  }
+  case 0x28:
+  {
+    // Label config: F0 6F 28 <preset> <l0> <l1> <l2> <l3> F7
+    if (len < 9) break;
+    uint8_t lPreset = sysex[3];
+    if (lPreset > 24) break;
+    for (uint8_t slot = 0; slot < 4; slot++) {
+      uint8_t val = sysex[4 + slot] & 0x07;
+      controls.setLabelConfig(lPreset, slot, val);
+      if (lPreset < 24)
+        json.getDoc()[String(lPreset)]["labels"][slot] = (int)val;
+      else
+        json.getDoc()["global"]["labels"][slot] = (int)val;
+    }
+    if (lPreset == controls.getPreset()) {
+      for (int i = 0; i < 4; i++)
+        currentLabelConfig[i] = controls.getLabelConfig(lPreset, i);
+      deviceLabelDirty = bankLabelDirty = trackLabelDirty = presetLabelDirty = true;
+    }
     break;
   }
   default:

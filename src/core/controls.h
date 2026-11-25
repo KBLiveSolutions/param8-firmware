@@ -58,10 +58,14 @@ public:
     uint16_t getHiResValue(uint8_t preset, uint8_t idx) const { return _hiResValues[preset][idx]; }
     void setHiResValue(uint8_t preset, uint8_t idx, uint16_t v) { _hiResValues[preset][idx] = v; }
 
+    uint8_t getLabelConfig(uint8_t preset, uint8_t slot) const;
+    void setLabelConfig(uint8_t preset, uint8_t slot, uint8_t value);
+
 private:
     uint8_t _currentPreset;
     PresetControls _presets[26];
     uint16_t _hiResValues[26][8];
+    uint8_t _labelConfigs[26][4];
 };
 
 extern ControlsManager controls;

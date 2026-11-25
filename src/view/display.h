@@ -18,6 +18,7 @@ extern char trackLabel[20];
 extern bool trackLabelDirty;
 extern char presetLabel[20];
 extern bool presetLabelDirty;
+extern uint8_t currentLabelConfig[4];
 
 #define BUTTON_BORDER_COLOR 6
 #define BUTTON_CORNER       2

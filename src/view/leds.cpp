@@ -3,6 +3,7 @@
 static const uint8_t ledPins[] = { LED_PIN_1, LED_PIN_2 };
 
 int ledBrightness = 255;
+bool ledsDimOff = false;
 static const uint8_t LED_DIM = 64;     // 25%
 static const uint8_t LED_FULL = 255;   // 100%
 static bool ledBlinking[2] = {false, false};
@@ -12,7 +13,7 @@ static bool blinkState[2] = {false, false};
 void setupLeds() {
   for (auto pin : ledPins) {
     pinMode(pin, OUTPUT);
-    analogWrite(pin, LED_DIM);
+    analogWrite(pin, ledsDimOff ? 0 : LED_DIM);
   }
   Serial.println("LEDs initialized (GPIO 0, 29)");
 }
@@ -20,7 +21,7 @@ void setupLeds() {
 void setLed(int led, bool on) {
   if (led < 2) {
     ledBlinking[led] = false;
-    analogWrite(ledPins[led], on ? LED_FULL : LED_DIM);
+    analogWrite(ledPins[led], on ? LED_FULL : (ledsDimOff ? 0 : LED_DIM));
   }
 }
 
@@ -32,7 +33,14 @@ void setLedBlink(int led, bool blink) {
     lastBlinkTime[led] = millis();
     analogWrite(ledPins[led], LED_FULL);
   } else {
-    analogWrite(ledPins[led], LED_DIM);
+    analogWrite(ledPins[led], ledsDimOff ? 0 : LED_DIM);
+  }
+}
+
+void applyLedDimOff() {
+  for (int i = 0; i < 2; i++) {
+    if (!ledBlinking[i])
+      analogWrite(ledPins[i], ledsDimOff ? 0 : LED_DIM);
   }
 }
 

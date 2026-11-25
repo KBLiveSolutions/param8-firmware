@@ -49,7 +49,7 @@ struct FaderSaveState {
     bool isQuantized;
     uint8_t numQuantizedItems;
 };
-static FaderSaveState settingsSaved[4];
+static FaderSaveState settingsSaved[5];
 
 static const unsigned long ssStepsSec[] = {0, 60, 120, 300, 600, 1800, 3600, 7200};
 static const char* const   ssStepLabels[] = {"Off", "1 min", "2 min", "5 min", "10 min", "30 min", "1 h", "2 h"};
@@ -235,7 +235,7 @@ static void drawPresetPage()
 }
 
 static void enterSettingsMode() {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         strncpy(settingsSaved[i].paramName,  faders[i]->paramName,  20);
         strncpy(settingsSaved[i].title,      faders[i]->title,      20);
         strncpy(settingsSaved[i].buttonName, faders[i]->buttonName, 20);
@@ -315,6 +315,15 @@ static void drawSettingsPage() {
         strncpy(faders[3]->buttonText, "Time", 20);
     }
     faders[3]->draw();
+    faders[4]->disabled    = true;
+    faders[4]->dimmed      = false;
+    faders[4]->valueOnly   = false;
+    faders[4]->showingValue = false;
+    faders[4]->isQuantized = false;
+    faders[4]->buttonState = !ledsDimOff;
+    strncpy(faders[4]->buttonText, "LEDs", 20);
+    strncpy(faders[4]->buttonName, "LEDs", 20);
+    faders[4]->draw();
     flushDisplays();
 }
 
@@ -370,7 +379,7 @@ void onShiftPress()
     if (settingsModeActive) {
         settingsModeActive = false;
         setLed(1, false);
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 5; ++i) {
             strncpy(faders[i]->paramName,  settingsSaved[i].paramName,  20);
             strncpy(faders[i]->title,      settingsSaved[i].title,      20);
             strncpy(faders[i]->buttonName, settingsSaved[i].buttonName, 20);
@@ -392,6 +401,7 @@ void onShiftPress()
         json.getDoc()["revertSlewSync"]    = (bool)revertSlewSync;
         json.getDoc()["latchSlewSyncStep"] = (int)latchSlewSyncStep;
         json.getDoc()["revertSlewSyncStep"]= (int)revertSlewSyncStep;
+        json.getDoc()["ledsDimOff"]        = (bool)ledsDimOff;
         settingsPendingSave = true;
         showDisplay();
         shiftState = SHIFT_IDLE;
@@ -686,6 +696,14 @@ void onButtonPressed(uint8_t idx)
             drawSettingsPage();
             { uint8_t pkt[7] = {0xF0, 0x6F, 0x25, revertSlewLevel, (uint8_t)(revertSlewSync ? 1 : 0), revertSlewSyncStep, 0xF7};
               serialEditorSend(pkt, 7); }
+        } else if (idx == 4) {
+            ledsDimOff = !ledsDimOff;
+            applyLedDimOff();
+            faders[4]->buttonState = !ledsDimOff;
+            faders[4]->draw();
+            flushDisplays();
+            { uint8_t pkt[5] = {0xF0, 0x6F, 0x29, ledsDimOff ? (uint8_t)1 : (uint8_t)0, 0xF7};
+              serialEditorSend(pkt, 5); }
         }
         return;
     }
@@ -1142,11 +1160,14 @@ void updateFaderTitles()
         faders[i]->setButtonName(buf);
     }
     if (preset == 25) {
-        deviceLabel[0] = '\0';
-        bankLabel[0] = '\0';
-        trackLabel[0] = '\0';
+        strncpy(trackLabel, "Track", sizeof(trackLabel));
+        strncpy(deviceLabel, "Device", sizeof(deviceLabel));
+        strncpy(bankLabel, "Bank", sizeof(bankLabel));
         strncpy(presetLabel, "Device", sizeof(presetLabel) - 1);
         presetLabel[sizeof(presetLabel) - 1] = '\0';
+        trackLabelDirty = true;
+        deviceLabelDirty = true;
+        bankLabelDirty = true;
         presetLabelDirty = true;
     } else if (preset == 24) {
         strncpy(deviceLabel, "Track", sizeof(deviceLabel));
@@ -1172,6 +1193,8 @@ void updateFaderTitles()
         presetLabel[sizeof(presetLabel) - 1] = '\0';
         presetLabelDirty = true;
     }
+    for (int i = 0; i < 4; i++)
+        currentLabelConfig[i] = controls.getLabelConfig(preset, i);
 }
 
 void updateFaderValues()

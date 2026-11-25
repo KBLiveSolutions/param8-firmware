@@ -44,9 +44,10 @@ void  Encoders::read(){
       }
 
       bool isRelative = controls.getPreset() > 23 || controls.getEncoder(i).isFunction;
-      bool isHiRes = !isRelative && controls.getEncoder(i).hiRes;
+      bool isPB    = !isRelative && controls.getEncoder(i).type == MIDI_PB;
+      bool isHiRes = !isRelative && (controls.getEncoder(i).hiRes || isPB);
       const int gain_min = 1;
-      const int gain_max = isRelative ? 5 : (isHiRes ? 64 : 4);
+      const int gain_max = isRelative ? 5 : (isPB ? 256 : (isHiRes ? 64 : 4));
       const unsigned long dt_min = 15;
       const unsigned long dt_max = isHiRes ? 500UL : 150UL;
 

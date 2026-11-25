@@ -16,6 +16,7 @@ bool deviceLabelDirty = false;
 bool bankLabelDirty = false;
 bool trackLabelDirty = false;
 bool presetLabelDirty = false;
+uint8_t currentLabelConfig[4] = {1, 4, 2, 3};
 bool screenSaverActive = false;
 bool screenSaverJustWoke = false;
 uint8_t brightnessLevel = 1;
@@ -115,10 +116,39 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     }
 }
 
+// Label type constants: 0=Off, 1=Track, 2=Device, 3=Bank, 4=Preset Name, 5=Preset Number
+static const char* getLabelByType(uint8_t type) {
+    switch (type) {
+        case 1: return trackLabel;
+        case 2: return deviceLabel;
+        case 3: return bankLabel;
+        case 4: return presetLabel;
+        case 5: return presetLabel; // number form set elsewhere
+        default: return nullptr;
+    }
+}
+
+// Slot positions: 0=display1 top, 1=display2 top, 2=display1 bottom, 3=display2 bottom
+static void drawOrClearSlot(uint8_t slot) {
+    static const struct { PicoGFX_SSD1322* disp; int y; } positions[4] = {
+        { &display1, 0 }, { &display2, 0 }, { &display1, 54 }, { &display2, 54 }
+    };
+    uint8_t type = currentLabelConfig[slot];
+    const char* lbl = (type == 0) ? nullptr : getLabelByType(type);
+    if (lbl && lbl[0] != '\0') {
+        drawLabelOverButton(*positions[slot].disp, lbl, positions[slot].y);
+    } else {
+        // clear the slot area
+        positions[slot].disp->fillRect((256 - 64) / 2, positions[slot].y, 64, 10, 0);
+    }
+}
+
+static bool isFlushing = false;
+static bool pendingShow = false;
+
 void flushDisplays() {
-    static bool flushing = false;
-    if (flushing) return;
-    flushing = true;
+    if (isFlushing) return;
+    isFlushing = true;
     if (display1.isDirty()) {
         display1.display();
         while (!display1.isTransferComplete()) {
@@ -131,7 +161,11 @@ void flushDisplays() {
             midiRead();
         }
     }
-    flushing = false;
+    isFlushing = false;
+    if (pendingShow) {
+        pendingShow = false;
+        showDisplay();
+    }
 }
 
 void drawAllWidgets() {
@@ -157,14 +191,7 @@ void drawAllWidgets() {
     }
     presetLabel[sizeof(presetLabel) - 1] = '\0';
 
-    if (trackLabel[0] != '\0')
-        drawLabelOverButton(display1, trackLabel, 0);
-    if (presetLabel[0] != '\0')
-        drawLabelOverButton(display2, presetLabel, 0);
-    if (deviceLabel[0] != '\0')
-        drawLabelOverButton(display1, deviceLabel, 54);
-    if (bankLabel[0] != '\0')
-        drawLabelOverButton(display2, bankLabel, 54);
+    for (int i = 0; i < 4; i++) drawOrClearSlot(i);
     deviceLabelDirty = false;
     bankLabelDirty = false;
     trackLabelDirty = false;
@@ -172,6 +199,8 @@ void drawAllWidgets() {
 }
 
 void showDisplay() {
+    if (isFlushing) { pendingShow = true; return; }
+    pendingShow = false;
     drawAllWidgets();
     flushDisplays();
 }
@@ -209,26 +238,11 @@ void updateDisplay() {
 void drawDeviceBankLabels() {
     if (screenSaverActive) return;
     if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty && !presetLabelDirty) return;
-    if (trackLabelDirty) {
-        trackLabelDirty = false;
-        if (trackLabel[0] != '\0')
-            drawLabelOverButton(display1, trackLabel, 0);
-    }
-    if (presetLabelDirty) {
-        presetLabelDirty = false;
-        if (presetLabel[0] != '\0')
-            drawLabelOverButton(display2, presetLabel, 0);
-    }
-    if (deviceLabelDirty) {
-        deviceLabelDirty = false;
-        if (deviceLabel[0] != '\0')
-            drawLabelOverButton(display1, deviceLabel, 54);
-    }
-    if (bankLabelDirty) {
-        bankLabelDirty = false;
-        if (bankLabel[0] != '\0')
-            drawLabelOverButton(display2, bankLabel, 54);
-    }
+    for (int i = 0; i < 4; i++) drawOrClearSlot(i);
+    deviceLabelDirty = false;
+    bankLabelDirty = false;
+    trackLabelDirty = false;
+    presetLabelDirty = false;
 }
 
 void runScreenSaver() {

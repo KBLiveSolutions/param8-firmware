@@ -15,6 +15,13 @@ ControlsManager::ControlsManager() : _currentPreset(0) {
     for (int p = 0; p < 26; p++)
         for (int i = 0; i < 8; i++)
             _hiResValues[p][i] = 8192;
+    for (int p = 0; p < 25; p++) {
+        _labelConfigs[p][0] = 1; _labelConfigs[p][1] = 0;
+        _labelConfigs[p][2] = 5; _labelConfigs[p][3] = 4;
+    }
+    // Preset 25 (Device mode): hardcoded, not user-configurable
+    _labelConfigs[25][0] = 1; _labelConfigs[25][1] = 4;
+    _labelConfigs[25][2] = 2; _labelConfigs[25][3] = 3;
 }
 
 void ControlsManager::setPreset(uint8_t preset) {
@@ -172,6 +179,13 @@ void ControlsManager::setDefaults() {
         if (_preset < 24) {
             const char* pName = json.getDoc()[String(_preset)]["preset_name"] | "";
             strncpy(_presets[_preset].presetName, pName, sizeof(_presets[_preset].presetName) - 1);
+            static const uint8_t dflt[4] = {1, 4, 2, 3};
+            for (int slot = 0; slot < 4; slot++)
+                _labelConfigs[_preset][slot] = json.getDoc()[String(_preset)]["labels"][slot] | dflt[slot];
+        } else if (_preset == 24) {
+            static const uint8_t dflt[4] = {1, 4, 2, 3};
+            for (int slot = 0; slot < 4; slot++)
+                _labelConfigs[24][slot] = json.getDoc()["global"]["labels"][slot] | dflt[slot];
         }
     }
 
@@ -301,6 +315,13 @@ void ControlsManager::getPresetControls(uint8_t preset) {
             delay(2);
         }
 
+        {
+            uint8_t labPacket[9] = { 240, 111, 0x28, preset,
+                _labelConfigs[preset][0], _labelConfigs[preset][1],
+                _labelConfigs[preset][2], _labelConfigs[preset][3], 247 };
+            serialEditorSend(labPacket, 9);
+        }
+
         uint8_t layoutPacket[5] = { 240, 111, 14, (uint8_t)faderLayout, 247 };
         usb_midi.write(layoutPacket, 5);
         serialEditorSend(layoutPacket, 5);
@@ -321,4 +342,13 @@ void ControlsManager::getPresetControls(uint8_t preset) {
         usb_midi.write(versionPacket, 7);
         serialEditorSend(versionPacket, 7);
     }
+}
+
+uint8_t ControlsManager::getLabelConfig(uint8_t preset, uint8_t slot) const {
+    if (preset < 26 && slot < 4) return _labelConfigs[preset][slot];
+    return 0;
+}
+
+void ControlsManager::setLabelConfig(uint8_t preset, uint8_t slot, uint8_t value) {
+    if (preset < 26 && slot < 4) _labelConfigs[preset][slot] = value;
 }

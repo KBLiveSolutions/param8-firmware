@@ -5,8 +5,10 @@
 #define LED_PIN_2  29
 
 extern int ledBrightness;
+extern bool ledsDimOff;
 void setupLeds();
 void setLed(int led, bool on);
 void setLedBlink(int led, bool blink);
 void updateLeds();
 void setLedBrightness(int led, uint8_t value);
+void applyLedDimOff();

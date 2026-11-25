@@ -26,19 +26,22 @@ v1.1.0 — 2026-11-20
     - Quantized parameters: controls mapped to stepped or on/off parameters
       now display as rectangular blocks in the Dynamic layout.
 
-    - Labels now appear on all Preset pages: 
-
-      ◎  [Track Name] ◎ | ◎ [Preset Name] ◎
-
-      ◎ [Device Name] ◎ | ◎  [Bank Name]  ◎ 
+    - Labels are available on all pages and can be customized.
 
     Editor :
 
+    - Editor: changes are no longer sent automatically — press Send
+      (or Cmd/Ctrl+U) to upload to param8.
+
+    - Controls can be swapped
+
+    Various :
+
+    - PB speed has been improved
+    
     - Trigger press mode: a third button mode alongside Toggle and Momentary.
       Sends the maximum value on press only, nothing on release.
 
-    - Editor: changes are no longer sent automatically — press Send
-      (or Cmd/Ctrl+U) to upload to param8.
 
 --------------------------------------------------------------------------------
 
