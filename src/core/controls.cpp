@@ -120,6 +120,21 @@ void ControlsManager::setDefaults() {
         json.save();
         Serial.println("Restored global enc7 to Sel. Param fnId=47 v5");
     }
+    if ((int)json.getDoc()["global"]["v"] < 6) {
+        for (int p = 0; p < 24; p++) {
+            json.getDoc()[String(p)]["labels"][0] = 0;
+            json.getDoc()[String(p)]["labels"][1] = 0;
+            json.getDoc()[String(p)]["labels"][2] = 5;
+            json.getDoc()[String(p)]["labels"][3] = 4;
+        }
+        json.getDoc()["global"]["labels"][0] = 1;
+        json.getDoc()["global"]["labels"][1] = 0;
+        json.getDoc()["global"]["labels"][2] = 2;
+        json.getDoc()["global"]["labels"][3] = 4;
+        json.getDoc()["global"]["v"] = 6;
+        json.save();
+        Serial.println("Applied label config defaults v6");
+    }
 
     for(int _preset = 0; _preset < 26; ++_preset){
         Serial.print("Chargement preset ");
@@ -182,11 +197,11 @@ void ControlsManager::setDefaults() {
         if (_preset < 24) {
             const char* pName = json.getDoc()[String(_preset)]["preset_name"] | "";
             strncpy(_presets[_preset].presetName, pName, sizeof(_presets[_preset].presetName) - 1);
-            static const uint8_t dflt[4] = {1, 4, 2, 3};
+            static const uint8_t dflt[4] = {0, 0, 5, 4};
             for (int slot = 0; slot < 4; slot++)
                 _labelConfigs[_preset][slot] = json.getDoc()[String(_preset)]["labels"][slot] | dflt[slot];
         } else if (_preset == 24) {
-            static const uint8_t dflt[4] = {1, 4, 2, 3};
+            static const uint8_t dflt[4] = {1, 0, 2, 4};
             for (int slot = 0; slot < 4; slot++)
                 _labelConfigs[24][slot] = json.getDoc()["global"]["labels"][slot] | dflt[slot];
         }
