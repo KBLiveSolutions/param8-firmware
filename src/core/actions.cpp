@@ -112,6 +112,7 @@ struct RelSmoothOp {
     unsigned long totalMs   = 0;
 };
 static RelSmoothOp relSmooth;
+static RelSmoothOp revertRelSmooth;
 
 static void startAbsoluteSmooth(uint8_t idx, int fromVal, int toVal, int smoothMs) {
     uint8_t channel = controls.getEncoder(idx).channel;
@@ -184,14 +185,42 @@ void checkSmoothProgress() {
                 : (int)((long)relSmooth.target[i] * (long)elapsed / (long)relSmooth.totalMs);
             int delta = shouldHaveSent - relSmooth.sent[i];
             if (delta != 0) {
-                uint8_t ch  = controls.getEncoder(i).channel;
-                ControlMidiType t = controls.getEncoder(i).type;
-                uint8_t num = controls.getEncoder(i).number;
-                sendRelativeCC(t, num, delta, ch);
+                if (controls.getEncoder(i).isFunction)
+                    sendRelativeCC(MIDI_CC, controls.getEncoder(i).fnId, delta, 7, 0);
+                else {
+                    uint8_t ch  = controls.getEncoder(i).channel;
+                    ControlMidiType t = controls.getEncoder(i).type;
+                    uint8_t num = controls.getEncoder(i).number;
+                    sendRelativeCC(t, num, delta, ch);
+                }
                 relSmooth.sent[i] = shouldHaveSent;
             }
         }
         if (done) relSmooth.active = false;
+    }
+
+    if (revertRelSmooth.active) {
+        unsigned long elapsed = now - revertRelSmooth.startTime;
+        bool done = elapsed >= revertRelSmooth.totalMs;
+        for (int i = 0; i < 8; ++i) {
+            if (revertRelSmooth.target[i] == 0) continue;
+            int shouldHaveSent = done
+                ? revertRelSmooth.target[i]
+                : (int)((long)revertRelSmooth.target[i] * (long)elapsed / (long)revertRelSmooth.totalMs);
+            int delta = shouldHaveSent - revertRelSmooth.sent[i];
+            if (delta != 0) {
+                if (controls.getEncoder(i).isFunction)
+                    sendRelativeCC(MIDI_CC, controls.getEncoder(i).fnId, delta, 7, 0);
+                else {
+                    uint8_t ch  = controls.getEncoder(i).channel;
+                    ControlMidiType t = controls.getEncoder(i).type;
+                    uint8_t num = controls.getEncoder(i).number;
+                    sendRelativeCC(t, num, delta, ch);
+                }
+                revertRelSmooth.sent[i] = shouldHaveSent;
+            }
+        }
+        if (done) revertRelSmooth.active = false;
     }
 }
 
@@ -1319,6 +1348,7 @@ void releaseLatchAndSend()
 void sendRevertEvents()
 {
     int smoothMs = revertSmoothSync ? syncSmoothToMs(revertSmoothSyncStep) : smoothLevelToMs(revertSmoothLevel);
+    revertRelSmooth = {false, {0}, {0}, 0, 0};
     for (int i = 0; i < 8; ++i)
     {
         if (!revertAbsoluteChanged[i])
@@ -1331,14 +1361,16 @@ void sendRevertEvents()
         if (encIsRelative)
         {
             int delta = (int)revertAbsoluteOriginal[i] - (int)controls.getEncoder(i).value;
-            if (delta != 0) {
+            controls.getEncoder(i).value = revertAbsoluteOriginal[i];
+            updateFader(i, revertAbsoluteOriginal[i]);
+            if (smoothMs > 0 && delta != 0) {
+                revertRelSmooth.target[i] = delta;
+            } else if (delta != 0) {
                 if (controls.getEncoder(i).isFunction)
                     sendRelativeCC(MIDI_CC, controls.getEncoder(i).fnId, delta, 7, 0);
                 else
                     sendRelativeCC(type, number, delta, channel);
             }
-            controls.getEncoder(i).value = revertAbsoluteOriginal[i];
-            updateFader(i, revertAbsoluteOriginal[i]);
         }
         else if (smoothMs > 0 && !controls.getEncoder(i).hiRes && type != MIDI_PB)
         {
@@ -1352,6 +1384,13 @@ void sendRevertEvents()
             updateFader(i, revertAbsoluteOriginal[i]);
         }
         revertAbsoluteChanged[i] = false;
+    }
+    bool hasRelTargets = false;
+    for (int i = 0; i < 8; ++i) if (revertRelSmooth.target[i] != 0) { hasRelTargets = true; break; }
+    if (hasRelTargets) {
+        revertRelSmooth.active = true;
+        revertRelSmooth.startTime = millis();
+        revertRelSmooth.totalMs = (unsigned long)smoothMs;
     }
 }
 
