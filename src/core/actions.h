@@ -42,3 +42,5 @@ void onButtonReleased(uint8_t);
 bool isSelectingPreset();
 void checkSmoothProgress();
 void onSmoothStateUpdatedFromEditor();
+extern bool deviceLocked;
+void setDeviceLockState(bool locked);

@@ -51,7 +51,7 @@ struct FaderSaveState {
     bool isQuantized;
     uint8_t numQuantizedItems;
 };
-static FaderSaveState settingsSaved[5];
+static FaderSaveState settingsSaved[6];
 
 static const unsigned long ssStepsSec[] = {0, 60, 120, 300, 600, 1800, 3600, 7200};
 static const char* const   ssStepLabels[] = {"Off", "1 min", "2 min", "5 min", "10 min", "30 min", "1 h", "2 h"};
@@ -113,6 +113,8 @@ struct RelSmoothOp {
 };
 static RelSmoothOp relSmooth;
 static RelSmoothOp revertRelSmooth;
+
+bool deviceLocked = false;
 
 static void startAbsoluteSmooth(uint8_t idx, int fromVal, int toVal, int smoothMs) {
     uint8_t channel = controls.getEncoder(idx).channel;
@@ -265,7 +267,7 @@ static void drawPresetPage()
 }
 
 static void enterSettingsMode() {
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
         strncpy(settingsSaved[i].paramName,  faders[i]->paramName,  20);
         strncpy(settingsSaved[i].title,      faders[i]->title,      20);
         strncpy(settingsSaved[i].buttonName, faders[i]->buttonName, 20);
@@ -356,6 +358,15 @@ static void drawSettingsPage() {
     strncpy(faders[4]->buttonText, "LEDs", 20);
     strncpy(faders[4]->buttonName, "LEDs", 20);
     faders[4]->draw();
+    faders[5]->disabled    = true;
+    faders[5]->dimmed      = false;
+    faders[5]->valueOnly   = false;
+    faders[5]->showingValue = false;
+    faders[5]->isQuantized = false;
+    faders[5]->buttonState = deviceLocked;
+    strncpy(faders[5]->buttonText, "Dev.Lock", 20);
+    strncpy(faders[5]->buttonName, "Dev.Lock", 20);
+    faders[5]->draw();
     flushDisplays();
 }
 
@@ -411,7 +422,7 @@ void onShiftPress()
     if (settingsModeActive) {
         settingsModeActive = false;
         setLed(1, false);
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 6; ++i) {
             strncpy(faders[i]->paramName,  settingsSaved[i].paramName,  20);
             strncpy(faders[i]->title,      settingsSaved[i].title,      20);
             strncpy(faders[i]->buttonName, settingsSaved[i].buttonName, 20);
@@ -746,6 +757,12 @@ void onButtonPressed(uint8_t idx)
             flushDisplays();
             { uint8_t pkt[5] = {0xF0, 0x6F, 0x29, ledsDimOff ? (uint8_t)1 : (uint8_t)0, 0xF7};
               serialEditorSend(pkt, 5); }
+        } else if (idx == 5) {
+            deviceLocked = !deviceLocked;
+            faders[5]->buttonState = deviceLocked;
+            faders[5]->draw();
+            flushDisplays();
+            sendMidiMessage(MIDI_CC, 36, 127, 7, 0);
         }
         return;
     }
@@ -1266,6 +1283,11 @@ void updateFaderTitles()
     }
     for (int i = 0; i < 4; i++)
         currentLabelConfig[i] = controls.getLabelConfig(preset, i);
+    // Restore device lock LED for buttons with fnId 36
+    for (int i = 0; i < 8; ++i) {
+        if (controls.getButtonShort(i).isFunction && controls.getButtonShort(i).fnId == 36)
+            faders[i]->buttonState = deviceLocked;
+    }
 }
 
 void updateFaderValues()
@@ -1397,6 +1419,24 @@ void sendRevertEvents()
 void setRevertModeLed(bool on)
 {
     setLedBlink(0, on);
+}
+
+void setDeviceLockState(bool locked)
+{
+    deviceLocked = locked;
+    if (settingsModeActive) {
+        faders[5]->buttonState = locked;
+        drawSettingsPage();
+        return;
+    }
+    for (int i = 0; i < 8; ++i) {
+        if (controls.getButtonShort(i).isFunction && controls.getButtonShort(i).fnId == 36) {
+            faders[i]->buttonState = locked;
+            faders[i]->updateButtonName(locked);
+            faders[i]->_dirty = true;
+        }
+    }
+    flushDisplays();
 }
 
 void onSmoothStateUpdatedFromEditor()

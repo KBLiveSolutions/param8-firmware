@@ -259,7 +259,7 @@ void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
   controls.onMidiValueChange(channel, control, value);
 }
 
-void onSysEx(const uint8_t *sysex, size_t len)
+void onSysEx(const uint8_t *sysex, size_t len, bool fromSerial)
 {
   if (len < 5 || sysex[0] != 0xF0 || sysex[1] != 0x6F)
     return;
@@ -531,6 +531,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     serialEditorSend(layoutPkt, 5);
     uint8_t ledPkt[5] = {0xF0, 0x6F, 0x29, ledsDimOff ? 1u : 0u, 0xF7};
     serialEditorSend(ledPkt, 5);
+    uint8_t dlPkt[5] = {0xF0, 0x6F, 0x2A, deviceLocked ? 1u : 0u, 0xF7};
+    serialEditorSend(dlPkt, 5);
     break;
   }
   case 0x1C:
@@ -714,6 +716,18 @@ void onSysEx(const uint8_t *sysex, size_t len)
       for (int i = 0; i < 4; i++)
         currentLabelConfig[i] = controls.getLabelConfig(lPreset, i);
       deviceLabelDirty = bankLabelDirty = trackLabelDirty = presetLabelDirty = true;
+    }
+    break;
+  }
+  case 0x2A:
+  {
+    // Device lock state: F0 6F 2A <0|1> F7
+    if (len < 4) break;
+    setDeviceLockState(sysex[3] != 0);
+    if (fromSerial) {
+      // Forward to Python script so Live follows the editor change
+      uint8_t fwdPkt[5] = {0xF0, 0x6F, 0x2A, (uint8_t)(sysex[3] & 0x01), 0xF7};
+      usb_midi.write(fwdPkt, 5);
     }
     break;
   }

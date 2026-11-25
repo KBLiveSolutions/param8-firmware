@@ -25,5 +25,5 @@ void handleSysExMessage(uint8_t *packet);
 void handleSysExStart(uint8_t *packet) ;
 void handleSysExContinuation(uint8_t *packet);
 void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value);
-void onSysEx(const uint8_t* sysex, size_t len);
+void onSysEx(const uint8_t* sysex, size_t len, bool fromSerial = false);
 void decode_ascii_sysex(const uint8_t* data, size_t len, char* out, size_t out_len);

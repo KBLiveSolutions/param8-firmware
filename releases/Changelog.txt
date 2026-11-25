@@ -13,9 +13,9 @@ v1.1.0 — 2026-11-20
     - DAW actions can be assigned to any control in a User preset, without
       leaving that preset.
 
-    Slew / settings :
+    Smooth / settings :
 
-    - Slew: smooth transition times for Latch and Revert, configurable in the
+    - Smooth: smooth transition times for Latch and Revert, configurable in the
       Settings page. Available in time (ms) or beat-synced mode.
 
     - Settings (brightness, screen saver, slew) are accessible directly on the
@@ -43,6 +43,9 @@ v1.1.0 — 2026-11-20
       Sends the maximum value on press only, nothing on release.
     
     - In Device Mode, A/B has been replaced by Capture to make way for Live 13
+
+    - Settings has a Device Lock toggle. If On, param8 will follow the "Blue Hand" in Live.
+    If Off, the Device Navigation is independant.
 
 
 --------------------------------------------------------------------------------
