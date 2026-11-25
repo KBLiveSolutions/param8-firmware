@@ -15,10 +15,13 @@ ControlsManager::ControlsManager() : _currentPreset(0) {
     for (int p = 0; p < 26; p++)
         for (int i = 0; i < 8; i++)
             _hiResValues[p][i] = 8192;
-    for (int p = 0; p < 25; p++) {
-        _labelConfigs[p][0] = 1; _labelConfigs[p][1] = 0;
+    for (int p = 0; p < 24; p++) {
+        _labelConfigs[p][0] = 0; _labelConfigs[p][1] = 0;
         _labelConfigs[p][2] = 5; _labelConfigs[p][3] = 4;
     }
+    // Preset 24 (Global/DAW mode)
+    _labelConfigs[24][0] = 1; _labelConfigs[24][1] = 0;
+    _labelConfigs[24][2] = 2; _labelConfigs[24][3] = 4;
     // Preset 25 (Device mode): hardcoded, not user-configurable
     _labelConfigs[25][0] = 1; _labelConfigs[25][1] = 4;
     _labelConfigs[25][2] = 2; _labelConfigs[25][3] = 3;
