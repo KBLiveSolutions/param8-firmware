@@ -259,6 +259,10 @@ void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
   controls.onMidiValueChange(channel, control, value);
 }
 
+static unsigned long scriptWarningUntil = 0;
+#define SCRIPT_REQUIRED_MAJOR 1
+#define SCRIPT_REQUIRED_MINOR 1
+
 void onSysEx(const uint8_t *sysex, size_t len, bool fromSerial)
 {
   if (len < 5 || sysex[0] != 0xF0 || sysex[1] != 0x6F)
@@ -313,6 +317,7 @@ void onSysEx(const uint8_t *sysex, size_t len, bool fromSerial)
 
   case 2:
     if (isSelectingPreset()) break;
+    if (millis() < scriptWarningUntil) break;
     strncpy(bankLabel, ascii_string, sizeof(bankLabel));
     bankLabel[sizeof(bankLabel)-1] = '\0';
     bankLabelDirty = true;
@@ -320,6 +325,7 @@ void onSysEx(const uint8_t *sysex, size_t len, bool fromSerial)
 
   case 3:
     if (isSelectingPreset()) break;
+    if (millis() < scriptWarningUntil) break;
     strncpy(deviceLabel, ascii_string, sizeof(deviceLabel));
     deviceLabel[sizeof(deviceLabel)-1] = '\0';
     deviceLabelDirty = true;
@@ -330,9 +336,21 @@ void onSysEx(const uint8_t *sysex, size_t len, bool fromSerial)
     bool wasConnected = liveConnected;
     liveConnected = true;
     liveConnectedTime = millis();
+    // Check script version: v1.1+ sends F0 6F 05 00 MAJOR MINOR F7 (len=7)
+    bool scriptOk = (len >= 7) &&
+                    ((sysex[4] > SCRIPT_REQUIRED_MAJOR) ||
+                     (sysex[4] == SCRIPT_REQUIRED_MAJOR && sysex[5] >= SCRIPT_REQUIRED_MINOR));
+    if (!scriptOk) {
+      strncpy(deviceLabel, "Update script!", sizeof(deviceLabel));
+      strncpy(bankLabel,   "",               sizeof(bankLabel));
+      strncpy(trackLabel,  "v1.1 required",  sizeof(trackLabel));
+      deviceLabelDirty = bankLabelDirty = trackLabelDirty = true;
+      scriptWarningUntil = millis() + 8000;
+      showDisplay();
+    }
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
-    if (!wasConnected && !isSelectingPreset()) {
+    if (!wasConnected && scriptOk && !isSelectingPreset()) {
       if (preset == 25 || preset == 24) {
         updateFaderTitles();
       }
@@ -343,6 +361,7 @@ void onSysEx(const uint8_t *sysex, size_t len, bool fromSerial)
   case 6:
   {
     if (isSelectingPreset()) break;
+    if (millis() < scriptWarningUntil) break;
     strncpy(trackLabel, ascii_string, sizeof(trackLabel));
     trackLabel[sizeof(trackLabel)-1] = '\0';
     trackLabelDirty = true;  // picked up by next timed updateDisplay()
