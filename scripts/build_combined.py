@@ -97,7 +97,7 @@ def build_combined_uf2():
         print("⚠️  Pas de dossier data trouvé - création d'un dossier vide...")
         os.makedirs('data', exist_ok=True)
 
-    envs = ['param8_simple', 'param8_advanced']
+    envs = ['param8_simple']
     for env in envs:
         print(f"\n{'='*60}")
         print(f"🔧 Build env: {env}")
