@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import subprocess
 import struct
 import urllib.request
@@ -79,15 +80,15 @@ def build_combined_uf2():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(project_root)
     print(f"📂 Répertoire de travail: {os.getcwd()}")
-    
+
     # Vérifier la validité des fichiers JSON
     if not validate_json_files():
         print("❌ Arrêt à cause d'erreurs JSON")
         return
-    
+
     # Télécharger les outils UF2 si nécessaire
     download_uf2_tools()
-    
+
     # Vérifier la présence du dossier data
     if os.path.exists('data'):
         data_files = os.listdir('data')
@@ -95,38 +96,39 @@ def build_combined_uf2():
     else:
         print("⚠️  Pas de dossier data trouvé - création d'un dossier vide...")
         os.makedirs('data', exist_ok=True)
-    
-    print("🔧 Compilation du firmware...")
-    result = os.system(".venv/bin/pio run")
-    if result != 0:
-        print("❌ Erreur lors de la compilation du firmware")
-        return
-    
-    print("📁 Création du filesystem...")
-    result = os.system(".venv/bin/pio run --target buildfs")
-    if result != 0:
-        print("⚠️  Erreur lors de la création du filesystem, continuons sans...")
-    
+
+    envs = ['param8_simple', 'param8_advanced']
+    for env in envs:
+        print(f"\n{'='*60}")
+        print(f"🔧 Build env: {env}")
+        print('='*60)
+        result = os.system(f".venv/bin/pio run -e {env}")
+        if result != 0:
+            print(f"❌ Erreur compilation {env}")
+            return
+        result = os.system(f".venv/bin/pio run -e {env} --target buildfs")
+        if result != 0:
+            print(f"⚠️  Erreur filesystem {env}, continuons sans...")
+        build_env_uf2(env)
+
+def build_env_uf2(env):
     debug_littlefs_content()
-    
+
     print("📦 Lecture des fichiers...")
-    
-    # Vérifier la présence des fichiers
-    firmware_path = '.pio/build/pico/firmware.bin'
-    littlefs_path = '.pio/build/pico/littlefs.bin'
-    
+
+    firmware_path = f'.pio/build/{env}/firmware.bin'
+    littlefs_path = f'.pio/build/{env}/littlefs.bin'
+
     if not os.path.exists(firmware_path):
         print(f"❌ Fichier firmware introuvable: {firmware_path}")
         return
-    
-    # Lire le firmware
-    with open('.pio/build/pico/firmware.bin', 'rb') as f:
+
+    with open(firmware_path, 'rb') as f:
         firmware = f.read()
-    
-    # Lire le filesystem
+
     filesystem = b''
-    if os.path.exists('.pio/build/pico/littlefs.bin'):
-        with open('.pio/build/pico/littlefs.bin', 'rb') as f:
+    if os.path.exists(littlefs_path):
+        with open(littlefs_path, 'rb') as f:
             filesystem = f.read()
         print(f"📁 Filesystem trouvé: {len(filesystem)} bytes")
     
@@ -151,37 +153,44 @@ def build_combined_uf2():
         combined = firmware
         print(f"📦 Image: firmware seul ({firmware_size} bytes)")
     
-    # Écrire l'image combinée
-    with open('combined.bin', 'wb') as f:
+    # Lire la version depuis version.h
+    version = "1.0.0"
+    try:
+        with open('src/core/version.h', 'r') as f:
+            content = f.read()
+        major = re.search(r'FW_VERSION_MAJOR\s+(\d+)', content).group(1)
+        minor = re.search(r'FW_VERSION_MINOR\s+(\d+)', content).group(1)
+        patch = re.search(r'FW_VERSION_PATCH\s+(\d+)', content).group(1)
+        version = f"{major}.{minor}.{patch}"
+    except Exception:
+        pass
+
+    suffix = "" if env == "param8_simple" else "-advanced"
+    out_bin  = f"combined{suffix}.bin"
+    out_uf2  = f"releases/param8-v{version}-firmware{suffix}.uf2"
+
+    with open(out_bin, 'wb') as f:
         f.write(combined)
-    print(f"💾 combined.bin créé: {len(combined)} bytes")
-    
-    # Convertir en UF2
+    print(f"💾 {out_bin} créé: {len(combined)} bytes")
+
     print("🔄 Conversion en UF2...")
     result = subprocess.run([
-        'python3', './uf2conv.py', 
-        'combined.bin', 
+        'python3', './uf2conv.py',
+        out_bin,
         '--base', '0x10000000',
         '--family', '0xe48bff56',
-        '--output', 'combined.uf2'
+        '--output', out_uf2
     ], capture_output=True, text=True)
-    
+
     if result.returncode == 0:
-        print("✅ Fichier combined.uf2 créé avec succès!")
-        print(f"📍 Localisation: {os.path.abspath('combined.uf2')}")
-        
-        # Afficher la taille du fichier final
-        size = os.path.getsize('combined.uf2')
-        print(f"📏 Taille: {size} bytes ({size/1024:.1f} KB)")
-        
-        # Vérifier le contenu du filesystem
+        size = os.path.getsize(out_uf2)
+        print(f"✅ {out_uf2} créé ({size/1024:.1f} KB)")
         if filesystem:
-            print("📋 Contenu du filesystem inclus dans l'image finale")
+            print("📋 Filesystem inclus")
         else:
-            print("⚠️  Aucun filesystem inclus - les données par défaut seront utilisées")
-            
+            print("⚠️  Aucun filesystem inclus")
     else:
-        print("❌ Erreur lors de la conversion UF2:")
+        print("❌ Erreur conversion UF2:")
         print("STDOUT:", result.stdout)
         print("STDERR:", result.stderr)
 

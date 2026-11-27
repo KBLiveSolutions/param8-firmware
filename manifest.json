@@ -1,7 +1,7 @@
 {
-  "version": "1.0.2",
-  "file": "param8-v1.0.2-firmware.uf2",
-  "notes": "v1.0.2",
-  "date": "2026-10-17",
+  "version": "1.1.0",
+  "file": "param8-v1.1.0-firmware.uf2",
+  "notes": "v1.1.0",
+  "date": "2026-11-27",
   "scriptUrl": "https://github.com/KBLiveSolutions/param8-remote-script/releases/download/v1.1/param8.zip"
 }
