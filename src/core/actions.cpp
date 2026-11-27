@@ -663,8 +663,15 @@ void onLatchPress()
         latchPendingActivation = false;
         if (controls.getPreset() > 23)
         {
-            uint8_t pkt[5] = {240, 111, 0x1A, 0, 247};
-            usb_midi.write(pkt, 5);
+            int smoothMs = revertSmoothSync ? syncSmoothToMs(revertSmoothSyncStep) : smoothLevelToMs(revertSmoothLevel);
+            if (smoothMs > 0) {
+                sendRevertEvents();
+                uint8_t pkt[5] = {240, 111, 0x1A, 2, 247}; // discard script snapshot
+                usb_midi.write(pkt, 5);
+            } else {
+                uint8_t pkt[5] = {240, 111, 0x1A, 0, 247};
+                usb_midi.write(pkt, 5);
+            }
         }
         else
             sendRevertEvents();
