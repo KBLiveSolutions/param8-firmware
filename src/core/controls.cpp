@@ -15,22 +15,25 @@ ControlsManager::ControlsManager() : _currentPreset(0) {
     for (int p = 0; p < 26; p++)
         for (int i = 0; i < 8; i++)
             _hiResValues[p][i] = 8192;
+    for (int p = 0; p < 24; p++) {
+        _labelConfigs[p][0] = 0; _labelConfigs[p][1] = 0;
+        _labelConfigs[p][2] = 5; _labelConfigs[p][3] = 4;
+    }
+    // Preset 24 (Global/DAW mode)
+    _labelConfigs[24][0] = 1; _labelConfigs[24][1] = 0;
+    _labelConfigs[24][2] = 2; _labelConfigs[24][3] = 4;
+    // Preset 25 (Device mode): hardcoded, not user-configurable
+    _labelConfigs[25][0] = 1; _labelConfigs[25][1] = 4;
+    _labelConfigs[25][2] = 2; _labelConfigs[25][3] = 3;
 }
 
 void ControlsManager::setPreset(uint8_t preset) {
     if (preset < 26) {
         _currentPreset = preset;
-        
-        // Charger les données du nouveau preset depuis le JSON
         json.setMode(preset);
-        
-        // Synchroniser les positions des encodeurs avec les nouvelles valeurs
         for (int i = 0; i < 8; i++) {
             encoders.positions[i] = _presets[_currentPreset].encoder[i].value;
         }
-        
-        // Sauvegarder le changement de preset
-        json.save();
     }
 }
 
@@ -57,15 +60,21 @@ MidiControl& ControlsManager::getButtonShortAt(uint8_t preset, uint8_t idx) {
 // Surcharges avec paramètre de preset
 void ControlsManager::setEncoder(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel) {
     if (preset < 26 && idx < 8) {
-        _presets[preset].encoder[idx] = {type, number, channel};
-        json.setEncoder(preset, idx, static_cast<int>(type), static_cast<int>(number), static_cast<int>(channel)); 
+        MidiControl& enc = _presets[preset].encoder[idx];
+        enc.type = type;
+        enc.number = number;
+        enc.channel = channel;
+        json.setEncoder(preset, idx, static_cast<int>(type), static_cast<int>(number), static_cast<int>(channel));
     }
 }
 
-void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, bool toggleMode) {
+void ControlsManager::setButtonShort(uint8_t preset, uint8_t idx, ControlMidiType type, uint8_t number, uint8_t channel, uint8_t pressMode) {
     if (preset < 26 && idx < 8) {
-        _presets[preset].buttons_short[idx] = {type, number, channel};
-        _presets[preset].buttons_short[idx].toggleMode = toggleMode;
+        MidiControl& btn = _presets[preset].buttons_short[idx];
+        btn.type = type;
+        btn.number = number;
+        btn.channel = channel;
+        btn.pressMode = pressMode;
     }
 }
 
@@ -89,35 +98,90 @@ void ControlsManager::setDefaults() {
     Serial.print("Preset actuel chargé: ");
     Serial.println(_currentPreset);
 
+    if (json.getDoc()["global"]["v"].isNull() || (int)json.getDoc()["global"]["v"] < 3) {
+        const uint8_t encDef[8] = {40, 41, 42, 43, 44, 45, 46, 47};
+        const uint8_t btnDef[8] = {50, 51, 52, 53, 54, 55, 56, 57};
+        const char* encNames[8] = {"Master Vol.", "Cue Vol.", "BPM", "Scroll Scn.", "Track Vol.", "Track Pan", "Song Pos.", "Sel. Param"};
+        const char* btnNames[8] = {"Metronome", "Arm", "Play", "Laun. Scn.", "Mute", "Solo", "Arr. Loop", "Ret. Dflt."};
+        for (int i = 0; i < 8; i++) {
+            json.getDoc()["global"]["enc"][String(i)] = encDef[i];
+            json.getDoc()["global"]["btn"][String(i)] = btnDef[i];
+            json.getDoc()["24"]["enc_names"][String(i)] = encNames[i];
+            json.getDoc()["24"]["btn_names"][String(i)] = btnNames[i];
+        }
+        json.getDoc()["global"]["v"] = 3;
+        json.save();
+        Serial.println("Initialized global mode fnId defaults v3");
+    }
+    if ((int)json.getDoc()["global"]["v"] < 5) {
+        json.getDoc()["global"]["enc"]["7"] = 47;
+        json.getDoc()["24"]["enc_names"]["7"] = "Sel. Param";
+        json.getDoc()["global"]["v"] = 5;
+        json.save();
+        Serial.println("Restored global enc7 to Sel. Param fnId=47 v5");
+    }
+    if ((int)json.getDoc()["global"]["v"] < 6) {
+        for (int p = 0; p < 24; p++) {
+            json.getDoc()[String(p)]["labels"][0] = 0;
+            json.getDoc()[String(p)]["labels"][1] = 0;
+            json.getDoc()[String(p)]["labels"][2] = 5;
+            json.getDoc()[String(p)]["labels"][3] = 4;
+        }
+        json.getDoc()["global"]["labels"][0] = 1;
+        json.getDoc()["global"]["labels"][1] = 0;
+        json.getDoc()["global"]["labels"][2] = 2;
+        json.getDoc()["global"]["labels"][3] = 4;
+        json.getDoc()["global"]["v"] = 6;
+        json.save();
+        Serial.println("Applied label config defaults v6");
+    }
+
     for(int _preset = 0; _preset < 26; ++_preset){
         Serial.print("Chargement preset ");
         Serial.println(_preset);
 
         for(int i = 0; i < 8; ++i) {
             if (_preset == 24) {
-                // Mixer/Global: encoders CC 40-47, buttons CC 50-57, all on channel 7
+                // Mixer/Global: uses isFunction=true, fnId == CC (no mapping needed)
                 setEncoder(_preset, i, MIDI_CC, 40 + i, 7);
                 setButtonShort(_preset, i, MIDI_CC, 50 + i, 7, false);
+                _presets[24].encoder[i].fnId = json.getDoc()["global"]["enc"][String(i)] | 73;
+                _presets[24].encoder[i].isFunction = true;
+                _presets[24].buttons_short[i].fnId = json.getDoc()["global"]["btn"][String(i)] | 1;
+                _presets[24].buttons_short[i].isFunction = true;
+                const char* encName24 = json.getDoc()["24"]["enc_names"][String(i)] | "";
+                strncpy(_presets[24].encoder[i].controlName, encName24, sizeof(_presets[24].encoder[i].controlName) - 1);
+                const char* btnName24 = json.getDoc()["24"]["btn_names"][String(i)] | "";
+                strncpy(_presets[24].buttons_short[i].controlName, btnName24, sizeof(_presets[24].buttons_short[i].controlName) - 1);
             } else if (_preset == 25) {
-                // Device: encoders CC 10-17, buttons CC 20-27, all on channel 7
+                // Device: encoders CC 10-17, buttons CC 20-27 (button 3: CC 29 = Capture)
                 setEncoder(_preset, i, MIDI_CC, 10 + i, 7);
-                setButtonShort(_preset, i, MIDI_CC, 20 + i, 7, false);
+                if (i == 3) {
+                    // Capture: CC 29 → capture_midi() via Remote Script interception
+                    setButtonShort(_preset, i, MIDI_CC, 29, 7, false);
+                } else {
+                    setButtonShort(_preset, i, MIDI_CC, 20 + i, 7, false);
+                }
             } else {
                 ControlData data = json.getControlData("encoders", _preset, i);
-                _presets[_preset].encoder[i].type    = static_cast<ControlMidiType>(data.value0);
-                _presets[_preset].encoder[i].number  = static_cast<uint8_t>(data.value1);
-                _presets[_preset].encoder[i].channel = static_cast<uint8_t>(data.value2);
-                _presets[_preset].encoder[i].hiRes   = (data.value3 != 0);
-                _presets[_preset].encoder[i].minVal  = (data.value4 < 0) ? 0   : (uint8_t)data.value4;
-                _presets[_preset].encoder[i].maxVal  = (data.value5 < 0) ? 127 : (uint8_t)data.value5;
+                _presets[_preset].encoder[i].type       = static_cast<ControlMidiType>(data.value0);
+                _presets[_preset].encoder[i].number     = static_cast<uint8_t>(data.value1);
+                _presets[_preset].encoder[i].channel    = static_cast<uint8_t>(data.value2);
+                _presets[_preset].encoder[i].hiRes      = (data.value3 != 0);
+                _presets[_preset].encoder[i].minVal     = (data.value4 < 0) ? 0   : (uint8_t)data.value4;
+                _presets[_preset].encoder[i].maxVal     = (data.value5 < 0) ? 127 : (uint8_t)data.value5;
+                _presets[_preset].encoder[i].isFunction = (data.value6 > 0);
+                _presets[_preset].encoder[i].fnId       = (data.value7 < 0) ? 0 : (uint8_t)data.value7;
 
                 data = json.getControlData("buttons_short", _preset, i);
-                _presets[_preset].buttons_short[i].type    = static_cast<ControlMidiType>(data.value0);
-                _presets[_preset].buttons_short[i].number  = static_cast<uint8_t>(data.value1);
-                _presets[_preset].buttons_short[i].channel = static_cast<uint8_t>(data.value2);
-                _presets[_preset].buttons_short[i].toggleMode = json.getButtonToggleMode(_preset, i) > 0;
-                _presets[_preset].buttons_short[i].minVal  = (data.value3 < 0) ? 0   : (uint8_t)data.value3;
-                _presets[_preset].buttons_short[i].maxVal  = (data.value4 < 0) ? 127 : (uint8_t)data.value4;
+                _presets[_preset].buttons_short[i].type       = static_cast<ControlMidiType>(data.value0);
+                _presets[_preset].buttons_short[i].number     = static_cast<uint8_t>(data.value1);
+                _presets[_preset].buttons_short[i].channel    = static_cast<uint8_t>(data.value2);
+                _presets[_preset].buttons_short[i].pressMode  = (uint8_t)json.getButtonToggleMode(_preset, i);
+                _presets[_preset].buttons_short[i].minVal     = (data.value3 < 0) ? 0   : (uint8_t)data.value3;
+                _presets[_preset].buttons_short[i].maxVal     = (data.value4 < 0) ? 127 : (uint8_t)data.value4;
+                _presets[_preset].buttons_short[i].isFunction = (data.value5 > 0);
+                _presets[_preset].buttons_short[i].fnId       = (data.value6 < 0) ? 0 : (uint8_t)data.value6;
 
                 const char* encName = json.getDoc()[String(_preset)]["enc_names"][String(i)] | "";
                 strncpy(_presets[_preset].encoder[i].controlName, encName, sizeof(_presets[_preset].encoder[i].controlName) - 1);
@@ -133,6 +197,13 @@ void ControlsManager::setDefaults() {
         if (_preset < 24) {
             const char* pName = json.getDoc()[String(_preset)]["preset_name"] | "";
             strncpy(_presets[_preset].presetName, pName, sizeof(_presets[_preset].presetName) - 1);
+            static const uint8_t dflt[4] = {0, 0, 5, 4};
+            for (int slot = 0; slot < 4; slot++)
+                _labelConfigs[_preset][slot] = json.getDoc()[String(_preset)]["labels"][slot] | dflt[slot];
+        } else if (_preset == 24) {
+            static const uint8_t dflt[4] = {1, 0, 2, 4};
+            for (int slot = 0; slot < 4; slot++)
+                _labelConfigs[24][slot] = json.getDoc()["global"]["labels"][slot] | dflt[slot];
         }
     }
 
@@ -143,6 +214,7 @@ void ControlsManager::setDefaults() {
 }
 
 void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value) {
+    
     for (int i = 0; i < 8; ++i) {
         if (getEncoder(i).channel == channel && getEncoder(i).number == control) {
             getEncoder(i).value = value;
@@ -153,11 +225,22 @@ void ControlsManager::onMidiValueChange(uint8_t channel, uint8_t control, uint8_
                 snprintf(buf, sizeof(buf), "%d", value);
                 faders[i]->updateTitle(buf);
             }
+        } else if (channel == 7 && getEncoder(i).isFunction) {
+            uint8_t fnId = getEncoder(i).fnId;
+            uint8_t effectiveCC = (fnId >= 48 && fnId <= 55) ? fnId - 8 : fnId;
+            if (effectiveCC == control) {
+                getEncoder(i).value = value;
+                faders[i]->setValue(value);
+                encoders.positions[i] = value;
+            }
         }
         if (getButtonShort(i).channel == channel && getButtonShort(i).number == control) {
             getButtonShort(i).value = value;
             bool on = (getButtonShort(i).type == MIDI_NOTE) ? (value == 127) : (value > 63);
             faders[i]->updateButtonName(on);
+        } else if (channel == 7 && getButtonShort(i).isFunction && getButtonShort(i).fnId == control) {
+            getButtonShort(i).value = value;
+            faders[i]->updateButtonName(value > 63);
         }
     }
 }
@@ -181,41 +264,42 @@ void ControlsManager::checkInactiveEncoders() {
 }
 
 void ControlsManager::getPresetControls(uint8_t preset) {
-    Serial.print("Envoi des contrôles du preset ");
-    Serial.println(preset);
-
     if (preset < 26) {
         for (int i = 0; i < 8; ++i) {
             MidiControl& encoder = _presets[preset].encoder[i];
 
-            uint8_t packet[12] = { 240, 111, 12, preset, (uint8_t)i,
+            uint8_t packet[14] = { 240, 111, 12, preset, (uint8_t)i,
                                    static_cast<uint8_t>(encoder.type),
                                    encoder.number,
                                    encoder.channel,
                                    encoder.hiRes ? (uint8_t)1 : (uint8_t)0,
                                    encoder.minVal,
                                    encoder.maxVal,
+                                   encoder.isFunction ? (uint8_t)1 : (uint8_t)0,
+                                   encoder.fnId,
                                    247 };
-            usb_midi.write(packet, 12);
-            serialEditorSend(packet, 12);
+            usb_midi.write(packet, 14);
+            serialEditorSend(packet, 14);
             delay(2);
 
-            uint8_t buttonShortPacket[12] = { 240, 111, 13, preset, (uint8_t)i,
+            uint8_t buttonShortPacket[14] = { 240, 111, 13, preset, (uint8_t)i,
                                   static_cast<uint8_t>(_presets[preset].buttons_short[i].type),
                                   _presets[preset].buttons_short[i].number,
                                   _presets[preset].buttons_short[i].channel,
-                                  _presets[preset].buttons_short[i].toggleMode ? 1 : 0,
+                                  _presets[preset].buttons_short[i].pressMode,
                                   _presets[preset].buttons_short[i].minVal,
                                   _presets[preset].buttons_short[i].maxVal,
+                                  _presets[preset].buttons_short[i].isFunction ? (uint8_t)1 : (uint8_t)0,
+                                  _presets[preset].buttons_short[i].fnId,
                                   247 };
-            usb_midi.write(buttonShortPacket, 12);
-            serialEditorSend(buttonShortPacket, 12);
+            usb_midi.write(buttonShortPacket, 14);
+            serialEditorSend(buttonShortPacket, 14);
             delay(2);
 
             if (encoder.controlName[0] != '\0') {
-                uint8_t namePacket[20] = { 240, 111, 15, preset, (uint8_t)i, 0 };
+                uint8_t namePacket[28] = { 240, 111, 15, preset, (uint8_t)i, 0 };
                 size_t j = 6;
-                for (size_t c = 0; c < 11 && encoder.controlName[c] != '\0'; c++) {
+                for (size_t c = 0; c < sizeof(encoder.controlName) - 1 && encoder.controlName[c] != '\0'; c++) {
                     namePacket[j++] = (uint8_t)encoder.controlName[c];
                 }
                 namePacket[j++] = 247;
@@ -226,9 +310,9 @@ void ControlsManager::getPresetControls(uint8_t preset) {
 
             MidiControl& btn = _presets[preset].buttons_short[i];
             if (btn.controlName[0] != '\0') {
-                uint8_t namePacket[20] = { 240, 111, 15, preset, (uint8_t)i, 1 };
+                uint8_t namePacket[28] = { 240, 111, 15, preset, (uint8_t)i, 1 };
                 size_t j = 6;
-                for (size_t c = 0; c < 11 && btn.controlName[c] != '\0'; c++) {
+                for (size_t c = 0; c < sizeof(btn.controlName) - 1 && btn.controlName[c] != '\0'; c++) {
                     namePacket[j++] = (uint8_t)btn.controlName[c];
                 }
                 namePacket[j++] = 247;
@@ -247,6 +331,13 @@ void ControlsManager::getPresetControls(uint8_t preset) {
             usb_midi.write(namePacket, j);
             serialEditorSend(namePacket, j);
             delay(2);
+        }
+
+        {
+            uint8_t labPacket[9] = { 240, 111, 0x28, preset,
+                _labelConfigs[preset][0], _labelConfigs[preset][1],
+                _labelConfigs[preset][2], _labelConfigs[preset][3], 247 };
+            serialEditorSend(labPacket, 9);
         }
 
         uint8_t layoutPacket[5] = { 240, 111, 14, (uint8_t)faderLayout, 247 };
@@ -269,4 +360,13 @@ void ControlsManager::getPresetControls(uint8_t preset) {
         usb_midi.write(versionPacket, 7);
         serialEditorSend(versionPacket, 7);
     }
+}
+
+uint8_t ControlsManager::getLabelConfig(uint8_t preset, uint8_t slot) const {
+    if (preset < 26 && slot < 4) return _labelConfigs[preset][slot];
+    return 0;
+}
+
+void ControlsManager::setLabelConfig(uint8_t preset, uint8_t slot, uint8_t value) {
+    if (preset < 26 && slot < 4) _labelConfigs[preset][slot] = value;
 }

@@ -2,6 +2,53 @@
   param8 Firmware Changelog
 ================================================================================
 
+v1.1.0 — 2026-11-20
+--------------------
+ 
+    DAW actions:
+
+    - Global mode is now customizable from the editor. Actions cover global functions (transport, Undo/Redo etc),
+    Session or Arrangement functions, per track /device functions, and Preset navigation functions.
+
+    - DAW actions can be assigned to any control in a User preset
+
+    Smooth / settings :
+
+    - Smooth: smooth transition times for Latch and Revert, configurable in the
+      Settings page. Available in time (ms) or beat-synced mode.
+
+    - Settings (brightness, screen saver, slew) are accessible directly on the
+      device with a double press on Shift.
+
+    Display :
+
+    - Quantized parameters: controls mapped to stepped or on/off parameters
+      now display as rectangular blocks in the Dynamic layout.
+
+    - Labels are available on all pages and can be customized.
+
+    Editor :
+
+    - Editor: changes are no longer sent automatically — press Send
+      (or Cmd/Ctrl+U) to upload to param8.
+
+    - Controls can be swapped
+
+    Various :
+
+    - PB speed has been improved
+
+    - Trigger press mode: a third button mode alongside Toggle and Momentary.
+      Sends the maximum value on press only, nothing on release.
+    
+    - In Device Mode, A/B has been replaced by Capture to make way for Live 13
+
+    - Settings has a Device Lock toggle. If On, param8 will follow the "Blue Hand" in Live.
+    If Off, the Device Navigation is independant.
+
+
+--------------------------------------------------------------------------------
+
 v1.0.3 — 2026-11-18
 --------------------
 

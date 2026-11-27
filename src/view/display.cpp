@@ -3,18 +3,24 @@
 #include "../core/actions.h"
 #include "../core/controls.h"
 #include "../midi/midi.h"
+#include "fonts/MiscFixed7x13Bpt7b.h"
 
 
 FaderWidget* faders[8];
 
 
-char deviceLabel[20] = {0};
-char bankLabel[20] = {0};
-char trackLabel[20] = {0};
+char deviceLabel[20] = "Device";
+char bankLabel[20] = "Bank";
+char trackLabel[20] = "Track";
+char presetLabel[20] = {0};
+char presetNumberLabel[20] = {0};
 bool deviceLabelDirty = false;
 bool bankLabelDirty = false;
 bool trackLabelDirty = false;
+bool presetLabelDirty = false;
+uint8_t currentLabelConfig[4] = {1, 4, 2, 3};
 bool screenSaverActive = false;
+bool screenSaverJustWoke = false;
 uint8_t brightnessLevel = 1;
 
 void setupDisplay() {
@@ -80,6 +86,8 @@ void setupDisplay() {
     setBrightness(brightnessLevel);
 }
 
+static const uint8_t LABEL_BACKGROUND = 5;
+
 static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     int label_w = 64;
     int label_x = (256 - label_w) / 2;
@@ -87,14 +95,14 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
     int area_h = 10;
 
     disp.fillRect(label_x, y, label_w, area_h, 0);
-    disp.fillRect(label_x + 2, y, inner_w, area_h, 15);
+    disp.fillRect(label_x + 2, y, inner_w, area_h, LABEL_BACKGROUND);
 
     disp.setFont(NULL);
     int tw = getStrWidth(disp, txt);
 
     if (tw <= inner_w) {
         int text_x = label_x + (label_w - tw) / 2;
-        disp.setCursor(text_x, y + 2);
+        disp.setCursor(text_x, y + 1);
         disp.setTextColor(0);
         disp.print(txt);
     } else {
@@ -104,16 +112,45 @@ static void drawLabelOverButton(PicoGFX_SSD1322 &disp, const char* txt, int y) {
         while (strlen(truncated) > 1 && getStrWidth(disp, truncated) > inner_w - 4) {
             truncated[strlen(truncated)-1] = '\0';
         }
-        disp.setCursor(label_x + 5, y + 2);
+        disp.setCursor(label_x + 5, y + 1);
         disp.setTextColor(0);
         disp.print(truncated);
     }
 }
 
+// Label type constants: 0=Off, 1=Track, 2=Device, 3=Bank, 4=Preset Name, 5=Preset Number
+static const char* getLabelByType(uint8_t type) {
+    switch (type) {
+        case 1: return trackLabel;
+        case 2: return deviceLabel;
+        case 3: return bankLabel;
+        case 4: return presetLabel;
+        case 5: return presetNumberLabel;
+        default: return nullptr;
+    }
+}
+
+// Slot positions: 0=display1 top, 1=display2 top, 2=display1 bottom, 3=display2 bottom
+static void drawOrClearSlot(uint8_t slot) {
+    static const struct { PicoGFX_SSD1322* disp; int y; } positions[4] = {
+        { &display1, 0 }, { &display2, 0 }, { &display1, 54 }, { &display2, 54 }
+    };
+    uint8_t type = currentLabelConfig[slot];
+    const char* lbl = (type == 0) ? nullptr : getLabelByType(type);
+    if (lbl && lbl[0] != '\0') {
+        drawLabelOverButton(*positions[slot].disp, lbl, positions[slot].y);
+    } else {
+        // clear the slot area
+        positions[slot].disp->fillRect((256 - 64) / 2, positions[slot].y, 64, 10, 0);
+    }
+}
+
+static bool isFlushing = false;
+static bool pendingShow = false;
+
 void flushDisplays() {
-    static bool flushing = false;
-    if (flushing) return;
-    flushing = true;
+    if (isFlushing) return;
+    isFlushing = true;
     if (display1.isDirty()) {
         display1.display();
         while (!display1.isTransferComplete()) {
@@ -126,7 +163,11 @@ void flushDisplays() {
             midiRead();
         }
     }
-    flushing = false;
+    isFlushing = false;
+    if (pendingShow) {
+        pendingShow = false;
+        showDisplay();
+    }
 }
 
 void drawAllWidgets() {
@@ -139,18 +180,33 @@ void drawAllWidgets() {
     for (int i : {2, 3, 6, 7}) {
         faders[i]->draw();
     }
-    if (trackLabel[0] != '\0')
-        drawLabelOverButton(display1, trackLabel, 0);
-    if (deviceLabel[0] != '\0')
-        drawLabelOverButton(display1, deviceLabel, 54);
-    if (bankLabel[0] != '\0')
-        drawLabelOverButton(display2, bankLabel, 54);
+    uint8_t currentPreset = controls.getPreset();
+    const char* pName = controls.getPresetName(currentPreset);
+    if (pName && pName[0] != '\0') {
+        strncpy(presetLabel, pName, sizeof(presetLabel) - 1);
+    } else if (currentPreset == 24) {
+        strncpy(presetLabel, "Global", sizeof(presetLabel) - 1);
+    } else if (currentPreset == 25) {
+        strncpy(presetLabel, "Device", sizeof(presetLabel) - 1);
+    } else {
+        snprintf(presetLabel, sizeof(presetLabel), "Preset %d", currentPreset + 1);
+    }
+    presetLabel[sizeof(presetLabel) - 1] = '\0';
+    if (currentPreset < 24)
+        snprintf(presetNumberLabel, sizeof(presetNumberLabel), "Preset %d", currentPreset + 1);
+    else
+        presetNumberLabel[0] = '\0';
+
+    for (int i = 0; i < 4; i++) drawOrClearSlot(i);
     deviceLabelDirty = false;
     bankLabelDirty = false;
     trackLabelDirty = false;
+    presetLabelDirty = false;
 }
 
 void showDisplay() {
+    if (isFlushing) { pendingShow = true; return; }
+    pendingShow = false;
     drawAllWidgets();
     flushDisplays();
 }
@@ -164,17 +220,21 @@ void updateDisplay() {
     unsigned long now = millis();
     if (now - lastUpdate < 25) return;
     lastUpdate = now;
-
     if (screenSaverActive) return;
-    if (isSelectingPreset()) {
+    if (screenSaverJustWoke) {
+        screenSaverJustWoke = false;
+        showDisplay();
+        return;
+    }
+    if (settingsModeActive || isSelectingPreset()) {
         for (int i = 0; i < 8; i++) faders[i]->_dirty = false;
-        deviceLabelDirty = bankLabelDirty = trackLabelDirty = false;
+        trackLabelDirty = bankLabelDirty = deviceLabelDirty = presetLabelDirty = false;
         return;
     }
     for (int i = 0; i < 8; i++) {
         if (faders[i]->_dirty) {
-            faders[i]->_dirty = false;
             faders[i]->drawFader();
+            faders[i]->_dirty = false;
         }
     }
     drawDeviceBankLabels();
@@ -183,47 +243,59 @@ void updateDisplay() {
 
 void drawDeviceBankLabels() {
     if (screenSaverActive) return;
-    if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty) return;
-    if (trackLabelDirty) {
-        trackLabelDirty = false;
-        if (trackLabel[0] != '\0')
-            drawLabelOverButton(display1, trackLabel, 0);
-    }
-    if (deviceLabelDirty) {
-        deviceLabelDirty = false;
-        if (deviceLabel[0] != '\0')
-            drawLabelOverButton(display1, deviceLabel, 54);
-    }
-    if (bankLabelDirty) {
-        bankLabelDirty = false;
-        if (bankLabel[0] != '\0')
-            drawLabelOverButton(display2, bankLabel, 54);
-    }
+    if (!deviceLabelDirty && !bankLabelDirty && !trackLabelDirty && !presetLabelDirty) return;
+    for (int i = 0; i < 4; i++) drawOrClearSlot(i);
+    deviceLabelDirty = false;
+    bankLabelDirty = false;
+    trackLabelDirty = false;
+    presetLabelDirty = false;
 }
 
 void runScreenSaver() {
     static unsigned long lastUpdate = 0;
-    static int pixelCount = 0;
-    const int pixelsPerFrame = 20;
+    static float x1 = 30.0f,  y1 = 10.0f, dx1 =  1.3f, dy1 = 0.7f;
+    static float x2 = 140.0f, y2 = 40.0f, dx2 = -1.1f, dy2 = 0.9f;
+    static int textW = 0, textH = 0, cursorYOff = 0;
     const unsigned long frameInterval = 50;
 
-    unsigned long now = millis();
-    if (now - lastUpdate >= frameInterval) {
-        lastUpdate = now;
-        pixelCount = 0;
-        display1.fillScreen(0);
-        display2.fillScreen(0);
-        while (pixelCount < pixelsPerFrame) {
-            int x = random(0, 256);
-            int y = random(0, 64);
-            display1.drawPixel(x, y, 15);
-            display2.drawPixel(x, y, 15);
-            pixelCount++;
-        }
-        display1.displayBlocking();
-        // display1 DMA complete; SPI is free for display2
-        display2.displayBlocking();
+    if (textW == 0) {
+        display1.setFont(&MiscFixed7x13Bpt7b);
+        int16_t bx, by; uint16_t bw, bh;
+        display1.getTextBounds("param8", 0, 0, &bx, &by, &bw, &bh);
+        textW = (int)bw;
+        textH = (int)bh;
+        cursorYOff = -by;   // cursor_y = iy + cursorYOff → text top aligns with iy
+        display1.setFont(NULL);
     }
+
+    unsigned long now = millis();
+    if (now - lastUpdate < frameInterval) return;
+    lastUpdate = now;
+
+    int maxX = 256 - textW, maxY = 64 - textH;
+
+    auto bounce = [](float &p, float &v, int hi) {
+        p += v;
+        if (p <= 0.0f)       { p = 0.0f;       v = -v; }
+        if (p >= (float)hi)  { p = (float)hi;   v = -v; }
+    };
+    bounce(x1, dx1, maxX);  bounce(y1, dy1, maxY);
+    bounce(x2, dx2, maxX);  bounce(y2, dy2, maxY);
+
+    display1.fillScreen(0);
+    display1.setFont(&MiscFixed7x13Bpt7b);
+    display1.setTextColor(15);
+    display1.setCursor((int)x1, (int)y1 + cursorYOff);
+    display1.print("param8");
+
+    display2.fillScreen(0);
+    display2.setFont(&MiscFixed7x13Bpt7b);
+    display2.setTextColor(15);
+    display2.setCursor((int)x2, (int)y2 + cursorYOff);
+    display2.print("param8");
+
+    display1.displayBlocking();
+    display2.displayBlocking();
 }
 
 void setBrightness(uint8_t level) {

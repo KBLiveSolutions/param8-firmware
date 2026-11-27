@@ -25,7 +25,10 @@ public:
     bool disabled = false;
     bool dimmed = false;
     bool buttonState = false;
+    bool buttonHeld = false;
+    bool isQuantized = false;
     bool _dirty = false;
+    uint8_t numQuantizedItems = 0;
     int x_offset, y_offset;
     int boutonNumber;
 
@@ -47,4 +50,6 @@ public:
     void setParamName(const char* txt);
     void showParamName();
     void drawSeparators();
+    void setQuantized(uint8_t numItems);
+    void drawFaderQuantized();
 };

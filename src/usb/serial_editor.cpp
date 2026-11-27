@@ -22,7 +22,7 @@ void serialEditorRead() {
             if (b == 0xF7) {
                 inSysEx = false;
                 serialEditorConnected = true;
-                onSysEx(serialBuf, serialBufLen);
+                onSysEx(serialBuf, serialBufLen, true);
             }
         }
     }

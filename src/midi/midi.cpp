@@ -5,6 +5,7 @@
 #include "../core/actions.h"
 #include "../core/version.h"
 #include "../view/display.h"
+#include "../view/leds.h"
 #include "../core/jsonManager.h"
 #include "../usb/serial_editor.h"
 
@@ -60,7 +61,7 @@ void setupMIDI()
 //     }
 // }
 
-void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel)
+void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channel, uint8_t forceCable)
 {
   lastInputTime = millis();
   if (screenSaverActive)
@@ -69,7 +70,7 @@ void sendMidiMessage(uint8_t type, uint8_t number, uint8_t value, uint8_t channe
     showDisplay();
   }
   // cable 0 = DAW (global/device modes), cable 1 = User (user presets 0-23)
-  uint8_t cable = (controls.getPreset() >= 24) ? 0 : 1;
+  uint8_t cable = (forceCable != 255) ? forceCable : ((controls.getPreset() >= 24) ? 0 : 1);
   uint8_t packet[4] = {0};
   switch (type)
   {
@@ -138,10 +139,9 @@ void midiRead()
       handleMIDIDAWMessage(packet);
     }
     lastInputTime = millis();
-    if (screenSaverActive)
-    {
+    if (screenSaverActive) {
       screenSaverActive = false;
-      showDisplay();
+      screenSaverJustWoke = true;
     }
   }
 }
@@ -176,6 +176,7 @@ void handleMIDIDAWMessage(uint8_t *packet)
     uint8_t program = packet[2] & 0x7F;
     if (program < 26) {
       controls.setPreset(program);
+      json.save();
       updateFaderTitles();
       updateFaderValues();
       sendPresetSysEx(program);
@@ -239,16 +240,32 @@ void handleSysExContinuation(uint8_t *packet)
 
 void onMidiValueChange(uint8_t channel, uint8_t control, uint8_t value)
 {
-  if (value == 0 && liveConnectedTime > 0 && millis() - liveConnectedTime < 500)
+  if (value == 0 && channel != 7 && liveConnectedTime > 0 && millis() - liveConnectedTime < 500)
     return;
+  if (isSelectingPreset()) {
+    // During SHIFT_HOLD: silently capture function-button states on ch7 into
+    // buttonState (no draw) so showDisplay() on shift release sees them.
+    if (channel == 7) {
+      for (int i = 0; i < 8; ++i) {
+        MidiControl& btn = controls.getButtonShort(i);
+        if (btn.isFunction && btn.fnId == control) {
+          btn.value = value;
+          faders[i]->buttonState = (value > 63);
+        }
+      }
+    }
+    return;
+  }
   controls.onMidiValueChange(channel, control, value);
 }
 
-void onSysEx(const uint8_t *sysex, size_t len)
+static unsigned long scriptWarningUntil = 0;
+#define SCRIPT_REQUIRED_MAJOR 1
+#define SCRIPT_REQUIRED_MINOR 1
+
+void onSysEx(const uint8_t *sysex, size_t len, bool fromSerial)
 {
   if (len < 5 || sysex[0] != 0xF0 || sysex[1] != 0x6F)
-    return;
-  if (isSelectingPreset())
     return;
 
   uint8_t status_byte = sysex[2];
@@ -266,6 +283,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
   switch (status_byte)
   {
   case 0:
+    if (isSelectingPreset()) break;
     if (param_number < 8)
       {
         if (strlen(ascii_string) > 0)
@@ -298,12 +316,16 @@ void onSysEx(const uint8_t *sysex, size_t len)
     break;
 
   case 2:
+    if (isSelectingPreset()) break;
+    if (millis() < scriptWarningUntil) break;
     strncpy(bankLabel, ascii_string, sizeof(bankLabel));
     bankLabel[sizeof(bankLabel)-1] = '\0';
     bankLabelDirty = true;
     break;
 
   case 3:
+    if (isSelectingPreset()) break;
+    if (millis() < scriptWarningUntil) break;
     strncpy(deviceLabel, ascii_string, sizeof(deviceLabel));
     deviceLabel[sizeof(deviceLabel)-1] = '\0';
     deviceLabelDirty = true;
@@ -314,9 +336,21 @@ void onSysEx(const uint8_t *sysex, size_t len)
     bool wasConnected = liveConnected;
     liveConnected = true;
     liveConnectedTime = millis();
+    // Check script version: v1.1+ sends F0 6F 05 00 MAJOR MINOR F7 (len=7)
+    bool scriptOk = (len >= 7) &&
+                    ((sysex[4] > SCRIPT_REQUIRED_MAJOR) ||
+                     (sysex[4] == SCRIPT_REQUIRED_MAJOR && sysex[5] >= SCRIPT_REQUIRED_MINOR));
+    if (!scriptOk) {
+      strncpy(deviceLabel, "Update script!", sizeof(deviceLabel));
+      strncpy(bankLabel,   "",               sizeof(bankLabel));
+      strncpy(trackLabel,  "v1.1 required",  sizeof(trackLabel));
+      deviceLabelDirty = bankLabelDirty = trackLabelDirty = true;
+      scriptWarningUntil = millis() + 8000;
+      showDisplay();
+    }
     uint8_t preset = controls.getPreset();
     sendPresetSysEx(preset);
-    if (!wasConnected) {
+    if (!wasConnected && scriptOk && !isSelectingPreset()) {
       if (preset == 25 || preset == 24) {
         updateFaderTitles();
       }
@@ -326,11 +360,11 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 6:
   {
+    if (isSelectingPreset()) break;
+    if (millis() < scriptWarningUntil) break;
     strncpy(trackLabel, ascii_string, sizeof(trackLabel));
     trackLabel[sizeof(trackLabel)-1] = '\0';
-    trackLabelDirty = true;
-    drawDeviceBankLabels();
-    flushDisplays();
+    trackLabelDirty = true;  // picked up by next timed updateDisplay()
     break;
   }
   case 7:
@@ -340,7 +374,6 @@ void onSysEx(const uint8_t *sysex, size_t len)
   }
   case 13:
   {
-    Serial.println("Configuration des encoders reçue");
     // Chaque contrôle utilise 3 octets: type, number, channel
     uint8_t preset = sysex[3];
     if (preset >= 24) break;
@@ -359,21 +392,19 @@ void onSysEx(const uint8_t *sysex, size_t len)
         case 3: encType = MIDI_PB; break;
         default: encType = MIDI_CC; break;
     }
+    bool isFunction = (len >= 13) ? sysex[11] != 0 : false;
+    uint8_t fnId    = (len >= 14) ? sysex[12] : 0;
     controls.setEncoder(preset, param_number, encType, number, channel);
     controls.getEncoderAt(preset, param_number).hiRes = hiRes;
     controls.getEncoderAt(preset, param_number).minVal = encMin;
     controls.getEncoderAt(preset, param_number).maxVal = encMax;
-    json.setEncoder(preset, param_number, (int)encType, (int)number, (int)channel, hiRes ? 1 : 0, encMin, encMax);
-    if (preset == controls.getPreset()) {
-      updateFaderTitles();
-      showDisplay();
-    }
-    json.save();
+    controls.getEncoderAt(preset, param_number).isFunction = isFunction;
+    controls.getEncoderAt(preset, param_number).fnId = fnId;
+    json.setEncoder(preset, param_number, (int)encType, (int)number, (int)channel, hiRes ? 1 : 0, encMin, encMax, isFunction ? 1 : 0, (int)fnId);
     break;
   }
   case 12:
   {
-    Serial.println("Configuration des boutons courts reçue (nouveau format)");
     // Structure : F0, constructeur, preset, status, type, control_number, channel, toggle, F7
     uint8_t preset = sysex[3];
     if (preset >= 24) break;
@@ -386,24 +417,25 @@ void onSysEx(const uint8_t *sysex, size_t len)
     }
     uint8_t control = sysex[6];
     uint8_t channel = sysex[7];
-    bool toggleMode = sysex[8] != 0;
-    uint8_t btnMin = (len >= 11) ? sysex[9]  : 0;
-    uint8_t btnMax = (len >= 12) ? sysex[10] : 127;
-    controls.setButtonShort(preset, param_number, _type, control, channel, toggleMode);
+    uint8_t pressMode = sysex[8] < 3 ? sysex[8] : 0;
+    uint8_t btnMin   = (len >= 11) ? sysex[9]  : 0;
+    uint8_t btnMax   = (len >= 12) ? sysex[10] : 127;
+    bool isFunction  = (len >= 13) ? sysex[11] != 0 : false;
+    uint8_t fnId     = (len >= 14) ? sysex[12] : 0;
+    controls.setButtonShort(preset, param_number, _type, control, channel, pressMode);
     controls.getButtonShortAt(preset, param_number).minVal = btnMin;
     controls.getButtonShortAt(preset, param_number).maxVal = btnMax;
+    controls.getButtonShortAt(preset, param_number).isFunction = isFunction;
+    controls.getButtonShortAt(preset, param_number).fnId = fnId;
     JsonArray arr = json.getDoc()[String(preset)]["buttons_short"][String(param_number)].to<JsonArray>();
-    arr[0] = static_cast<int>(_type);
-    arr[1] = static_cast<int>(control);
-    arr[2] = static_cast<int>(channel);
-    arr[3] = (int)btnMin;
-    arr[4] = (int)btnMax;
-    json.setButtonToggleMode(preset, param_number, toggleMode ? 1 : 0);
-    if (preset == controls.getPreset()) {
-      updateFaderTitles();
-      showDisplay();
-    }
-    json.save();
+    arr.add(static_cast<int>(_type));
+    arr.add(static_cast<int>(control));
+    arr.add(static_cast<int>(channel));
+    arr.add((int)btnMin);
+    arr.add((int)btnMax);
+    arr.add(isFunction ? 1 : 0);
+    arr.add((int)fnId);
+    json.setButtonToggleMode(preset, param_number, (int)pressMode);
     break;
   }
   case 14:
@@ -431,11 +463,11 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = sysex[3];
     uint8_t idx = sysex[4];
     uint8_t isButton = sysex[5];
-    if (preset >= 24 || idx >= 8) break;
+    if (preset > 24 || idx >= 8) break;
 
-    char name[12] = {0};
+    char name[20] = {0};
     size_t nameLen = 0;
-    for (size_t j = 6; j < len - 1 && nameLen < 11; j++) {
+    for (size_t j = 6; j < len - 1 && nameLen < 19; j++) {
       name[nameLen++] = (char)sysex[j];
     }
     name[nameLen] = '\0';
@@ -447,12 +479,9 @@ void onSysEx(const uint8_t *sysex, size_t len)
 
     const char* jsonKey = isButton ? "btn_names" : "enc_names";
     json.getDoc()[String(preset)][jsonKey][String(idx)] = name;
-    json.save();
 
-    if (preset == controls.getPreset()) {
+    if (preset == controls.getPreset() && !isSelectingPreset()) {
       updateFaderTitles();
-      // setParamName() only updates the string; the fader area needs an
-      // explicit redraw for the new name to show up right away.
       showDisplay();
     }
     break;
@@ -467,14 +496,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
       name[nameLen++] = (char)sysex[j];
     }
     name[nameLen] = '\0';
-    Serial.printf("Preset name received: preset=%d name='%s'\n", preset, name);
     controls.setPresetName(preset, name);
     json.getDoc()[String(preset)]["preset_name"] = name;
-    json.save();
-    if (preset == controls.getPreset()) {
-      updateFaderTitles();
-      showDisplay();
-    }
     break;
   }
   case 18:
@@ -483,10 +506,8 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t preset = sysex[3];
     uint8_t idx = sysex[4];
     uint8_t on = sysex[5];
-    Serial.printf("SysEx18 watcher: preset=%d idx=%d on=%d\n", preset, idx, on);
     if (preset < 24 && idx < 8) {
       controls.getEncoderAt(preset, idx).hasWatcher = on != 0;
-      Serial.printf("  -> hasWatcher[%d][%d] = %d\n", preset, idx, controls.getEncoderAt(preset, idx).hasWatcher);
     }
     break;
   }
@@ -501,6 +522,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
       screenSaverActive = false;
       showDisplay();
     }
+    onSmoothStateUpdatedFromEditor();  // redraws settings page if active
     break;
   }
   case 0x1B:
@@ -509,6 +531,7 @@ void onSysEx(const uint8_t *sysex, size_t len)
     setBrightness(val);
     json.getDoc()["brightness"] = val;
     json.save();
+    onSmoothStateUpdatedFromEditor();  // redraws settings page if active
     break;
   }
   case 0x13:
@@ -517,6 +540,214 @@ void onSysEx(const uint8_t *sysex, size_t len)
     uint8_t reply[7] = { 240, 111, 0x14, FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH, 247 };
     usb_midi.write(reply, 7);
     serialEditorSend(reply, 7);
+    // Send current display settings so editor reflects device state on connect
+    uint8_t brPkt[5] = {0xF0, 0x6F, 0x1B, brightnessLevel, 0xF7};
+    serialEditorSend(brPkt, 5);
+    uint16_t sec = (uint16_t)(screenSaverDelay / 1000UL);
+    uint8_t ssPkt[6] = {0xF0, 0x6F, 0x10, (uint8_t)((sec >> 7) & 0x7F), (uint8_t)(sec & 0x7F), 0xF7};
+    serialEditorSend(ssPkt, 6);
+    uint8_t layoutPkt[5] = {0xF0, 0x6F, 0x0E, (uint8_t)faderLayout, 0xF7};
+    serialEditorSend(layoutPkt, 5);
+    uint8_t ledPkt[5] = {0xF0, 0x6F, 0x29, ledsDimOff ? 1u : 0u, 0xF7};
+    serialEditorSend(ledPkt, 5);
+    uint8_t dlPkt[5] = {0xF0, 0x6F, 0x2A, deviceLocked ? 1u : 0u, 0xF7};
+    serialEditorSend(dlPkt, 5);
+    break;
+  }
+  case 0x1C:
+  {
+    // Set global encoder fnId: F0 6F 1C <idx> <fnId> F7  (from editor via serial)
+    uint8_t idx  = sysex[3];
+    uint8_t fnId = sysex[4];
+    if (idx >= 8) break;
+    controls.getEncoderAt(24, idx).fnId = fnId;
+    json.getDoc()["global"]["enc"][String(idx)] = fnId;
+    break;
+  }
+  case 0x1D:
+  {
+    // Set global button fnId: F0 6F 1D <idx> <fnId> F7  (from editor via serial)
+    uint8_t idx  = sysex[3];
+    uint8_t fnId = sysex[4];
+    if (idx >= 8) break;
+    controls.getButtonShortAt(24, idx).fnId = fnId;
+    json.getDoc()["global"]["btn"][String(idx)] = fnId;
+    break;
+  }
+  case 0x1E:
+  {
+    if (len == 7) {
+      // BPM from Live: F0 6F 1E <b2> <b1> <b0> F7  (BPM*100 as 21-bit, 7 bits each)
+      uint32_t cents = ((uint32_t)(sysex[3] & 0x7F) << 14)
+                     | ((uint32_t)(sysex[4] & 0x7F) << 7)
+                     |  (uint32_t)(sysex[5] & 0x7F);
+      if (cents > 0) liveBpmCents = cents;
+    } else {
+      // Request global fnIds from editor: F0 6F 1E 00 F7
+      // Reply via serial only — never via USB MIDI to avoid triggering Live's song-position handler
+      for (int i = 0; i < 8; i++) {
+        uint8_t encPkt[6] = { 240, 111, 0x1C, (uint8_t)i, controls.getEncoderAt(24, i).fnId, 247 };
+        serialEditorSend(encPkt, 6);
+        delay(2);
+        uint8_t btnPkt[6] = { 240, 111, 0x1D, (uint8_t)i, controls.getButtonShortAt(24, i).fnId, 247 };
+        serialEditorSend(btnPkt, 6);
+        delay(2);
+      }
+      {
+        uint8_t labPkt[9] = { 240, 111, 0x28, 24,
+          controls.getLabelConfig(24, 0), controls.getLabelConfig(24, 1),
+          controls.getLabelConfig(24, 2), controls.getLabelConfig(24, 3), 247 };
+        serialEditorSend(labPkt, 9);
+      }
+    }
+    break;
+  }
+  case 0x1F:
+  {
+    // Quantized param: F0 6F 1F <fader_idx 0-7> <num_items> F7
+    // num_items=0 or 1 clears quantized mode; ≥2 activates it
+    if (param_number >= 8) break;
+    faders[param_number]->setQuantized(staticOverlay);
+    break;
+  }
+  case 0x20:
+  {
+    // Assign DAW function to all user presets: F0 6F 20 <isButton> <idx> <fnId> [name bytes] F7
+    uint8_t isButton = sysex[3];
+    uint8_t idx      = sysex[4];
+    uint8_t fnId     = sysex[5];
+    if (idx >= 8) break;
+    char name[12] = {0};
+    size_t nameLen = 0;
+    for (size_t j = 6; j < len - 1 && nameLen < 11; j++)
+      name[nameLen++] = (char)sysex[j];
+    const char* jsonNameKey = isButton ? "btn_names" : "enc_names";
+    for (uint8_t p = 0; p < 24; p++) {
+      if (isButton) {
+        MidiControl& btn = controls.getButtonShortAt(p, idx);
+        btn.isFunction = true;
+        btn.fnId = fnId;
+        if (nameLen > 0) strncpy(btn.controlName, name, sizeof(btn.controlName) - 1);
+        JsonArray arr = json.getDoc()[String(p)]["buttons_short"][String(idx)].to<JsonArray>();
+        arr.add(static_cast<int>(btn.type));
+        arr.add(static_cast<int>(btn.number));
+        arr.add(static_cast<int>(btn.channel));
+        arr.add((int)btn.minVal);
+        arr.add((int)btn.maxVal);
+        arr.add(1);
+        arr.add((int)fnId);
+        json.setButtonToggleMode(p, idx, (int)btn.pressMode);
+      } else {
+        MidiControl& enc = controls.getEncoderAt(p, idx);
+        enc.isFunction = true;
+        enc.fnId = fnId;
+        if (nameLen > 0) strncpy(enc.controlName, name, sizeof(enc.controlName) - 1);
+        json.setEncoder(p, idx, (int)enc.type, (int)enc.number, (int)enc.channel,
+                        enc.hiRes ? 1 : 0, enc.minVal, enc.maxVal, 1, (int)fnId);
+      }
+      if (nameLen > 0) json.getDoc()[String(p)][jsonNameKey][String(idx)] = name;
+    }
+    json.save();
+    uint8_t cur = controls.getPreset();
+    if (cur < 24) { updateFaderTitles(); showDisplay(); }
+    break;
+  }
+  case 0x23:
+  {
+    // BPM sync: F0 6F 23 <b2> <b1> <b0> F7  (BPM*100 as 21-bit, 7 bits each)
+    if (len < 7) break;
+    uint32_t cents = ((uint32_t)(sysex[3] & 0x7F) << 14)
+                   | ((uint32_t)(sysex[4] & 0x7F) << 7)
+                   |  (uint32_t)(sysex[5] & 0x7F);
+    if (cents > 0) liveBpmCents = cents;
+    break;
+  }
+  case 0x24:
+  {
+    // Set latch smooth: F0 6F 24 <level> <syncMode 0/1> <syncStep 0-7> F7
+    if (len < 7) break;
+    latchSmoothLevel    = sysex[3] & 0x7F;
+    latchSmoothSync     = (sysex[4] & 0x7F) != 0;
+    latchSmoothSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
+    json.getDoc()["latchSmooth"]         = (int)latchSmoothLevel;
+    json.getDoc()["latchSmoothSync"]     = (bool)latchSmoothSync;
+    json.getDoc()["latchSmoothSyncStep"] = (int)latchSmoothSyncStep;
+    json.save();
+    onSmoothStateUpdatedFromEditor();
+    break;
+  }
+  case 0x25:
+  {
+    // Set revert smooth: F0 6F 25 <level> <syncMode 0/1> <syncStep 0-7> F7
+    if (len < 7) break;
+    revertSmoothLevel    = sysex[3] & 0x7F;
+    revertSmoothSync     = (sysex[4] & 0x7F) != 0;
+    revertSmoothSyncStep = constrain((int)(sysex[5] & 0x7F), 0, 7);
+    json.getDoc()["revertSmooth"]         = (int)revertSmoothLevel;
+    json.getDoc()["revertSmoothSync"]     = (bool)revertSmoothSync;
+    json.getDoc()["revertSmoothSyncStep"] = (int)revertSmoothSyncStep;
+    json.save();
+    onSmoothStateUpdatedFromEditor();
+    break;
+  }
+  case 0x26:
+  {
+    // Request smooth state → reply with 0x24 and 0x25
+    uint8_t lPkt[7] = {0xF0, 0x6F, 0x24, latchSmoothLevel, (uint8_t)(latchSmoothSync ? 1 : 0), latchSmoothSyncStep, 0xF7};
+    usb_midi.write(lPkt, 7);
+    serialEditorSend(lPkt, 7);
+    uint8_t rPkt[7] = {0xF0, 0x6F, 0x25, revertSmoothLevel, (uint8_t)(revertSmoothSync ? 1 : 0), revertSmoothSyncStep, 0xF7};
+    usb_midi.write(rPkt, 7);
+    serialEditorSend(rPkt, 7);
+    break;
+  }
+  case 0x27:
+  {
+    // Explicit save-to-flash from editor (sent after a full preset Send)
+    json.save();
+    if (!isSelectingPreset()) { updateFaderTitles(); showDisplay(); }
+    break;
+  }
+  case 0x29:
+  {
+    // LED dim-off: F0 6F 29 <0|1> F7
+    ledsDimOff = sysex[3] != 0;
+    json.getDoc()["ledsDimOff"] = (bool)ledsDimOff;
+    json.save();
+    applyLedDimOff();
+    break;
+  }
+  case 0x28:
+  {
+    // Label config: F0 6F 28 <preset> <l0> <l1> <l2> <l3> F7
+    if (len < 9) break;
+    uint8_t lPreset = sysex[3];
+    if (lPreset > 24) break;
+    for (uint8_t slot = 0; slot < 4; slot++) {
+      uint8_t val = sysex[4 + slot] & 0x07;
+      controls.setLabelConfig(lPreset, slot, val);
+      if (lPreset < 24)
+        json.getDoc()[String(lPreset)]["labels"][slot] = (int)val;
+      else
+        json.getDoc()["global"]["labels"][slot] = (int)val;
+    }
+    if (lPreset == controls.getPreset()) {
+      for (int i = 0; i < 4; i++)
+        currentLabelConfig[i] = controls.getLabelConfig(lPreset, i);
+      deviceLabelDirty = bankLabelDirty = trackLabelDirty = presetLabelDirty = true;
+    }
+    break;
+  }
+  case 0x2A:
+  {
+    // Device lock state: F0 6F 2A <0|1> F7
+    if (len < 4) break;
+    setDeviceLockState(sysex[3] != 0);
+    if (fromSerial) {
+      // Forward to Python script so Live follows the editor change
+      uint8_t fwdPkt[5] = {0xF0, 0x6F, 0x2A, (uint8_t)(sysex[3] & 0x01), 0xF7};
+      usb_midi.write(fwdPkt, 5);
+    }
     break;
   }
   default:

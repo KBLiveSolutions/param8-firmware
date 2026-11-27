@@ -83,10 +83,12 @@ ControlData JsonManager::getControlData(const char* control_type, uint8_t preset
     data.value3 = arr[3] | 0;
     data.value4 = arr[4].isNull() ? -1 : (int)arr[4].as<int>();
     data.value5 = arr[5].isNull() ? -1 : (int)arr[5].as<int>();
+    data.value6 = arr[6].isNull() ? -1 : (int)arr[6].as<int>();
+    data.value7 = arr[7].isNull() ? -1 : (int)arr[7].as<int>();
     return data;
 }
 
-void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel, int hiRes, int minVal, int maxVal) {
+void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel, int hiRes, int minVal, int maxVal, int isFunction, int fnId) {
     JsonArray arr = _doc[String(preset)]["encoders"][String(enc)].to<JsonArray>();
     arr.add(type);
     arr.add(number);
@@ -94,6 +96,8 @@ void JsonManager::setEncoder(uint8_t preset, uint8_t enc, int type, int number, 
     arr.add(hiRes);
     arr.add(minVal);
     arr.add(maxVal);
+    arr.add(isFunction);
+    arr.add(fnId);
 }
 
 void setupJsonManager() {

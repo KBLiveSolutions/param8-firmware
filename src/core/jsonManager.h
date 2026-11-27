@@ -9,6 +9,8 @@ struct ControlData {
     int value3;
     int value4 = -1;
     int value5 = -1;
+    int value6 = -1;
+    int value7 = -1;
 };
 
 class JsonManager {
@@ -34,7 +36,7 @@ public:
     void setButtonToggleMode(uint8_t preset, uint8_t btn, int value);
     JsonArray getEncoder(uint8_t preset, uint8_t enc);
     void getEncoderArray(uint8_t preset, uint8_t enc, int result[2]);
-    void setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel, int hiRes = 0, int minVal = 0, int maxVal = 127);
+    void setEncoder(uint8_t preset, uint8_t enc, int type, int number, int channel, int hiRes = 0, int minVal = 0, int maxVal = 127, int isFunction = 0, int fnId = 0);
     ControlData getControlData(const char* control_type, uint8_t preset, uint8_t enc);
 
 private:

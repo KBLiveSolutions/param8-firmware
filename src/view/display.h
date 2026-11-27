@@ -8,6 +8,7 @@ extern PicoGFX_SSD1322 display2;
 extern FaderWidget* faders[8];
 
 extern bool screenSaverActive;
+extern bool screenSaverJustWoke;
 extern unsigned long screenSaverDelay;
 extern char deviceLabel[20];
 extern char bankLabel[20];
@@ -15,6 +16,10 @@ extern bool deviceLabelDirty;
 extern bool bankLabelDirty;
 extern char trackLabel[20];
 extern bool trackLabelDirty;
+extern char presetLabel[20];
+extern char presetNumberLabel[20];
+extern bool presetLabelDirty;
+extern uint8_t currentLabelConfig[4];
 
 #define BUTTON_BORDER_COLOR 6
 #define BUTTON_CORNER       2
@@ -31,6 +36,7 @@ inline int getStrWidth(PicoGFX_SSD1322 &disp, const char* str) {
 void setupDisplay();
 
 void showDisplay();
+void drawAllWidgets();
 void flushDisplays();
 void updateFader(int idx, int value);
 void updateDisplay();

@@ -1,9 +1,15 @@
 #pragma once
 #include <Arduino.h>
 
-extern bool shiftPressed;
-extern uint8_t latchSlewLevel;
-extern uint8_t revertSlewLevel;
+extern bool     shiftPressed;
+extern uint8_t  latchSmoothLevel;
+extern uint8_t  revertSmoothLevel;
+extern bool     latchSmoothSync;
+extern bool     revertSmoothSync;
+extern uint8_t  latchSmoothSyncStep;
+extern uint8_t  revertSmoothSyncStep;
+extern uint32_t liveBpmCents;
+extern bool settingsModeActive;
 extern bool latchPressed;
 extern bool latchHeld;
 extern bool revertMode;
@@ -22,6 +28,7 @@ void sendClearNaming(uint8_t idx, uint8_t isButton);
 void checkNamingPending();
 void checkShiftPending();
 void checkLatchPending();
+void checkPendingPresetSave();
 void onShiftPress();
 void onShiftRelease();
 void onLatchPress();
@@ -33,3 +40,7 @@ void initActionSettings();
 void onButtonPressed(uint8_t);
 void onButtonReleased(uint8_t);
 bool isSelectingPreset();
+void checkSmoothProgress();
+void onSmoothStateUpdatedFromEditor();
+extern bool deviceLocked;
+void setDeviceLockState(bool locked);
