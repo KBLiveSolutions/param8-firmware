@@ -134,25 +134,12 @@ def build_env_uf2(env):
     
     # CORRECTION : Utiliser la vraie configuration du filesystem
     firmware_size = len(firmware)
-    
-    # Pour un Pico avec 2MB de flash et 0.5MB de filesystem :
-    # Firmware : 0x10000000 à 0x10180000 (1.5MB)
-    # Filesystem : 0x10180000 à 0x10200000 (0.5MB)
-    fs_offset = 0x180000  # 1.5MB au lieu de 2MB
-    
-    if filesystem:
-        # Vérifier que le firmware ne dépasse pas la zone allouée
-        if firmware_size > fs_offset:
-            print(f"❌ ERREUR: Firmware trop gros ({firmware_size}) pour la zone allouée ({fs_offset})")
-            return
-        
-        padding_size = fs_offset - firmware_size
-        combined = firmware + b'\xff' * padding_size + filesystem
-        print(f"📦 Image: firmware({firmware_size}) + padding({padding_size}) + fs({len(filesystem)})")
-    else:
-        combined = firmware
-        print(f"📦 Image: firmware seul ({firmware_size} bytes)")
-    
+    fs_offset = 0x180000  # Filesystem starts at 1.5MB
+
+    if firmware_size > fs_offset:
+        print(f"❌ ERREUR: Firmware trop gros ({firmware_size}) pour la zone allouée ({fs_offset})")
+        return
+
     # Lire la version depuis version.h
     version = "1.0.0"
     try:
@@ -166,33 +153,29 @@ def build_env_uf2(env):
         pass
 
     suffix = "" if env == "param8_simple" else "-advanced"
-    out_bin  = f"combined{suffix}.bin"
-    out_uf2  = f"releases/param8-v{version}-firmware{suffix}.uf2"
 
-    with open(out_bin, 'wb') as f:
-        f.write(combined)
-    print(f"💾 {out_bin} créé: {len(combined)} bytes")
+    # Firmware-only UF2 (for OTA updates — does not touch user settings)
+    fw_bin = f"firmware{suffix}.bin"
+    fw_uf2 = f"releases/param8-v{version}-firmware{suffix}.uf2"
+    with open(fw_bin, 'wb') as f:
+        f.write(firmware)
+    print(f"💾 {fw_bin} créé: {firmware_size} bytes (firmware only)")
+
+    def to_uf2(src_bin, dst_uf2):
+        r = subprocess.run([
+            'python3', './uf2conv.py', src_bin,
+            '--base', '0x10000000',
+            '--family', '0xe48bff56',
+            '--output', dst_uf2
+        ], capture_output=True, text=True)
+        if r.returncode == 0:
+            print(f"✅ {dst_uf2} ({os.path.getsize(dst_uf2)/1024:.1f} KB)")
+        else:
+            print(f"❌ Erreur UF2 {dst_uf2}:", r.stderr)
+        return r.returncode == 0
 
     print("🔄 Conversion en UF2...")
-    result = subprocess.run([
-        'python3', './uf2conv.py',
-        out_bin,
-        '--base', '0x10000000',
-        '--family', '0xe48bff56',
-        '--output', out_uf2
-    ], capture_output=True, text=True)
-
-    if result.returncode == 0:
-        size = os.path.getsize(out_uf2)
-        print(f"✅ {out_uf2} créé ({size/1024:.1f} KB)")
-        if filesystem:
-            print("📋 Filesystem inclus")
-        else:
-            print("⚠️  Aucun filesystem inclus")
-    else:
-        print("❌ Erreur conversion UF2:")
-        print("STDOUT:", result.stdout)
-        print("STDERR:", result.stderr)
+    to_uf2(fw_bin, fw_uf2)
 
 def getControlData(controlType, preset, index):
     """Récupère les données de contrôle depuis le JSON"""
